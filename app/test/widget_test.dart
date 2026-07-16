@@ -1,29 +1,27 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Widget smoke test for the Loop-2 debug harness. Does NOT touch native code
+// (no model is loaded), so it runs everywhere including CI.
 
 import 'package:dhruva/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Debug chat screen renders its controls', (tester) async {
+    await tester.pumpWidget(const DhruvaApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Dhruva · Engine Debug'), findsOneWidget);
+    expect(find.text('Load'), findsOneWidget);
+    expect(find.text('Generate'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    expect(find.text('not loaded'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Generate/Cancel are disabled until a model is loaded.
+    final generate = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Generate'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(generate.onPressed, isNull);
   });
 }
