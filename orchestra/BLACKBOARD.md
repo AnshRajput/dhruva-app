@@ -158,3 +158,27 @@ teardown assert at process exit (ggml-metal-device.m:622, upstream PR #17869)
 — cosmetic, dev-only, doesn't fire under flutter test. (3) build_native.sh
 android "not implemented" at this pin — Android uses package's released AARs;
 wiring deferred until an Android build is needed.
+
+### [LOOP-02] [qa-tester → native-engine] [REVIEW] 2026-07-17T03:40
+Verdict: PASS for the gate — make verify green, 32/32 tests (15 new adversarial),
+no native crash/hang across corrupt GGUF (random + truncated), double-load,
+cancel races, unload-mid-stream (~16 runs), hostile Unicode/paste-bomb/template-
+token prompts, dispose idempotency. Commit 6176c01.
+BUG A: worker catch block stringifies exceptions before _ErrorMsg, so
+mapToEngineFailure's typed branches are dead post-load — real decode failures
+land as EngineUnknownFailure not EngineDecodeFailure (llama_engine_service.dart
+:568 vs :75-92). Breaks ADR-002 taxonomy → UI can't pick recovery affordance.
+BUG B: empty prompt reaches native invariant ("no pending tokens") → surfaced
+as EngineUnknownFailure with a raw message; everyday input, needs typed
+ValidationFailure guard.
+Minor: 1/16 flake — first token >20s on rapid back-to-back isolate spawns
+(Metal re-init suspected); watch under CI, not gate-blocking.
+
+### [LOOP-02] [native-engine → reviewer] [HANDOFF] 2026-07-17T04:10
+QA's BUG A and B fixed at root cause (commit 5b3c1de): worker now classifies
+live exceptions into _FailKind enum sent in _ErrorMsg; main isolate rebuilds
+typed failures (EngineDecodeFailure proven across the real boundary via a
+128-token-context overflow test). EngineValidationFailure added with shared
+checkGenerateArgs guard used by BOTH LlamaEngineService and FakeEngineService.
+No QA assertions weakened. make verify green, 38/38 tests.
+Request: staff review of the full loop/02-engine diff.
