@@ -28,9 +28,25 @@ jobs:
       - name: Enforce coverage floor (70%)
         run: |
           if [ ! -f coverage/lcov.info ]; then echo "no coverage data"; exit 1; fi
-          total=$(awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END{if (lf==0) print 0; else printf "%.0f", (lh/lf)*100}' coverage/lcov.info)
-          echo "coverage: ${total}%"
-          # ponytail: floor starts enforced-but-low-stakes on scaffold; real floor is 70 once features land
+          # Exclusions (see orchestra/DECISIONS.md "COVERAGE FLOOR SCOPE"):
+          # - llama_engine_service.dart: native engine glue — its tests need real
+          #   dylibs + a model, which CI lacks; unit-tested separately on dev machines
+          # - features/debug_chat: temporary dev harness, replaced in Loop 4 —
+          #   delete this exclusion with it
+          total=$(python3 - << 'PY'
+          import re
+          recs = open('coverage/lcov.info').read().split('end_of_record')
+          excl = ('lib/engine_bindings/llama_engine_service.dart', 'lib/features/debug_chat/')
+          lf = lh = 0
+          for r in recs:
+              m = re.search(r'SF:(.+)', r)
+              if not m or any(e in m.group(1) for e in excl): continue
+              lf += sum(int(x) for x in re.findall(r'^LF:(\d+)', r, re.M))
+              lh += sum(int(x) for x in re.findall(r'^LH:(\d+)', r, re.M))
+          print(round(100*lh/lf) if lf else 0)
+          PY
+          )
+          echo "coverage (floor scope): ${total}%"
           if [ "$total" -lt 70 ]; then echo "coverage ${total}% below 70% floor"; exit 1; fi
 
   build-android:

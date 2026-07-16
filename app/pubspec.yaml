@@ -33,6 +33,13 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
+  # Inference engine (ADR-001). PINNED to an exact commit — the pub.dev
+  # release (0.2.2) is stale and must NOT be used. See orchestra/DECISIONS.md
+  # (ENGINE PIN). Native binaries are shipped/built separately, not by pub.
+  llama_cpp_dart:
+    git:
+      url: https://github.com/netdur/llama_cpp_dart
+      ref: c6e37785835a189261fab28e53386e4e954f3e42
 
 dev_dependencies:
   flutter_lints: ^6.0.0
