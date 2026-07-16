@@ -51,3 +51,31 @@ strict lint set caught real template debt (unsorted deps, import order) —
 hexes (ponytail-marked) — Loop 12 must replace with token-fetch theming; risk
 of drift accepted knowingly for 11 loops. (4) Carry into Loop 2: pin
 llama_cpp_dart to an exact commit SHA in pubspec AND record it in DECISIONS.md.
+
+## LOOP 2 — Engine online (2026-07-17)
+Goal: real GGUF loads and streams through our abstraction, off root isolate,
+working cancel, proven free path.
+Exit gate results (attempt 2):
+1. Debug chat streams completions on a desktop build — PASS (macOS dev target;
+   real SmolLM2-135M, 64.9 tok/s Metal)
+2. Engine unit tests green — PASS (39 tests: contract, adversarial QA,
+   real-model smoke, RSS free-path incl. failed-ctx-create)
+3. QA verdict — PASS (after BUG A/B fixes)
+4. Reviewer verdict — APPROVE (after blocking leak fix)
+5. CI green on merged PR — PASS (attempt 2; attempt 1 failed on coverage scope)
+Shipped: EngineService abstraction + owned-isolate LlamaEngineService (typed
+failure taxonomy across the isolate boundary, single stream error channel,
+cooperative cancel via _GenGate, File-existence precheck), FakeEngineService,
+debug chat harness, pinned llama_cpp_dart @ c6e377, macOS dev platform.
+Retro: (1) BIGGEST LESSON — the pinned package's own LlamaEngine leaks
+~167MB/reload; "verify the dependency's claims against its source" (Loop 0
+lesson) paid off again at the code level: owning the isolate + reusing sync
+primitives beat blind wrapping. (2) QA→fix→review→fix chain caught a real
+mobile-OOM leak path the builder missed — the adversarial gate sequence is
+worth its wall-clock. (3) Gate attempt 1 failure was self-inflicted: coverage
+floor didn't implement §9's glue exclusion from day 1; scope rulings belong in
+CI code the moment they're written down. (4) Docs-only pushes cancel in-flight
+CI (concurrency group) — add paths-ignore for orchestra/** and docs/** in
+Loop 3. (5) Carry into Loop 3: debug_chat's hard-wired concrete service made
+it untestable — Loop 3+ features MUST take EngineService via Riverpod DI from
+the first line.
