@@ -33,6 +33,11 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Loop-2 dev-only native binaries + downloaded test model (not committed).
+# Rebuild dylibs with llama_cpp_dart's tool/build_native.sh; see the engine
+# loop report. Model is fetched from Hugging Face by the smoke test docs.
+/.dev-native/
+
 # Symbolication related
 app.*.symbols
 
