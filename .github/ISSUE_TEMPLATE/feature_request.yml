@@ -1,0 +1,28 @@
+name: Feature request
+description: An idea that makes on-device AI better
+title: "[feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: What can't you do today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: dropdown
+    id: offline
+    attributes:
+      label: Does it work 100% offline?
+      description: Dhruva has no cloud path — features must run entirely on-device.
+      options:
+        - "Yes, fully on-device"
+        - "Not sure"
+    validations:
+      required: true

@@ -1,0 +1,42 @@
+name: Bug report
+description: Something broke
+title: "[bug] "
+labels: [bug]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: e.g. Pixel 7, 8GB RAM, Android 15
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: AI model in use
+      placeholder: e.g. bartowski/Llama-3.2-1B-Instruct-GGUF Q4_K_M
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. Open chat… 2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Crash logs help enormously. Dhruva collects no telemetry, so your report is the only signal we get.
