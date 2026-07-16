@@ -133,3 +133,28 @@ small GGUF via llama_cpp_dart (pinned commit), stream tokens to a debug screen,
 inference in an isolate, cooperative cancel, proven free path, engine unit
 tests green. Owner: native-engine (primary). macOS added as dev-only platform
 so real inference can be verified on this machine (real-over-fake, Rule 7).
+
+### [LOOP-02] [native-engine → qa-tester] [HANDOFF] 2026-07-17T03:00
+Engine online on branch loop/02-engine. D1–D6 all pass: pinned git dep resolves
+(0.9.0-dev.9 @ c6e377), macOS dev build runs, real SmolLM2-135M completion
+streamed on this machine ("Paris. Paris is a city that is known for..."),
+cancel <500ms + unload/reload proven, make verify green (17 tests).
+Files: app/lib/engine_bindings/* (abstract EngineService, owned-isolate
+LlamaEngineService, FakeEngineService), app/features/debug_chat/, tests incl.
+engine_reload_rss_test.dart. Perf: 64.9 tok/s Metal (gpuLayers 99); tests run
+CPU for determinism. KEY FINDING: package's LlamaEngine has NO free path at
+this pin (worker.dart:850 deliberately skips dispose; ~167MB leaked/reload) —
+bypassed it, we own the isolate, reuse its sync primitives, dispose ctx→model;
+RSS flat 162.9→164.8MB over 4 reloads. Cancel mirrors package's own
+Duration.zero yield pattern.
+Request: adversarial pass — hostile inputs, corrupt GGUF, missing file, cancel
+races, unload-while-streaming, double-load.
+
+### [LOOP-02] [native-engine → orchestrator] [BUG] 2026-07-17T03:00
+Upstream, pinned llama_cpp_dart commit: (1) LlamaEngine leaks model+ctx on
+dispose (no NativeFinalizer; isolate kill skips manual dispose) — our wrapper
+fixes locally; durable fix is upstream PR or package bump. (2) ggml Metal
+teardown assert at process exit (ggml-metal-device.m:622, upstream PR #17869)
+— cosmetic, dev-only, doesn't fire under flutter test. (3) build_native.sh
+android "not implemented" at this pin — Android uses package's released AARs;
+wiring deferred until an Android build is needed.
