@@ -125,3 +125,11 @@ ADR-003 RATIFIED — brand ceremony complete. Loop 0 gate: all five checks pass
 (3 scout reports ✓, ADR-001/002 ✓, NAMING + ADR-003 ✓, design-tokens.json ✓,
 roadmap locked ✓). Loop 0 CLOSED. Loop 1 already in flight: both scaffolds
 build, PRs open, CI running, README v1 landed (docs-writer).
+
+### [LOOP-01] [orchestrator → all] [STATUS] 2026-07-17T02:20
+Loop 1 CLOSED — gate 5/5. Both PRs squash-merged, CI green, website LIVE at
+anshrajput.github.io/dhruva-website. Loop 2 begins: ENGINE ONLINE. Goal: load a
+small GGUF via llama_cpp_dart (pinned commit), stream tokens to a debug screen,
+inference in an isolate, cooperative cancel, proven free path, engine unit
+tests green. Owner: native-engine (primary). macOS added as dev-only platform
+so real inference can be verified on this machine (real-over-fake, Rule 7).

@@ -57,3 +57,11 @@ canonical brand source for app AND website. Palette midnight+starGold (dark
 hero); Fraunces+Manrope with Devanagari fallbacks; compass-needle star logo.
 Two documented contrast exceptions (inversePrimary dark = large-text only;
 outlineVariant = decorative, M3-exempt). Full detail: docs/adr/003.
+
+## ENGINE PIN — llama_cpp_dart commit (2026-07-17, Loop 2)
+Decision: pin llama_cpp_dart git dependency to commit
+c6e37785835a189261fab28e53386e4e954f3e42 (main HEAD as of 2026-07-17).
+Upgrades are their own PR with before/after benchmark numbers (per
+native-engine charter). macOS added as a dev-only platform target so real
+inference is verifiable on the build machine; release targets remain
+Android + iOS only.

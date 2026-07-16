@@ -31,3 +31,23 @@ Loop 1 scaffold work with the ceremony tail cost nothing — keep overlapping
 non-conflicting work across loop boundaries. (4) Carry into Loop 1 prompts:
 builders must consume design-tokens.json via the documented heightMultiplier
 field, not recompute.
+
+## LOOP 1 — Skeleton & org (2026-07-17)
+Goal: both repos skeletoned, building, CI-gated, presentable.
+Exit gate results (5/5, attempt 1):
+1. flutter test green — PASS (local + CI)
+2. flutter build apk succeeds — PASS (CI release build)
+3. astro build succeeds — PASS (local + CI)
+4. CI green on merged PR in BOTH repos — PASS (app#1, site#1 squash-merged)
+5. README v1 + CLAUDE.md in both repos — PASS
+Bonus: GitHub Pages LIVE at https://anshrajput.github.io/dhruva-website/ (200).
+Shipped: Flutter scaffold (tech.appuinside.dhruva, strict lints, make verify),
+app CI (format/analyze --fatal-infos/test+70% floor/android release/ios
+no-codesign), Astro scaffold + Pages deploy pipeline, README v1, CONTRIBUTING,
+issue templates, placeholder landing page.
+Retro: (1) subosito/flutter-action + cache made CI fast enough — keep. (2) The
+strict lint set caught real template debt (unsorted deps, import order) —
+--fatal-infos from day 1 was right. (3) Placeholder page hardcodes two token
+hexes (ponytail-marked) — Loop 12 must replace with token-fetch theming; risk
+of drift accepted knowingly for 11 loops. (4) Carry into Loop 2: pin
+llama_cpp_dart to an exact commit SHA in pubspec AND record it in DECISIONS.md.

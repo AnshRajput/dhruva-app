@@ -51,6 +51,7 @@ Conventional commits. CI green before merge, no exceptions.
 
 ## Current status
 
-Loop 0 (research & identity) closing: ADR-001/002 accepted, name DHRUVA
-ratified, roadmap locked in orchestra/TASKS.md. Loop 1 next: scaffolds, CI,
-GitHub repos.
+Loops 0–1 CLOSED: ADRs 001-003 accepted, brand tokens ratified, both repos
+scaffolded with green CI, website live. Loop 2 IN PROGRESS: engine online —
+llama_cpp_dart pinned git dep, EngineService + isolate worker + token
+streaming + cancel + free-path tests, debug chat screen.
