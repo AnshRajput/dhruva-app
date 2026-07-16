@@ -71,10 +71,16 @@ final class EngineLoadParams {
   /// Prompt-prefill batch size.
   final int batchSize;
 
+  /// Max concurrent sequences the context hosts (ADR-001 is single-session, so
+  /// the default is 1; the Model Arena loop raises it). The native limit is
+  /// 256 — higher values fail fast at context creation.
+  final int maxSequences;
+
   const EngineLoadParams({
     this.contextSize = 4096,
     this.gpuLayers = 99,
     this.batchSize = 512,
+    this.maxSequences = 1,
   });
 }
 
@@ -131,6 +137,13 @@ final class EngineValidationFailure extends EngineFailure {
   const EngineValidationFailure(super.message, {super.cause});
 }
 
+/// The engine is in the wrong state for the requested op (e.g. a generation
+/// is already in flight — one active session per ADR-001). A usage error,
+/// distinct from bad input ([EngineValidationFailure]).
+final class EngineStateFailure extends EngineFailure {
+  const EngineStateFailure(super.message, {super.cause});
+}
+
 /// An operation was attempted after the engine (or a required model) was
 /// disposed / not loaded.
 final class EngineDisposedFailure extends EngineFailure {
@@ -143,20 +156,23 @@ final class EngineUnknownFailure extends EngineFailure {
 }
 
 /// Validate [EngineService.generate] arguments at the service boundary,
-/// before any native/isolate work. Throws the right [EngineFailure] subtype.
-/// Shared by every [EngineService] implementation so the contract can't drift.
-void checkGenerateArgs(String? prompt, List<ChatTurn>? messages) {
+/// before any native/isolate work. Returns the failure to surface, or null if
+/// the args are valid. Shared by every implementation so the contract can't
+/// drift. Returned (not thrown) because generate delivers ALL errors via the
+/// stream — see [EngineService.generate].
+EngineFailure? checkGenerateArgs(String? prompt, List<ChatTurn>? messages) {
   if ((prompt == null) == (messages == null)) {
-    throw const EngineUnknownFailure(
+    return const EngineValidationFailure(
       'generate requires exactly one of prompt or messages',
     );
   }
   if (prompt != null && prompt.trim().isEmpty) {
-    throw const EngineValidationFailure('prompt is empty or whitespace-only');
+    return const EngineValidationFailure('prompt is empty or whitespace-only');
   }
   if (messages != null && messages.isEmpty) {
-    throw const EngineValidationFailure('messages is empty');
+    return const EngineValidationFailure('messages is empty');
   }
+  return null;
 }
 
 /// On-device inference engine. One loaded model at a time (ADR-001: single
@@ -171,8 +187,14 @@ abstract interface class EngineService {
   Future<void> load(String modelPath, {EngineLoadParams params});
 
   /// Stream a completion. Provide exactly one of [prompt] or [messages].
-  /// The returned stream ends with an [EngineCompletion]. Cancelling the
-  /// subscription (or calling [cancel]) stops generation cooperatively
+  ///
+  /// Single error channel: this NEVER throws synchronously. Every failure —
+  /// invalid arguments ([EngineValidationFailure]), no model loaded
+  /// ([EngineDisposedFailure]), a generation already in flight
+  /// ([EngineStateFailure]), and mid-stream decode/OOM failures — is delivered
+  /// via the returned stream's `onError`, so consumers handle exactly one
+  /// path. On success the stream ends with an [EngineCompletion]. Cancelling
+  /// the subscription (or calling [cancel]) stops generation cooperatively
   /// between tokens.
   Stream<EngineEvent> generate({
     String? prompt,

@@ -70,6 +70,8 @@ class _DebugChatScreenState extends State<DebugChatScreen> {
     try {
       await _engine?.dispose();
       final libPath = _libPathCtrl.text.trim();
+      // Dev-tool exception: constructs the concrete impl directly. Real
+      // features get EngineService via Riverpod DI (later loop).
       final engine = LlamaEngineService(
         libraryPath: libPath.isEmpty ? null : libPath,
       );

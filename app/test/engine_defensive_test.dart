@@ -8,13 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('generate() before load()', () {
-    test('throws a typed EngineFailure, not a raw exception', () {
-      final engine = LlamaEngineService();
-      expect(
-        () => engine.generate(prompt: 'x'),
-        throwsA(isA<EngineDisposedFailure>()),
-      );
-    });
+    test(
+      'errors with a typed EngineFailure via the stream, not a raw throw',
+      () async {
+        final engine = LlamaEngineService();
+        // Single error channel: generate() never throws synchronously; the
+        // failure arrives on the stream's onError.
+        await expectLater(
+          engine.generate(prompt: 'x'),
+          emitsError(isA<EngineDisposedFailure>()),
+        );
+      },
+    );
   });
 
   group('dispose without ever loading', () {
@@ -30,9 +35,9 @@ void main() {
           () => engine.load('whatever.gguf'),
           throwsA(isA<EngineDisposedFailure>()),
         );
-        expect(
-          () => engine.generate(prompt: 'x'),
-          throwsA(isA<EngineDisposedFailure>()),
+        await expectLater(
+          engine.generate(prompt: 'x'),
+          emitsError(isA<EngineDisposedFailure>()),
         );
         // cancel() with nothing active/loaded must be a safe no-op.
         await engine.cancel();

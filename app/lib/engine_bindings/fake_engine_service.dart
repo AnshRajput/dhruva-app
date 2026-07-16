@@ -64,13 +64,17 @@ final class FakeEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
-    checkGenerateArgs(prompt, messages);
-    if (!isLoaded) {
-      throw const EngineDisposedFailure('no model loaded; call load() first');
-    }
-    if (_run != null) {
-      throw const EngineDecodeFailure('a generation is already in flight');
-    }
+    // Single error channel (see EngineService.generate): never throw; surface
+    // every pre-flight failure via the returned stream's onError.
+    final preflight =
+        checkGenerateArgs(prompt, messages) ??
+        (!isLoaded
+            ? const EngineDisposedFailure('no model loaded; call load() first')
+            : null) ??
+        (_run != null
+            ? const EngineStateFailure('a generation is already in flight')
+            : null);
+    if (preflight != null) return Stream<EngineEvent>.error(preflight);
 
     final controller = StreamController<EngineEvent>();
     final run = _FakeRun(controller);

@@ -367,9 +367,9 @@ void main() {
           () => engine.load(paths.modelPath, params: _cpuParams),
           throwsA(isA<EngineDisposedFailure>()),
         );
-        expect(
-          () => engine.generate(prompt: 'x'),
-          throwsA(isA<EngineFailure>()),
+        await expectLater(
+          engine.generate(prompt: 'x'),
+          emitsError(isA<EngineFailure>()),
         );
         // cancel() after dispose must not hang or throw.
         await engine.cancel().timeout(const Duration(seconds: 5));

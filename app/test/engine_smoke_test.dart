@@ -103,9 +103,10 @@ void main() {
         // --- unload frees ---
         await engine.unload();
         expect(engine.isLoaded, isFalse);
-        expect(
-          () => engine.generate(prompt: 'x'),
-          throwsA(isA<EngineDisposedFailure>()),
+        // Single error channel: post-unload generate errors via the stream.
+        await expectLater(
+          engine.generate(prompt: 'x'),
+          emitsError(isA<EngineDisposedFailure>()),
         );
 
         // --- reload works ---

@@ -49,11 +49,17 @@ void main() {
       );
     });
 
-    test('rejects when neither prompt nor messages given', () async {
-      final engine = FakeEngineService();
-      await engine.load('m');
-      expect(() => engine.generate(), throwsA(isA<EngineUnknownFailure>()));
-    });
+    test(
+      'rejects when neither prompt nor messages given (via stream)',
+      () async {
+        final engine = FakeEngineService();
+        await engine.load('m');
+        await expectLater(
+          engine.generate(),
+          emitsError(isA<EngineValidationFailure>()),
+        );
+      },
+    );
   });
 
   group('cancel', () {
@@ -136,56 +142,60 @@ void main() {
       );
     });
 
-    test('generate before load throws EngineDisposedFailure', () {
-      final engine = FakeEngineService();
-      expect(
-        () => engine.generate(prompt: 'x'),
-        throwsA(isA<EngineDisposedFailure>()),
-      );
-    });
+    test(
+      'generate before load errors with EngineDisposedFailure (via stream)',
+      () async {
+        final engine = FakeEngineService();
+        await expectLater(
+          engine.generate(prompt: 'x'),
+          emitsError(isA<EngineDisposedFailure>()),
+        );
+      },
+    );
   });
 
   // BUG B: empty/whitespace input must be rejected at the service boundary
   // with a typed EngineValidationFailure — before any native/isolate work.
+  // Single channel: delivered via the stream's onError, not a sync throw.
   group('empty input validation', () {
-    test('fake: empty prompt throws EngineValidationFailure', () async {
+    test('fake: empty prompt → EngineValidationFailure', () async {
       final engine = FakeEngineService();
       await engine.load('m');
-      expect(
-        () => engine.generate(prompt: ''),
-        throwsA(isA<EngineValidationFailure>()),
+      await expectLater(
+        engine.generate(prompt: ''),
+        emitsError(isA<EngineValidationFailure>()),
+      );
+    });
+
+    test('fake: whitespace-only prompt → EngineValidationFailure', () async {
+      final engine = FakeEngineService();
+      await engine.load('m');
+      await expectLater(
+        engine.generate(prompt: '   \n\t '),
+        emitsError(isA<EngineValidationFailure>()),
+      );
+    });
+
+    test('fake: empty messages list → EngineValidationFailure', () async {
+      final engine = FakeEngineService();
+      await engine.load('m');
+      await expectLater(
+        engine.generate(messages: const []),
+        emitsError(isA<EngineValidationFailure>()),
       );
     });
 
     test(
-      'fake: whitespace-only prompt throws EngineValidationFailure',
+      'llama service: empty prompt → EngineValidationFailure without loading '
+      '(guard runs before the isolate)',
       () async {
-        final engine = FakeEngineService();
-        await engine.load('m');
-        expect(
-          () => engine.generate(prompt: '   \n\t '),
-          throwsA(isA<EngineValidationFailure>()),
+        final engine = LlamaEngineService();
+        await expectLater(
+          engine.generate(prompt: '  '),
+          emitsError(isA<EngineValidationFailure>()),
         );
       },
     );
-
-    test('fake: empty messages list throws EngineValidationFailure', () async {
-      final engine = FakeEngineService();
-      await engine.load('m');
-      expect(
-        () => engine.generate(messages: const []),
-        throwsA(isA<EngineValidationFailure>()),
-      );
-    });
-
-    test('llama service: empty prompt throws EngineValidationFailure without '
-        'loading (guard runs before the isolate)', () {
-      final engine = LlamaEngineService();
-      expect(
-        () => engine.generate(prompt: '  '),
-        throwsA(isA<EngineValidationFailure>()),
-      );
-    });
   });
 
   group('mapToEngineFailure (llama_cpp_dart → EngineFailure)', () {

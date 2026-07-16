@@ -78,4 +78,65 @@ void main() {
     timeout: const Timeout(Duration(minutes: 4)),
     skip: skip,
   );
+
+  // Reviewer BLOCKING: if context creation fails after the model loaded (the
+  // low-RAM OOM path), the worker must dispose the already-loaded model — else
+  // ~one model size leaks on every failed load. Force ctx-create failure and
+  // prove: typed failure + flat RSS across retries.
+  test(
+    'failed context creation frees the model (typed failure, flat RSS)',
+    () async {
+      final engine = LlamaEngineService(libraryPath: paths!.libraryPath);
+      addTearDown(() => engine.dispose());
+
+      // Warm one good cycle so RSS is at steady state before we measure.
+      await engine.load(
+        paths.modelPath,
+        params: const EngineLoadParams(contextSize: 512, gpuLayers: 0),
+      );
+      await engine.unload();
+      final before = ProcessInfo.currentRss;
+
+      // maxSequences > the native limit (256) throws immediately at context
+      // creation — AFTER the model loaded — without touching memory. (An
+      // "absurd context size" instead hangs on macOS: the VM over-commits the
+      // reservation, so the failure isn't fast.)
+      const failing = EngineLoadParams(
+        contextSize: 512,
+        gpuLayers: 0,
+        maxSequences: 512,
+      );
+      for (var i = 0; i < 3; i++) {
+        await expectLater(
+          () => engine.load(paths.modelPath, params: failing),
+          throwsA(isA<EngineFailure>()),
+        ).timeout(const Duration(seconds: 30));
+        expect(engine.isLoaded, isFalse);
+      }
+
+      final growthMb = (ProcessInfo.currentRss - before) / (1024 * 1024);
+      // ignore: avoid_print
+      print(
+        'RSS after 3 failed ctx-create loads: ${growthMb.toStringAsFixed(1)} MB',
+      );
+      // A leaked model per failure would add ~3×105MB; the free path keeps it
+      // near zero.
+      expect(
+        growthMb,
+        lessThan(90),
+        reason:
+            'model not freed on ctx-create failure: '
+            '+${growthMb.toStringAsFixed(1)}MB over 3 failed loads',
+      );
+
+      // Engine still usable after the failures.
+      await engine.load(
+        paths.modelPath,
+        params: const EngineLoadParams(contextSize: 512, gpuLayers: 0),
+      );
+      expect(engine.isLoaded, isTrue);
+    },
+    timeout: const Timeout(Duration(minutes: 4)),
+    skip: skip,
+  );
 }

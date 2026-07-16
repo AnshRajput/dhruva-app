@@ -36,6 +36,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart' as llama;
@@ -157,6 +158,11 @@ final class LlamaEngineService implements EngineService {
     EngineLoadParams params = const EngineLoadParams(),
   }) async {
     _throwIfDisposed();
+    // Deterministic, cheap check before spawning an isolate and sniffing
+    // native error strings.
+    if (!File(modelPath).existsSync()) {
+      throw EngineLoadFailure('model file not found: $modelPath');
+    }
     if (_isolate != null) await unload();
 
     final response = ReceivePort();
@@ -187,6 +193,7 @@ final class LlamaEngineService implements EngineService {
             nCtx: params.contextSize,
             nBatch: params.batchSize,
             nUbatch: params.batchSize,
+            nSeqMax: params.maxSequences,
           ),
         ),
         errorsAreFatal: true,
@@ -211,13 +218,17 @@ final class LlamaEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
-    checkGenerateArgs(prompt, messages);
-    if (!isLoaded) {
-      throw const EngineDisposedFailure('no model loaded; call load() first');
-    }
-    if (_activeController != null) {
-      throw const EngineDecodeFailure('a generation is already in flight');
-    }
+    // Single error channel (see EngineService.generate): never throw; surface
+    // every pre-flight failure via the returned stream's onError.
+    final preflight =
+        checkGenerateArgs(prompt, messages) ??
+        (!isLoaded
+            ? const EngineDisposedFailure('no model loaded; call load() first')
+            : null) ??
+        (_activeController != null
+            ? const EngineStateFailure('a generation is already in flight')
+            : null);
+    if (preflight != null) return Stream<EngineEvent>.error(preflight);
 
     final id = _nextId++;
     // Closed in _handleWorkerMessage / cancel / unload.
@@ -460,24 +471,41 @@ final class _ShutdownDoneMsg {
 /// model on shutdown.
 Future<void> _llamaEngineWorker(_Bootstrap boot) async {
   final reply = boot.replyPort;
-  final llama.LlamaModel model;
-  final llama.LlamaContext context;
+  // Nullable during construction so the catch can free a partially-loaded
+  // model if context creation fails (the low-RAM OOM path) — otherwise the
+  // model native memory is orphaned on every failed load.
+  llama.LlamaModel? loadedModel;
+  llama.LlamaContext? loadedContext;
   try {
     if (boot.libraryPath == null) {
       llama.LlamaLibrary.loadFromProcess();
     } else {
       llama.LlamaLibrary.load(path: boot.libraryPath!);
     }
-    model = llama.LlamaModel.load(boot.modelParams);
-    context = llama.LlamaContext.create(model, boot.contextParams);
+    loadedModel = llama.LlamaModel.load(boot.modelParams);
+    loadedContext = llama.LlamaContext.create(loadedModel, boot.contextParams);
   } catch (e, st) {
+    try {
+      loadedContext?.dispose();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      loadedModel?.dispose();
+    } catch (_) {
+      /* ignore */
+    }
     reply.send(_ErrorMsg(0, _classify(e), '$e\n$st'));
     return;
   }
 
+  final model = loadedModel;
+  final context = loadedContext;
   final template = llama.ChatTemplate.fromModel(model);
   final session = llama.LlamaSession(context, seqId: 0);
-  final cancelled = <int>{};
+  // Bounded cancel state: only the single in-flight request can be cancelled,
+  // so one flag suffices — no unbounded set of stale ids.
+  final gate = _GenGate();
   final commandRx = ReceivePort();
   final done = Completer<void>();
 
@@ -485,7 +513,7 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
 
   commandRx.listen((dynamic msg) {
     if (msg is _CancelCommand) {
-      cancelled.add(msg.targetId);
+      if (msg.targetId == gate.inFlightId) gate.cancelRequested = true;
       return;
     }
     if (msg is _ShutdownCommand) {
@@ -512,20 +540,28 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
       return;
     }
     if (msg is _GenerateCommand) {
-      unawaited(_runGenerate(msg, session, template, cancelled, reply));
+      unawaited(_runGenerate(msg, session, template, gate, reply));
     }
   });
 
   await done.future;
 }
 
+/// Bounded cancel state for the worker's single in-flight generation.
+final class _GenGate {
+  int? inFlightId;
+  bool cancelRequested = false;
+}
+
 Future<void> _runGenerate(
   _GenerateCommand cmd,
   llama.LlamaSession session,
   String? template,
-  Set<int> cancelled,
+  _GenGate gate,
   SendPort reply,
 ) async {
+  gate.inFlightId = cmd.id;
+  gate.cancelRequested = false;
   try {
     // Each call is independent: reset KV + history first.
     session.clear();
@@ -560,7 +596,7 @@ Future<void> _runGenerate(
       // between tokens (mirrors llama_cpp_dart worker.dart:835). Without this
       // the microtask-driven generate stream starves the cancel event.
       await Future<void>.delayed(Duration.zero);
-      if (cancelled.remove(cmd.id)) {
+      if (gate.cancelRequested) {
         reply.send(_DoneMsg(cmd.id, EngineStopReason.cancelled, count));
         return;
       }
@@ -587,10 +623,14 @@ Future<void> _runGenerate(
     }
     reply.send(_DoneMsg(cmd.id, EngineStopReason.endOfSequence, count));
   } catch (e, st) {
-    if (cancelled.remove(cmd.id)) {
+    if (gate.cancelRequested) {
       reply.send(_DoneMsg(cmd.id, EngineStopReason.cancelled, 0));
     } else {
       reply.send(_ErrorMsg(cmd.id, _classify(e), '$e\n$st'));
     }
+  } finally {
+    // Clear in-flight id so a late cancel for this (now finished) request is
+    // dropped by the listener instead of accumulating.
+    if (gate.inFlightId == cmd.id) gate.inFlightId = null;
   }
 }
