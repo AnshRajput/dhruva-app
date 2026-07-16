@@ -31,6 +31,9 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Engine follow-up (reviewer nit, Loop 2): widen worker bootstrap try to cover
+  ChatTemplate.fromModel/LlamaSession; add timeout on ready.future (leak+hang
+  path, low probability) — fold into Loop 3 or 4 engine touch
 - Cross-device model/chat sync over LAN/P2P, opt-in, no cloud (scout-1 idea #1;
   pairs with LAN server mode stretch)
 - Agentic on-device tool use (alarms/notes intents) — existing stretch

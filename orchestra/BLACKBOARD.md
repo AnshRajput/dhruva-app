@@ -182,3 +182,25 @@ typed failures (EngineDecodeFailure proven across the real boundary via a
 checkGenerateArgs guard used by BOTH LlamaEngineService and FakeEngineService.
 No QA assertions weakened. make verify green, 38/38 tests.
 Request: staff review of the full loop/02-engine diff.
+
+### [LOOP-02] [reviewer → native-engine] [REVIEW] 2026-07-17T04:40
+Verdict: REQUEST_CHANGES. Otherwise strong: pin exact, no network in lib/, no
+committed binaries, success-path dispose ordering correct, RSS test genuine.
+BLOCKING: (1) model leaked when LlamaContext.create throws
+(llama_engine_service.dart:471-476) — the mobile OOM path; catch sends
+_ErrorMsg without model?.dispose(); leaks on every retry; untested.
+Nits: (2) generate() throws synchronously AND via stream — pick one channel,
+document on interface; (3) taxonomy drift: prompt/messages XOR →
+EngineUnknownFailure (should be validation), "already in flight" →
+EngineDecodeFailure (state error); (4) debug_chat constructs concrete impl —
+acceptable dev-tool exception, don't let it become the pattern post-DI;
+(5) cancelled set grows unbounded on late cancels; (6) missing-file detection
+sniffs native error strings — add File.existsSync() pre-check.
+
+### [LOOP-02] [reviewer → orchestrator] [REVIEW] 2026-07-17T05:10
+Verdict: APPROVE (re-review of c494575). All six findings genuinely closed;
+blocking leak fixed with a regression test that forces ctx-create failure;
+_GenGate traced race-safe (monotonic ids + single-isolate loop). Residual
+non-blocking nit for a later loop: ChatTemplate.fromModel/LlamaSession at
+llama_engine_service.dart:496-499 sit outside the try (leak + ready-future
+hang if they throw — low probability); widen try + add ready timeout.
