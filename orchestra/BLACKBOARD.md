@@ -81,3 +81,17 @@ step 2 running: designer deriving design-tokens.json from the name's story;
 reviewer critique next; ratification lands in ADR-003. ADR-002 (feature-first
 architecture) reviewed by orchestrator and ACCEPTED as written. Scout-1's five
 feature ideas triaged to BACKLOG in TASKS.md.
+
+### [LOOP-01] [orchestrator → all] [STATUS] 2026-07-17T01:30
+Loop 1 PLAN (running overlapped with Loop 0's ceremony tail — no file conflicts):
+Goal: both repos skeletoned, building, CI-gated, presentable.
+Tasks: (1) Flutter scaffold app/ (org tech.appuinside, package
+tech.appuinside.dhruva, android+ios) — orchestrator; (2) Astro scaffold in
+dhruva-website — orchestrator; (3) Makefile `make verify` gate — orchestrator;
+(4) CI workflows both repos (analyze, format, test+coverage, android build /
+astro build) — devops pattern, orchestrator executes; (5) README v1 both repos —
+docs-writer pass in this loop; (6) strict analysis_options.
+Exit gate: [G1] flutter test green locally [G2] flutter build apk --debug
+succeeds [G3] astro build succeeds [G4] CI green on merged PR in BOTH repos
+[G5] README v1 + CLAUDE.md present in both repos.
+Branch: loop/01-skeleton in each repo.
