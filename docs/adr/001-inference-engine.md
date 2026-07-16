@@ -1,6 +1,6 @@
 # ADR-001 — LLM inference engine binding
 
-- **Status:** DRAFT
+- **Status:** ACCEPTED (rev 1 — flip condition met, Option A chosen; see Decision)
 - **Date:** 2026-07-17
 - **Deciders:** architect (pending scout-2 evidence)
 - **Loop:** 0
@@ -52,17 +52,28 @@ gate — an option that cannot reach mmproj is disqualified regardless of ergono
 - **C:** `EngineService` → generated `bindings.dart` (ffigen) called from an isolate
   worker; we own `native/` submodule + build scripts. Widest surface, most build work.
 
-## Decision (provisional)
+## Decision
 
-**Lean C (vendored submodule + ffigen)**, *pending scout-2*. Rationale: vision via
-`libmtmd` and cooperative cancellation are core product surfaces, and owning the
-binding removes the risk of being gated by a third party's exposure choices or
-release cadence. **Flip to A if** scout-2 shows `llama_cpp_dart` is actively
-maintained (commit within weeks), surfaces `libmtmd`, and exposes a stop callback —
-then A's saved build-matrix work outweighs C's control. B is the fallback only if
-both A and C prove too costly to reach vision. `EngineService` is abstract on day 1
-regardless, so the concrete binding stays swappable and this ADR stays cheap to
-revise.
+**Option A — `llama_cpp_dart`, consumed as a git dependency pinned to an exact
+commit** (NOT the stale pub.dev release). The draft's flip condition was verified
+2026-07-17 by the orchestrator against primary sources:
+
+- **Actively maintained:** last commit 2026-06-18 (github.com/netdur/llama_cpp_dart)
+  — "test(tool): add probe_cancel for the cancel-responsiveness regression (#105)",
+  which also evidences a working cancellation path.
+- **`libmtmd` surfaced:** `lib/src/multimodal/mtmd_bitmap.dart`, `mtmd_chunks.dart`;
+  README documents `MultimodalParams(mmprojPath: ...)`, vision+audio via mtmd, and
+  mtmd-enabled iOS/Android artifacts (incl. a Hexagon-NPU AAR for Snapdragon).
+- **Mobile-first 0.9.x rewrite:** single-active-session, off-thread, iOS/Android
+  packaging; llama.cpp vendored as a submodule tracking master.
+- **Caveat found:** pub.dev latest is 0.2.2 (2026-01-02) — releases lag the repo,
+  hence the pinned git dependency.
+
+Accepted risks: pre-1.0 API drift (mitigated by `EngineService` wrapper),
+single-active-session model (acceptable — matches our one-loaded-model UX; Model
+Arena in Loop 11 must verify dual-session feasibility or run sequential turns).
+**Fallback remains C** (vendor + ffigen) if the API surface blocks a core feature;
+the abstraction keeps that flip cheap. B (fllama) is not pursued.
 
 ## Isolate / threading model (applies to any option)
 
