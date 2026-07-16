@@ -48,8 +48,17 @@ Computed via relative-luminance formula (not eyeballed) — script: `luminance =
 | success / onSuccess | `#4FAE8A` | `#0A1F17` | 6.35:1 | AA text PASS |
 | warning / onWarning | `#E2933A` | `#241505` | 7.15:1 | AA text PASS |
 | onBackground / primaryContainer | `#EDEFF8` | `#3F3212` | 10.92:1 | AA text PASS |
+| onPrimaryContainer / primaryContainer | `#F6EBD0` | `#3F3212` | 10.57:1 | AA text PASS |
+| onSecondaryContainer / secondaryContainer | `#C9DCF5` | `#1E3355` | 9.06:1 | AA text PASS |
+| onTertiaryContainer / tertiaryContainer | `#F0C9B5` | `#40200F` | 9.59:1 | AA text PASS |
+| onErrorContainer / errorContainer | `#F9C8C9` | `#470E10` | 10.56:1 | AA text PASS |
+| onSurfaceVariant / surfaceVariant | `#C7CEE0` | `#2D385C` | 7.28:1 | AA text PASS |
+| onInverseSurface / inverseSurface | `#1F263D` | `#EDEFF8` | 13.05:1 | AA text PASS |
+| inversePrimary / inverseSurface | `#8C6A1D` | `#EDEFF8` | 4.36:1 | **Large-text/UI PASS only** — see compromise note below |
 | outline / surface | `#647199` | `#1F263D` | 3.11:1 | **3:1 UI-component pair** — non-text border/divider only, not for text |
 | outline / background | `#647199` | `#0E1220` | 3.88:1 | **3:1 UI-component pair** |
+| outlineVariant / surface | `#3D4867` | `#1F263D` | 1.65:1 | **Non-text, intentionally sub-3:1** — see compromise note below |
+| scrim | `#0E1220` | n/a | n/a | Functional overlay at partial opacity, no fixed foreground — not a contrast pair |
 
 ### Light theme
 
@@ -65,7 +74,22 @@ Computed via relative-luminance formula (not eyeballed) — script: `luminance =
 | success / onSuccess | `#1F7A5C` | `#F2FBF7` | 4.98:1 | AA text PASS |
 | warning / onWarning | `#A85E12` | `#FFF6EC` | 4.60:1 | AA text PASS |
 | onBackground / primaryContainer | `#12182B` | `#FCEFD2` | 15.46:1 | AA text PASS |
+| onPrimaryContainer / primaryContainer | `#4A3508` | `#FCEFD2` | 10.21:1 | AA text PASS |
+| onSecondaryContainer / secondaryContainer | `#1C355F` | `#DCE6F7` | 9.69:1 | AA text PASS |
+| onTertiaryContainer / tertiaryContainer | `#5C2814` | `#F7DCD2` | 9.12:1 | AA text PASS |
+| onErrorContainer / errorContainer | `#6B1315` | `#FBDADA` | 9.34:1 | AA text PASS |
+| onSurfaceVariant / surfaceVariant | `#454F6B` | `#E9ECF5` | 6.88:1 | AA text PASS |
+| onInverseSurface / inverseSurface | `#EDEFF8` | `#1F263D` | 13.05:1 | AA text PASS |
+| inversePrimary / inverseSurface | `#EBBA47` | `#1F263D` | 8.30:1 | AA text PASS |
 | outline / surface | `#7C8598` | `#FFFFFF` | 3.71:1 | **3:1 UI-component pair** |
 | outline / background | `#7C8598` | `#F7F8FC` | 3.49:1 | **3:1 UI-component pair** |
+| outlineVariant / surface | `#CDD2E0` | `#FFFFFF` | 1.51:1 | **Non-text, intentionally sub-3:1** — see compromise note below |
+| scrim | `#0E1220` | n/a | n/a | Same functional overlay hex as dark theme; scrim doesn't invert with theme |
 
-**Compromises, stated plainly:** the two `outline` pairs in each theme are held to the 3:1 non-text threshold, not 4.5:1 — this is correct per WCAG 2.1 SC 1.4.11 (non-text contrast) since `outline` is only ever used for dividers, input borders, and other non-text UI boundaries in this token set, never for rendering text. Every pair that carries text meets or exceeds 4.5:1. `onPrimary` in the dark theme intentionally equals `background` (`#0E1220`) rather than a separate near-black — same hex, reused on purpose, still verified independently at 10.34:1.
+**Compromises, stated plainly:**
+
+- The `outline` pairs in each theme are held to the 3:1 non-text threshold, not 4.5:1 — correct per WCAG 2.1 SC 1.4.11 (non-text contrast), since `outline` is only ever used for dividers and input borders, never text. Every pair that carries text meets or exceeds 4.5:1.
+- `onPrimary` in the dark theme intentionally equals `background` (`#0E1220`) rather than a separate near-black — same hex, reused on purpose, still verified independently at 10.34:1.
+- **`outlineVariant` does not meet 3:1** (1.65:1 dark, 1.51:1 light) — this is deliberate, not a gap: Material 3's own spec defines `outlineVariant` as a decorative, low-emphasis divider explicitly exempt from contrast minimums, one step quieter than `outline`. Forcing it to 3:1 would make it indistinguishable from `outline` and defeat the point of having two divider tokens. Flagged here rather than silently passed off as verified.
+- **`inversePrimary` in the dark theme clears only the large-text/UI bar** (4.36:1 against `#EDEFF8`), not the 4.5:1 body-text bar. `inversePrimary` is used on short-lived inverse surfaces (snackbars, tooltips) which are conventionally large/bold or icon-only; if a future screen needs small body text in this role, use `onInverseSurface` instead, not `inversePrimary`.
+- `scrim` is a translucent functional overlay (recommended ~48–60% alpha at point of use), not a fixed foreground/background pair, so no single ratio applies — using `midnight.900` instead of pure black keeps even the overlay tinted to the brand hue.

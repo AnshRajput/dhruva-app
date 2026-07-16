@@ -47,3 +47,13 @@ Decision: minSdk 26 / target latest, iOS 14+. Catalog tiers: 1B → 4GB+ RAM,
 3-4B → 6GB+; tiering logic in core/device_info per ADR-002.
 Why: scout-3 device research; llama.cpp GPU accel needs API 30+/iOS 14 Metal —
 older devices fall back to CPU tiers.
+
+## ADR-003 — Brand identity ratified (2026-07-17)
+Context: ceremony ran per protocol — scout-3 verification (PASS, no hard
+collision), designer derivation from the pole-star story, reviewer critique
+(REQUEST_CHANGES on M3 completeness), designer fix pass.
+Decision: DHRUVA / "Dhruva AI"; design-tokens.json at repo root is the single
+canonical brand source for app AND website. Palette midnight+starGold (dark
+hero); Fraunces+Manrope with Devanagari fallbacks; compass-needle star logo.
+Two documented contrast exceptions (inversePrimary dark = large-text only;
+outlineVariant = decorative, M3-exempt). Full detail: docs/adr/003.

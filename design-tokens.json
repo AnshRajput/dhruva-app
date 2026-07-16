@@ -127,25 +127,25 @@
       "display": { "family": "Fraunces", "role": "Editorial serif carrying the myth: display, headline, and titleLarge.", "devanagariCompanion": "Noto Serif Devanagari" },
       "ui": { "family": "Manrope", "role": "Humanist geometric sans for interface text: titleMedium/Small, body, label.", "devanagariCompanion": "Noto Sans Devanagari" }
     },
-    "displayLarge":  { "family": "Fraunces", "weight": 600, "size": 57, "lineHeight": 64, "letterSpacing": -0.25, "devanagariFallback": "Noto Serif Devanagari" },
-    "displayMedium": { "family": "Fraunces", "weight": 600, "size": 45, "lineHeight": 52, "letterSpacing": 0,     "devanagariFallback": "Noto Serif Devanagari" },
-    "displaySmall":  { "family": "Fraunces", "weight": 600, "size": 36, "lineHeight": 44, "letterSpacing": 0,     "devanagariFallback": "Noto Serif Devanagari" },
+    "displayLarge":  { "family": "Fraunces", "weight": 600, "size": 57, "lineHeight": 64, "heightMultiplier": 1.123, "letterSpacing": -0.25, "devanagariFallback": "Noto Serif Devanagari" },
+    "displayMedium": { "family": "Fraunces", "weight": 600, "size": 45, "lineHeight": 52, "heightMultiplier": 1.156, "letterSpacing": 0,     "devanagariFallback": "Noto Serif Devanagari" },
+    "displaySmall":  { "family": "Fraunces", "weight": 600, "size": 36, "lineHeight": 44, "heightMultiplier": 1.222, "letterSpacing": 0,     "devanagariFallback": "Noto Serif Devanagari" },
 
-    "headlineLarge":  { "family": "Fraunces", "weight": 600, "size": 32, "lineHeight": 40, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
-    "headlineMedium": { "family": "Fraunces", "weight": 500, "size": 28, "lineHeight": 36, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
-    "headlineSmall":  { "family": "Fraunces", "weight": 500, "size": 24, "lineHeight": 32, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
+    "headlineLarge":  { "family": "Fraunces", "weight": 600, "size": 32, "lineHeight": 40, "heightMultiplier": 1.250, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
+    "headlineMedium": { "family": "Fraunces", "weight": 500, "size": 28, "lineHeight": 36, "heightMultiplier": 1.286, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
+    "headlineSmall":  { "family": "Fraunces", "weight": 500, "size": 24, "lineHeight": 32, "heightMultiplier": 1.333, "letterSpacing": 0, "devanagariFallback": "Noto Serif Devanagari" },
 
-    "titleLarge":  { "family": "Fraunces", "weight": 600, "size": 22, "lineHeight": 28, "letterSpacing": 0,    "devanagariFallback": "Noto Serif Devanagari" },
-    "titleMedium": { "family": "Manrope",  "weight": 600, "size": 16, "lineHeight": 24, "letterSpacing": 0.15, "devanagariFallback": "Noto Sans Devanagari" },
-    "titleSmall":  { "family": "Manrope",  "weight": 600, "size": 14, "lineHeight": 20, "letterSpacing": 0.1,  "devanagariFallback": "Noto Sans Devanagari" },
+    "titleLarge":  { "family": "Fraunces", "weight": 600, "size": 22, "lineHeight": 28, "heightMultiplier": 1.273, "letterSpacing": 0,    "devanagariFallback": "Noto Serif Devanagari" },
+    "titleMedium": { "family": "Manrope",  "weight": 600, "size": 16, "lineHeight": 24, "heightMultiplier": 1.500, "letterSpacing": 0.15, "devanagariFallback": "Noto Sans Devanagari" },
+    "titleSmall":  { "family": "Manrope",  "weight": 600, "size": 14, "lineHeight": 20, "heightMultiplier": 1.429, "letterSpacing": 0.1,  "devanagariFallback": "Noto Sans Devanagari" },
 
-    "bodyLarge":  { "family": "Manrope", "weight": 400, "size": 16, "lineHeight": 24, "letterSpacing": 0.5,  "devanagariFallback": "Noto Sans Devanagari" },
-    "bodyMedium": { "family": "Manrope", "weight": 400, "size": 14, "lineHeight": 20, "letterSpacing": 0.25, "devanagariFallback": "Noto Sans Devanagari" },
-    "bodySmall":  { "family": "Manrope", "weight": 400, "size": 12, "lineHeight": 16, "letterSpacing": 0.4,  "devanagariFallback": "Noto Sans Devanagari" },
+    "bodyLarge":  { "family": "Manrope", "weight": 400, "size": 16, "lineHeight": 24, "heightMultiplier": 1.500, "letterSpacing": 0.5,  "devanagariFallback": "Noto Sans Devanagari" },
+    "bodyMedium": { "family": "Manrope", "weight": 400, "size": 14, "lineHeight": 20, "heightMultiplier": 1.429, "letterSpacing": 0.25, "devanagariFallback": "Noto Sans Devanagari" },
+    "bodySmall":  { "family": "Manrope", "weight": 400, "size": 12, "lineHeight": 16, "heightMultiplier": 1.333, "letterSpacing": 0.4,  "devanagariFallback": "Noto Sans Devanagari" },
 
-    "labelLarge":  { "family": "Manrope", "weight": 600, "size": 14, "lineHeight": 20, "letterSpacing": 0.1, "devanagariFallback": "Noto Sans Devanagari" },
-    "labelMedium": { "family": "Manrope", "weight": 600, "size": 12, "lineHeight": 16, "letterSpacing": 0.5, "devanagariFallback": "Noto Sans Devanagari" },
-    "labelSmall":  { "family": "Manrope", "weight": 600, "size": 11, "lineHeight": 16, "letterSpacing": 0.5, "devanagariFallback": "Noto Sans Devanagari" }
+    "labelLarge":  { "family": "Manrope", "weight": 600, "size": 14, "lineHeight": 20, "heightMultiplier": 1.429, "letterSpacing": 0.1, "devanagariFallback": "Noto Sans Devanagari" },
+    "labelMedium": { "family": "Manrope", "weight": 600, "size": 12, "lineHeight": 16, "heightMultiplier": 1.333, "letterSpacing": 0.5, "devanagariFallback": "Noto Sans Devanagari" },
+    "labelSmall":  { "family": "Manrope", "weight": 600, "size": 11, "lineHeight": 16, "heightMultiplier": 1.455, "letterSpacing": 0.5, "devanagariFallback": "Noto Sans Devanagari" }
   },
 
   "spacing": {

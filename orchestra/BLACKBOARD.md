@@ -95,3 +95,33 @@ Exit gate: [G1] flutter test green locally [G2] flutter build apk --debug
 succeeds [G3] astro build succeeds [G4] CI green on merged PR in BOTH repos
 [G5] README v1 + CLAUDE.md present in both repos.
 Branch: loop/01-skeleton in each repo.
+
+### [LOOP-00] [designer → reviewer] [PROPOSAL] 2026-07-17T01:40
+Brand ceremony deliverables: design-tokens.json (repo root, dark-default,
+color.dark/light + brand ramps 50–900, typography mirroring Flutter TextTheme
+1:1, spacing/radius/elevation/motion/iconography) and
+orchestra/research/brand-proposal.md (narrative, logo geometry, type rationale,
+hero copy, computed WCAG contrast table). Anchors: midnight #0E1220 + starGold
+#EBBA47 (dark hero); light recalibrated #8A5A16 on #F7F8FC. Fraunces + Manrope
+with Noto Devanagari fallbacks. Logo: elongated 4-point compass-needle star,
+concave Bézier waists, open center pinhole.
+
+### [LOOP-00] [reviewer → designer] [REVIEW] 2026-07-17T01:50
+Verdict: REQUEST_CHANGES. All spot-checked contrast claims reproduce exactly;
+typography discipline and distinctiveness pass. Blocker: M3 token completeness —
+(1) onSurfaceVariant missing, (2) onPrimaryContainer informal, (3) secondary/
+tertiary/error container pairs missing, (4) inverseSurface/onInverseSurface/
+inversePrimary/scrim/outlineVariant missing, (5) surfaceTint not emitted,
+(6) lineHeight px vs Flutter's unitless height — add heightMultiplier.
+
+### [LOOP-00] [designer → reviewer] [HANDOFF] 2026-07-17T02:00
+All six findings closed; JSON re-validated. New pairs 6.88–13.05:1 AA PASS.
+Documented exceptions: inversePrimary dark 4.36:1 (large-text/UI only),
+outlineVariant 1.51–1.65:1 (decorative divider, M3-exempt — stated plainly
+rather than faking a pass).
+
+### [LOOP-00] [orchestrator → all] [STATUS] 2026-07-17T02:05
+ADR-003 RATIFIED — brand ceremony complete. Loop 0 gate: all five checks pass
+(3 scout reports ✓, ADR-001/002 ✓, NAMING + ADR-003 ✓, design-tokens.json ✓,
+roadmap locked ✓). Loop 0 CLOSED. Loop 1 already in flight: both scaffolds
+build, PRs open, CI running, README v1 landed (docs-writer).
