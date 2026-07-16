@@ -95,6 +95,30 @@ EngineFailure mapToEngineFailure(Object error, {StackTrace? stackTrace}) {
   return EngineUnknownFailure(text, cause: error);
 }
 
+/// Failure category carried across the isolate boundary. Exceptions can't be
+/// sent with their type intact (they become strings), so the WORKER — where
+/// the real exception object lives — classifies via [mapToEngineFailure] and
+/// sends this enum; the main isolate rebuilds the typed failure from it. This
+/// keeps the ADR-002 taxonomy alive for post-load (decode) failures too.
+enum _FailKind { load, oom, decode, validation, unknown }
+
+_FailKind _classify(Object error) => switch (mapToEngineFailure(error)) {
+  EngineLoadFailure() => _FailKind.load,
+  EngineOutOfMemoryFailure() => _FailKind.oom,
+  EngineDecodeFailure() => _FailKind.decode,
+  EngineValidationFailure() => _FailKind.validation,
+  _ => _FailKind.unknown,
+};
+
+EngineFailure _failureFromKind(_FailKind kind, String message) =>
+    switch (kind) {
+      _FailKind.load => EngineLoadFailure(message),
+      _FailKind.oom => EngineOutOfMemoryFailure(message),
+      _FailKind.decode => EngineDecodeFailure(message),
+      _FailKind.validation => EngineValidationFailure(message),
+      _FailKind.unknown => EngineUnknownFailure(message),
+    };
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -142,7 +166,7 @@ final class LlamaEngineService implements EngineService {
         if (msg is _ReadyMsg) {
           ready.complete(msg);
         } else if (msg is _ErrorMsg) {
-          ready.completeError(mapToEngineFailure(msg.message));
+          ready.completeError(_failureFromKind(msg.kind, msg.message));
         }
         return;
       }
@@ -187,11 +211,7 @@ final class LlamaEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
-    if ((prompt == null) == (messages == null)) {
-      throw const EngineUnknownFailure(
-        'generate requires exactly one of prompt or messages',
-      );
-    }
+    checkGenerateArgs(prompt, messages);
     if (!isLoaded) {
       throw const EngineDisposedFailure('no model loaded; call load() first');
     }
@@ -265,7 +285,7 @@ final class LlamaEngineService implements EngineService {
         if (msg.id != _activeId) return;
         final c = _activeController;
         if (c != null && !c.isClosed) {
-          c.addError(mapToEngineFailure(msg.message));
+          c.addError(_failureFromKind(msg.kind, msg.message));
         }
         _closeActive(msg.id);
       case _ShutdownDoneMsg():
@@ -421,8 +441,9 @@ final class _DoneMsg {
 
 final class _ErrorMsg {
   final int id;
+  final _FailKind kind;
   final String message;
-  const _ErrorMsg(this.id, this.message);
+  const _ErrorMsg(this.id, this.kind, this.message);
 }
 
 final class _ShutdownDoneMsg {
@@ -450,7 +471,7 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
     model = llama.LlamaModel.load(boot.modelParams);
     context = llama.LlamaContext.create(model, boot.contextParams);
   } catch (e, st) {
-    reply.send(_ErrorMsg(0, '$e\n$st'));
+    reply.send(_ErrorMsg(0, _classify(e), '$e\n$st'));
     return;
   }
 
@@ -512,7 +533,11 @@ Future<void> _runGenerate(
     if (cmd.messages != null) {
       if (template == null) {
         reply.send(
-          _ErrorMsg(cmd.id, 'model has no chat template; use a prompt instead'),
+          _ErrorMsg(
+            cmd.id,
+            _FailKind.validation,
+            'model has no chat template; use a prompt instead',
+          ),
         );
         return;
       }
@@ -565,7 +590,7 @@ Future<void> _runGenerate(
     if (cancelled.remove(cmd.id)) {
       reply.send(_DoneMsg(cmd.id, EngineStopReason.cancelled, 0));
     } else {
-      reply.send(_ErrorMsg(cmd.id, '$e\n$st'));
+      reply.send(_ErrorMsg(cmd.id, _classify(e), '$e\n$st'));
     }
   }
 }

@@ -145,6 +145,49 @@ void main() {
     });
   });
 
+  // BUG B: empty/whitespace input must be rejected at the service boundary
+  // with a typed EngineValidationFailure — before any native/isolate work.
+  group('empty input validation', () {
+    test('fake: empty prompt throws EngineValidationFailure', () async {
+      final engine = FakeEngineService();
+      await engine.load('m');
+      expect(
+        () => engine.generate(prompt: ''),
+        throwsA(isA<EngineValidationFailure>()),
+      );
+    });
+
+    test(
+      'fake: whitespace-only prompt throws EngineValidationFailure',
+      () async {
+        final engine = FakeEngineService();
+        await engine.load('m');
+        expect(
+          () => engine.generate(prompt: '   \n\t '),
+          throwsA(isA<EngineValidationFailure>()),
+        );
+      },
+    );
+
+    test('fake: empty messages list throws EngineValidationFailure', () async {
+      final engine = FakeEngineService();
+      await engine.load('m');
+      expect(
+        () => engine.generate(messages: const []),
+        throwsA(isA<EngineValidationFailure>()),
+      );
+    });
+
+    test('llama service: empty prompt throws EngineValidationFailure without '
+        'loading (guard runs before the isolate)', () {
+      final engine = LlamaEngineService();
+      expect(
+        () => engine.generate(prompt: '  '),
+        throwsA(isA<EngineValidationFailure>()),
+      );
+    });
+  });
+
   group('mapToEngineFailure (llama_cpp_dart → EngineFailure)', () {
     test('model load exception → EngineLoadFailure', () {
       final f = mapToEngineFailure(

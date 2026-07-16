@@ -378,4 +378,78 @@ void main() {
       skip: skip,
     );
   });
+
+  // BUG A: failures raised inside the worker isolate must keep their ADR-002
+  // type when they cross back to the main isolate — not collapse to
+  // EngineUnknownFailure. These exercise the REAL cross-isolate path (not a
+  // directly-constructed exception), one test per taxonomy branch.
+  group('taxonomy across the isolate boundary', () {
+    test(
+      'decode overflow surfaces a typed EngineDecodeFailure',
+      () async {
+        final engine = LlamaEngineService(libraryPath: paths!.libraryPath);
+        addTearDown(() => engine.dispose());
+        // Tiny context: a prompt far larger than nCtx overflows the KV cache
+        // during prefill → LlamaDecodeException in the worker (shift is off).
+        await engine.load(
+          paths.modelPath,
+          params: const EngineLoadParams(
+            contextSize: 128,
+            batchSize: 128,
+            gpuLayers: 0,
+          ),
+        );
+
+        Object? err;
+        try {
+          await for (final _ in engine.generate(
+            prompt: 'overflow ' * 400, // ~hundreds of tokens >> 128
+            params: const EngineGenerateParams(maxTokens: 8, greedy: true),
+          )) {}
+        } catch (e) {
+          err = e;
+        }
+        expect(
+          err,
+          isA<EngineDecodeFailure>(),
+          reason:
+              'worker decode failure must survive as EngineDecodeFailure, '
+              'got: $err',
+        );
+
+        // Engine stays usable afterwards.
+        await engine.load(
+          paths.modelPath,
+          params: const EngineLoadParams(contextSize: 512, gpuLayers: 0),
+        );
+        var tokens = 0;
+        await for (final e in engine.generate(
+          prompt: 'Hi',
+          params: const EngineGenerateParams(maxTokens: 4, greedy: true),
+        )) {
+          if (e is EngineToken) tokens++;
+        }
+        expect(tokens, greaterThan(0));
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+      skip: skip,
+    );
+
+    test(
+      'nonexistent model surfaces a typed EngineLoadFailure',
+      () async {
+        final engine = LlamaEngineService(libraryPath: paths!.libraryPath);
+        addTearDown(() => engine.dispose());
+        final missing =
+            '/tmp/dhruva_qa_load_${DateTime.now().microsecondsSinceEpoch}.gguf';
+        await expectLater(
+          () => engine.load(missing),
+          throwsA(isA<EngineLoadFailure>()),
+        ).timeout(const Duration(seconds: 20));
+        expect(engine.isLoaded, isFalse);
+      },
+      timeout: const Timeout(Duration(minutes: 1)),
+      skip: skip,
+    );
+  });
 }

@@ -64,11 +64,7 @@ final class FakeEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
-    if ((prompt == null) == (messages == null)) {
-      throw const EngineUnknownFailure(
-        'generate requires exactly one of prompt or messages',
-      );
-    }
+    checkGenerateArgs(prompt, messages);
     if (!isLoaded) {
       throw const EngineDisposedFailure('no model loaded; call load() first');
     }

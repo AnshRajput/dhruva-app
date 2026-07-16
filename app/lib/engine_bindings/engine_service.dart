@@ -125,6 +125,12 @@ final class EngineDecodeFailure extends EngineFailure {
   const EngineDecodeFailure(super.message, {super.cause});
 }
 
+/// Bad caller input caught at the service boundary before any native work
+/// (the `ValidationFailure` branch of the ADR-002 taxonomy, engine-scoped).
+final class EngineValidationFailure extends EngineFailure {
+  const EngineValidationFailure(super.message, {super.cause});
+}
+
 /// An operation was attempted after the engine (or a required model) was
 /// disposed / not loaded.
 final class EngineDisposedFailure extends EngineFailure {
@@ -134,6 +140,23 @@ final class EngineDisposedFailure extends EngineFailure {
 /// Last-resort bucket. Always carries the original [cause].
 final class EngineUnknownFailure extends EngineFailure {
   const EngineUnknownFailure(super.message, {super.cause});
+}
+
+/// Validate [EngineService.generate] arguments at the service boundary,
+/// before any native/isolate work. Throws the right [EngineFailure] subtype.
+/// Shared by every [EngineService] implementation so the contract can't drift.
+void checkGenerateArgs(String? prompt, List<ChatTurn>? messages) {
+  if ((prompt == null) == (messages == null)) {
+    throw const EngineUnknownFailure(
+      'generate requires exactly one of prompt or messages',
+    );
+  }
+  if (prompt != null && prompt.trim().isEmpty) {
+    throw const EngineValidationFailure('prompt is empty or whitespace-only');
+  }
+  if (messages != null && messages.isEmpty) {
+    throw const EngineValidationFailure('messages is empty');
+  }
 }
 
 /// On-device inference engine. One loaded model at a time (ADR-001: single
