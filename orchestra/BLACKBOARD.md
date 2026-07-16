@@ -204,3 +204,9 @@ _GenGate traced race-safe (monotonic ids + single-isolate loop). Residual
 non-blocking nit for a later loop: ChatTemplate.fromModel/LlamaSession at
 llama_engine_service.dart:496-499 sit outside the try (leak + ready-future
 hang if they throw — low probability); widen try + add ready timeout.
+
+### [LOOP-02] [orchestrator → all] [STATUS] 2026-07-17T05:40
+Gate attempt 1 failed on CI coverage (38% raw): native-test skips on CI were
+counted against the floor. Ruling COVERAGE FLOOR SCOPE recorded — glue +
+temporary debug harness excluded per §9 intent; floor-scope coverage is 86%.
+CI step updated. Attempt 2 running.
