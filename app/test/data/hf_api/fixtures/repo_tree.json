@@ -1,0 +1,50 @@
+[
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-IQ3_M.gguf",
+    "size": 776664320,
+    "lfs": {
+      "oid": "aebd579aa34bde75426b7e3b786b089bc366f16da19e8aa60945d27f77e780f0",
+      "size": 776664320
+    }
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q2_K.gguf",
+    "size": 676304992
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q3_K_M.gguf",
+    "size": 824178784
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "size": 986048768
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q5_K_M.gguf",
+    "size": 1125050624
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q6_K.gguf",
+    "size": 1272740096
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-Q8_0.gguf",
+    "size": 1646573312
+  },
+  {
+    "type": "file",
+    "path": "Qwen2.5-1.5B-Instruct-f16.gguf",
+    "size": 3093669376
+  },
+  {
+    "type": "directory",
+    "path": "mmproj"
+  }
+]

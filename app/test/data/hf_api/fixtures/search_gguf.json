@@ -1,0 +1,32 @@
+[
+  {
+    "id": "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+    "likes": 2783,
+    "downloads": 2328315,
+    "tags": [
+      "gguf",
+      "qwen3.6",
+      "moe",
+      "vision",
+      "license:apache-2.0",
+      "base_model:Qwen/Qwen3.6-35B-A3B"
+    ],
+    "pipeline_tag": "image-text-to-text",
+    "private": false,
+    "trendingScore": 149,
+    "createdAt": "2026-04-17T00:15:26.000Z"
+  },
+  {
+    "id": "unsloth/Qwen3.6-27B-MTP-GGUF",
+    "likes": 1107,
+    "downloads": 2893839,
+    "tags": ["transformers", "gguf", "qwen3_5", "license:apache-2.0"],
+    "pipeline_tag": "image-text-to-text"
+  },
+  {
+    "id": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+    "likes": 122,
+    "downloads": 325917,
+    "tags": ["gguf", "qwen3_6", "llama.cpp", "conversational"]
+  }
+]

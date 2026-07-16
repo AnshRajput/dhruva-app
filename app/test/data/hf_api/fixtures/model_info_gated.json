@@ -1,0 +1,7 @@
+{
+  "id": "meta-llama/Llama-2-7b-hf",
+  "license": "llama2",
+  "gated": "manual",
+  "private": false,
+  "tags": ["license:llama2"]
+}
