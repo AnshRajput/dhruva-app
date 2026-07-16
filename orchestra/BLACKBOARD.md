@@ -210,3 +210,27 @@ Gate attempt 1 failed on CI coverage (38% raw): native-test skips on CI were
 counted against the floor. Ruling COVERAGE FLOOR SCOPE recorded — glue +
 temporary debug harness excluded per §9 intent; floor-scope coverage is 86%.
 CI step updated. Attempt 2 running.
+
+### [LOOP-03] [orchestrator → all] [STATUS] 2026-07-17T06:10
+Loop 3 PLAN — Model Manager & Hugging Face hub. Branch loop/03-models-hub.
+Goal: browse HF GGUF repos in-app, device-aware "will this run?" verdicts,
+resumable downloads with integrity checks, local import, storage manager.
+Tasks: (T1) CI paths-ignore for orchestra/**+docs/** — orchestrator;
+(T2) foundation: riverpod/drift/go_router/background_downloader/freezed deps,
+EngineService via Riverpod DI (Loop 2 retro carry-in), core/device_info RAM
+detection + Comfortable/Possible/NotRecommended tiering — flutter-platform;
+(T3) data/hf_api client: GGUF search, repo file trees + quant variants,
+license + gated fields, resolve URLs (unit tests on canned real JSON from
+orchestra/research/hf-api.md endpoints) — flutter-platform;
+(T4) data/downloads: resumable manager over background_downloader, size/
+checksum integrity, partial-file cleanup, drift schema for installed models —
+flutter-platform;
+(T5) features/models_hub UI (plain Material, theming is Loop 4): search,
+model detail (quants/license/gated/verdict), downloads, storage manager,
+local GGUF import — flutter-core pattern agent;
+(T6) QA adversarial pass incl. mocked-HF e2e download of a real small file,
+offline mid-download, resume, corrupt checksum; (T7) review + merge.
+Exit gate: [G1] e2e download flow passes (mocked HF API + real small file)
+[G2] offline/resume/corrupt states all handled with typed failures [G3] make
+verify green, floor-scope coverage ≥70% [G4] QA PASS + reviewer APPROVE
+[G5] CI green on merged PR.
