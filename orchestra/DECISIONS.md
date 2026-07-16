@@ -24,3 +24,26 @@ Why: meets the drafted flip condition; saves the build-matrix ownership cost of 
 EngineService stays abstract; fallback to C stays cheap. Full detail: docs/adr/001.
 Lesson recorded: scout (haiku) version claims MUST be orchestrator-verified against
 pub.dev/GitHub APIs before ratification.
+
+## ADR-002 — App architecture: feature-first single package (2026-07-17)
+Context: architect's draft; orchestrator reviewed.
+Decision: ACCEPTED as written (docs/adr/002): features → data → core one-way
+dependency; engine_bindings isolated behind abstract EngineService; Riverpod
+providers only (no logic in widgets); freezed failure taxonomy; testing pyramid
+with 70% coverage floor; import-boundary lint wired in Loop 1 CI.
+Why: strong locality across nine features; keeps ADR-001 swappable; melos
+multi-package rejected as YAGNI.
+
+## NAMING — DHRUVA ratified (2026-07-17)
+Context: scout-3 dossier (orchestra/NAMING.md): no hard store or trademark
+collision; GitHub soft collision (AI4Bharat/Dhruva-Platform, different category).
+Decision: DHRUVA stands; store display name "Dhruva AI"; repos dhruva-app /
+dhruva-website; README carries a one-line disambiguation from AI4Bharat's
+platform. H2 not triggered; fallbacks unused. Formal ratification in ADR-003
+with the design tokens.
+
+## DEVICE FLOOR (2026-07-17)
+Decision: minSdk 26 / target latest, iOS 14+. Catalog tiers: 1B → 4GB+ RAM,
+3-4B → 6GB+; tiering logic in core/device_info per ADR-002.
+Why: scout-3 device research; llama.cpp GPU accel needs API 30+/iOS 14 Metal —
+older devices fall back to CPU tiers.

@@ -1,6 +1,6 @@
 # ADR-002 — App architecture: feature-first layering
 
-- **Status:** DRAFT
+- **Status:** ACCEPTED (2026-07-17, orchestrator review)
 - **Date:** 2026-07-17
 - **Deciders:** architect
 - **Loop:** 0

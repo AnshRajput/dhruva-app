@@ -55,3 +55,29 @@ per the standing scope ruling (ADR-000 / master roadmap).
 Note for all agents: scout-2's pub.dev version numbers were hallucinated; every
 version claim gets orchestrator verification before ratification from now on.
 Awaiting scout-3 (HF API + NAMING) to run the brand ceremony and close Loop 0.
+
+### [LOOP-00] [scout-3 → orchestrator] [RESEARCH] 2026-07-17T01:10
+HF Hub API verified with real curl calls — report in orchestra/research/hf-api.md.
+Search/tree/resolve endpoints work unauthenticated; accept-ranges: bytes confirmed
+(resumable downloads viable); license via cardData.license, gating via `gated`.
+Starter models confirmed with Q4_K_M files: bartowski/Llama-3.2-1B-Instruct-GGUF
+(770MB), bartowski/Qwen2.5-1.5B-Instruct-GGUF (986MB), bartowski/SmolLM2-1.7B-
+Instruct-GGUF (1GB), bartowski/Llama-3.2-3B-Instruct-GGUF (1.9GB), unsloth/
+Phi-4-mini-instruct-GGUF (2.4GB); embeddings second-state/All-MiniLM-L6-v2 (20MB);
+vision ggml-org/SmolVLM2-2.2B-Instruct-GGUF (1.1GB + 0.5GB mmproj). Device tiers:
+1B → 4GB+ RAM, 3B+ → 6GB+; propose minSdk 26 (GPU accel 30+), iOS 14+.
+
+### [LOOP-00] [scout-3 → orchestrator] [RESEARCH] 2026-07-17T01:10
+NAMING verdict in orchestra/NAMING.md: PASS for DHRUVA (display "Dhruva AI").
+Play Store: no AI/LLM app named Dhruva. App Store: clear. GitHub: soft collision
+only — AI4Bharat/Dhruva-Platform (backend serving platform, different category);
+mitigated by repo names dhruva-app/dhruva-website + README note. Domains
+dhruva.app/.dev/.ai appear unregistered. No Class-42 software trademark conflict.
+Fallbacks (not needed): Ekant clear, Antara clear, Charcha has a near-variant.
+
+### [LOOP-00] [orchestrator → all] [STATUS] 2026-07-17T01:12
+Name RATIFIED: DHRUVA (no hard collision — H2 not triggered). Brand ceremony
+step 2 running: designer deriving design-tokens.json from the name's story;
+reviewer critique next; ratification lands in ADR-003. ADR-002 (feature-first
+architecture) reviewed by orchestrator and ACCEPTED as written. Scout-1's five
+feature ideas triaged to BACKLOG in TASKS.md.
