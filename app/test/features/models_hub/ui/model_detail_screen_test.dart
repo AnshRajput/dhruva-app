@@ -1,6 +1,10 @@
-// Model detail screen: license/gated status is shown, and a gated repo
-// blocks the download affordance with an explanation instead of a broken
-// download button (T5 test requirement, Rule: user sees license first).
+// Model detail screen (reworked): the PRIMARY flow is one prominent
+// "Recommended download" card (device-appropriate default quant + verdict +
+// one big Download button); the full per-quant list lives in a COLLAPSED
+// "All quantizations (advanced)" section. License/gated status is still shown
+// first, and a gated repo blocks the download affordance with an explanation.
+// AppTheme.dark is supplied — the verdict chip / "May be slow" note need
+// DhruvaTokens.
 
 import 'dart:convert';
 import 'dart:io';
@@ -11,7 +15,6 @@ import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/models_hub/state/downloads_controller.dart';
 import 'package:dhruva/features/models_hub/ui/model_detail_screen.dart';
 import 'package:drift/native.dart';
@@ -21,6 +24,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../../support/mock_hf_client.dart';
+
 String _fixture(String name) =>
     File('test/data/hf_api/fixtures/$name').readAsStringSync();
 
@@ -29,9 +34,10 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
 );
 
-/// _QuantTile now watches `downloadsControllerProvider` for the real per-task
-/// progress ring — stub it empty so these tests don't pull the real download
-/// manager (path_provider + background_downloader plugins) into a headless run.
+/// The download button watches `downloadsControllerProvider` for the real
+/// per-task progress ring — stub it empty so these tests don't pull the real
+/// download manager (path_provider + background_downloader) into a headless
+/// run.
 class _EmptyDownloadsController extends DownloadsController {
   @override
   Future<Map<String, DownloadProgress>> build() async => const {};
@@ -42,8 +48,8 @@ Future<void> _pump(
   required String repoId,
   required http.Response Function(http.Request) responder,
 }) async {
-  final client = HfApiClient(
-    client: MockClient((request) async => responder(request)),
+  final client = mockHfClient(
+    MockClient((request) async => responder(request)),
   );
   await tester.pumpWidget(
     ProviderScope(
@@ -63,7 +69,8 @@ Future<void> _pump(
 
 void main() {
   testWidgets(
-    'gated repo shows license + gated badge and blocks the download button',
+    'gated repo shows license + gated badge and blocks download (no button, '
+    'and expanding the advanced list still blocks each quant)',
     (tester) async {
       await _pump(
         tester,
@@ -79,7 +86,7 @@ void main() {
         },
       );
 
-      // License is shown (Rule: user sees license first).
+      // License is shown first (Rule: user sees license before any download).
       expect(find.text('llama2'), findsOneWidget);
       expect(find.textContaining('Gated · manual approval'), findsOneWidget);
       expect(
@@ -87,41 +94,66 @@ void main() {
         findsOneWidget,
       );
 
-      // No functional download button for a gated repo.
+      // No recommended download card for a gated repo, and no Download button
+      // anywhere.
+      expect(find.text('Recommended download'), findsNothing);
       expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
+
+      // The advanced list is still offered (collapsed); expanding it shows the
+      // per-quant blocking explanation instead of a working button.
+      expect(find.text('All quantizations (advanced)'), findsOneWidget);
+      await tester.tap(find.text('All quantizations (advanced)'));
+      await tester.pumpAndSettle();
       expect(
         find.text('Requires Hugging Face sign-in — not supported yet'),
         findsWidgets,
       );
+      expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
     },
   );
 
-  testWidgets('open repo shows an enabled Download button per quant file', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      repoId: 'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
-      responder: (request) {
-        if (request.url.path.endsWith('/tree/main')) {
-          return http.Response(_fixture('repo_tree.json'), 200);
-        }
-        if (request.url.path.endsWith('/mmproj')) {
-          return http.Response(_fixture('mmproj_tree.json'), 200);
-        }
-        return http.Response(_fixture('model_info_open.json'), 200);
-      },
-    );
+  testWidgets(
+    'open repo leads with ONE recommended Download; the full quant list is '
+    'collapsed until expanded',
+    (tester) async {
+      await _pump(
+        tester,
+        repoId: 'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+        responder: (request) {
+          if (request.url.path.endsWith('/tree/main')) {
+            return http.Response(_fixture('repo_tree.json'), 200);
+          }
+          if (request.url.path.endsWith('/mmproj')) {
+            return http.Response(_fixture('mmproj_tree.json'), 200);
+          }
+          return http.Response(_fixture('model_info_open.json'), 200);
+        },
+      );
 
-    expect(find.text('apache-2.0'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Download'), findsWidgets);
-  });
+      expect(find.text('apache-2.0'), findsOneWidget);
+
+      // PRIMARY: exactly one recommended card + one big Download button while
+      // the advanced list is collapsed (its buttons aren't built yet).
+      expect(find.text('Recommended download'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
+      expect(find.text('All quantizations (advanced)'), findsOneWidget);
+
+      // SECONDARY: expand → the full per-quant list appears, so now there are
+      // several Download buttons.
+      await tester.tap(find.text('All quantizations (advanced)'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(FilledButton, 'Download').evaluate().length,
+        greaterThan(1),
+      );
+    },
+  );
 
   testWidgets(
-    'a path-traversal file path from a hostile repo tree is sanitized to a '
-    'bare filename before it reaches the download layer (attack #7: proves '
-    'the UI call site DOES sanitize — see download_manager_test.dart for the '
-    "BUG that DownloadManager itself, the shared boundary, doesn't)",
+    'the recommended Download sanitizes a path-traversal filename to a bare '
+    'basename before it reaches the download layer (attack #7: proves the UI '
+    'call site DOES sanitize — see download_manager_test.dart for the shared '
+    "boundary's own guard)",
     (tester) async {
       final maliciousTree = jsonEncode([
         {
@@ -130,8 +162,8 @@ void main() {
           'size': 100,
         },
       ]);
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           if (request.url.path.endsWith('/tree/main')) {
             return http.Response(maliciousTree, 200);
           }
@@ -169,8 +201,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // The recommended card's single Download button is the primary CTA.
+      expect(find.text('Recommended download'), findsOneWidget);
       await tester.tap(find.widgetWithText(FilledButton, 'Download'));
-      // The tile now shows an indeterminate progress ring after enqueue, so
+      // The tile shows an indeterminate progress ring after enqueue, so
       // pumpAndSettle would hang — pump a bounded number of frames instead.
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(milliseconds: 50));
