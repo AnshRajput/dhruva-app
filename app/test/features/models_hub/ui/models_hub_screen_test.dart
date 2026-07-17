@@ -69,4 +69,27 @@ void main() {
     );
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets(
+    // QA (Loop-4 attack list #6): Amendment 4c's rail is only meant above an
+    // *unfiltered* view.
+    'the recommended rail is visible with an empty query and disappears '
+    'once the user submits a search query',
+    (tester) async {
+      final client = HfApiClient(
+        client: MockClient(
+          (request) async => http.Response(_fixture('search_gguf.json'), 200),
+        ),
+      );
+      await _pump(tester, client);
+
+      expect(find.text('Recommended for your device'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'llama');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Recommended for your device'), findsNothing);
+    },
+  );
 }

@@ -357,4 +357,188 @@ void main() {
       expect(refreshed!.lastUsedAt, isNotNull);
     },
   );
+
+  // ---- QA (Loop-4 attack list #2): streaming robustness -------------------
+
+  test(
+    'regenerate is a no-op while a generation is already in flight',
+    () async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService(
+        scriptedTokens: List.generate(10, (i) => 'tok$i '),
+        tokenDelay: const Duration(milliseconds: 30),
+      );
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      final sendFuture = notifier.sendMessage('hi');
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+      final duringStream = container.read(chatControllerProvider(args)).value!;
+      expect(duringStream.isGenerating, isTrue);
+      final assistantId = duringStream.messages.last.id;
+      final countDuringStream = duringStream.messages.length;
+
+      // Blocked, not queued: ChatController.regenerate checks isGenerating
+      // and returns early — it does not interrupt or enqueue behind the
+      // active stream.
+      await notifier.regenerate(assistantId);
+      final afterAttempt = container.read(chatControllerProvider(args)).value!;
+      expect(afterAttempt.messages.length, countDuringStream);
+
+      await sendFuture;
+      final finalState = container.read(chatControllerProvider(args)).value!;
+      expect(
+        finalState.visibleMessages.where(
+          (m) => m.role == MessageRole.assistant,
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'editMessage is a no-op while a generation is already in flight',
+    () async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService(
+        scriptedTokens: List.generate(10, (i) => 'tok$i '),
+        tokenDelay: const Duration(milliseconds: 30),
+      );
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      final sendFuture = notifier.sendMessage('what is 2+2');
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+      final duringStream = container.read(chatControllerProvider(args)).value!;
+      expect(duringStream.isGenerating, isTrue);
+      final userMsgId = duringStream.messages.first.id;
+      final countDuringStream = duringStream.messages.length;
+
+      await notifier.editMessage(userMsgId, 'what is 3+3');
+      final afterAttempt = container.read(chatControllerProvider(args)).value!;
+      expect(afterAttempt.messages.length, countDuringStream);
+      expect(afterAttempt.messages.first.content, 'what is 2+2');
+
+      await sendFuture;
+    },
+  );
+
+  test('BUG repro: switching models mid-stream updates the conversation\'s '
+      'modelId and UI-visible model immediately, with no isGenerating guard '
+      '(unlike regenerate/editMessage) — the in-flight reply keeps streaming '
+      'under the OLD engine-loaded model regardless', () async {
+    final modelA = await insertModel(repoId: 'org/model-a-GGUF');
+    final modelB = await insertModel(repoId: 'org/model-b-GGUF');
+    final engine = FakeEngineService(
+      scriptedTokens: List.generate(10, (i) => 'tok$i '),
+      tokenDelay: const Duration(milliseconds: 30),
+    );
+    final container = buildContainer(engine);
+    final args = ChatRouteArgs(initialModelId: modelA);
+    await container.read(chatControllerProvider(args).future);
+    final notifier = container.read(chatControllerProvider(args).notifier);
+
+    final sendFuture = notifier.sendMessage('hi');
+    await Future<void>.delayed(const Duration(milliseconds: 45));
+    expect(
+      container.read(chatControllerProvider(args)).value!.isGenerating,
+      isTrue,
+    );
+
+    final modelBInfo = await container
+        .read(storageManagerProvider)
+        .getInstalledModel(modelB);
+    await notifier.switchModel(modelBInfo!);
+
+    // The chip/state flips to model B immediately...
+    final mid = container.read(chatControllerProvider(args)).value!;
+    expect(mid.modelId, modelB);
+    // ...but ensureModelLoaded silently bailed (current.isGenerating was
+    // true), so the engine singleton never actually loaded/unloaded
+    // anything — it's still on model A underneath a UI that now claims
+    // model B is active.
+    expect(container.read(loadedModelIdProvider), modelA);
+
+    await sendFuture;
+    final finalState = container.read(chatControllerProvider(args)).value!;
+    expect(finalState.messages.last.status, MessageStatus.complete);
+  });
+
+  test('unloading the engine mid-stream finalizes the message as cancelled, '
+      'conversation intact — NOT a typed error; unload() takes the same '
+      'graceful-cancellation path as user cancel() in both FakeEngineService '
+      'and LlamaEngineService (pinning actual behavior)', () async {
+    final modelId = await insertModel();
+    final engine = FakeEngineService(
+      scriptedTokens: List.generate(20, (i) => 'tok$i '),
+      tokenDelay: const Duration(milliseconds: 30),
+    );
+    final container = buildContainer(engine);
+    final args = ChatRouteArgs(initialModelId: modelId);
+    await container.read(chatControllerProvider(args).future);
+    final notifier = container.read(chatControllerProvider(args).notifier);
+
+    final sendFuture = notifier.sendMessage('go');
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    // Simulate the model being unloaded out from under the stream (e.g. a
+    // memory-pressure eviction elsewhere in the app) — bypasses the
+    // controller's own cancel() entirely.
+    await engine.unload();
+    await sendFuture;
+
+    final state = container.read(chatControllerProvider(args)).value!;
+    final assistant = state.messages.last;
+    expect(assistant.status, MessageStatus.cancelled);
+    expect(state.isGenerating, isFalse);
+    expect(state.modelLoadError, isNull);
+    expect(state.conversationId, isNotNull);
+  });
+
+  test('BUG repro: a 0-token assistant response finalizes as an empty, '
+      'complete-status message that stays in visibleMessages once '
+      'streamingMessageId clears — see chat_thread_screen_test.dart for the '
+      'resulting "ghost bubble" render', () async {
+    final modelId = await insertModel();
+    final engine = FakeEngineService(scriptedTokens: const []);
+    final container = buildContainer(engine);
+    final args = ChatRouteArgs(initialModelId: modelId);
+    await container.read(chatControllerProvider(args).future);
+    final notifier = container.read(chatControllerProvider(args).notifier);
+
+    await notifier.sendMessage('hi');
+
+    final state = container.read(chatControllerProvider(args)).value!;
+    final assistant = state.messages.last;
+    expect(assistant.content, isEmpty);
+    expect(assistant.reasoningContent, anyOf(isNull, isEmpty));
+    expect(assistant.status, MessageStatus.complete);
+    expect(assistant.tokCount, 0);
+    expect(state.visibleMessages.map((m) => m.id), contains(assistant.id));
+    expect(state.streamingMessageId, isNull);
+  });
+
+  test('a think-only response (closes with no trailing content) leaves content '
+      'empty and reasoningContent populated', () async {
+    final modelId = await insertModel();
+    final engine = FakeEngineService(
+      scriptedTokens: const ['<think>', 'just reasoning', '</think>'],
+      tokenDelay: const Duration(milliseconds: 10),
+    );
+    final container = buildContainer(engine);
+    final args = ChatRouteArgs(initialModelId: modelId);
+    await container.read(chatControllerProvider(args).future);
+    final notifier = container.read(chatControllerProvider(args).notifier);
+
+    await notifier.sendMessage('explain');
+
+    final state = container.read(chatControllerProvider(args)).value!;
+    final assistant = state.messages.last;
+    expect(assistant.reasoningContent, 'just reasoning');
+    expect(assistant.content, isEmpty);
+    expect(state.reasoningDurationMs[assistant.id], isNotNull);
+  });
 }

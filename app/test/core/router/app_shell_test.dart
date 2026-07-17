@@ -135,4 +135,36 @@ void main() {
 
     expect(anyBadgeVisible(tester), isFalse);
   });
+
+  testWidgets(
+    // QA (Loop-4 attack list #7): failed is not in AppShell's `_isActive`
+    // set, so the badge should clear the instant the backend reports
+    // failure — no separate "dismiss" step should be required. Pinning that
+    // actual behavior here.
+    'badge disappears as soon as a download fails, with no dismiss step',
+    (tester) async {
+      await pumpApp(tester);
+
+      await settleAfter(
+        tester,
+        () => manager.enqueue(request, freeBytes: 1 << 30),
+      );
+      await emitAndSettle(
+        tester,
+        BackendProgressUpdate(
+          request.taskId,
+          progress: 0.4,
+          expectedFileSizeBytes: request.expectedSizeBytes,
+        ),
+      );
+      expect(anyBadgeVisible(tester), isTrue);
+
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(request.taskId, status: BackendTaskStatus.failed),
+      );
+
+      expect(anyBadgeVisible(tester), isFalse);
+    },
+  );
 }

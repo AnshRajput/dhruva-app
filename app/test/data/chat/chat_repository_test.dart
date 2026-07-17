@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/chat/models/sampling_params.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/downloads/download_backend.dart';
+import 'package:dhruva/data/downloads/download_manager.dart';
+import 'package:dhruva/data/downloads/fake_download_backend.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -625,6 +630,43 @@ void main() {
     );
   });
 
+  group('QA (Loop-4 attack list #4): 1000-message conversation load', () {
+    test('getMessages on a 1000-message conversation is a full eager load — '
+        'no LIMIT/pagination — measured, not assumed', () async {
+      final id = await repo.createConversation();
+      // Bulk-insert directly (bypassing appendMessage's per-call
+      // renameAuto/touchUpdatedAt round trips — this test is about the
+      // read path's cost, not simulating 1000 real sends).
+      await db.batch((batch) {
+        batch.insertAll(db.messages, [
+          for (var i = 0; i < 1000; i++)
+            MessagesCompanion.insert(
+              conversationId: id,
+              role: i.isEven ? MessageRole.user : MessageRole.assistant,
+              content: Value('message number $i'),
+              status: MessageStatus.complete,
+              createdAt: DateTime.utc(2026, 1, 1).add(Duration(seconds: i)),
+            ),
+        ]);
+      });
+
+      final sw = Stopwatch()..start();
+      final messages = await repo.getMessages(id);
+      sw.stop();
+
+      // Confirms it IS a full, unpaginated load (every row comes back)...
+      expect(messages, hasLength(1000));
+      expect(messages.first.content, 'message number 0');
+      expect(messages.last.content, 'message number 999');
+      // ...and judges the cost: on an in-memory db, indexed by
+      // idx_messages_conversation, this is comfortably sub-100ms — a
+      // single-user on-device chat history doesn't need pagination at
+      // this row count (matches the repository's own class-doc rationale
+      // for skipping FTS5). Not a hard perf budget, a sanity ceiling.
+      expect(sw.elapsedMilliseconds, lessThan(500));
+    });
+  });
+
   group('clearAllHistory', () {
     test('deletes every conversation and cascades to its messages', () async {
       final modelId = await db
@@ -658,6 +700,60 @@ void main() {
       // Installed models are untouched — only conversations/messages are in
       // scope for this action.
       expect(await db.select(db.installedModels).get(), hasLength(1));
+    });
+
+    test('an active download in flight is untouched — clearAllHistory only '
+        'issues DELETE FROM conversations, a disjoint table from anything '
+        'DownloadManager tracks', () async {
+      final modelsDir = Directory.systemTemp.createTempSync(
+        'dhruva_clear_history_downloads_test_',
+      );
+      addTearDown(() {
+        if (modelsDir.existsSync()) modelsDir.deleteSync(recursive: true);
+      });
+      final backend = FakeDownloadBackend();
+      final manager = DownloadManager(
+        backend: backend,
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(manager.dispose);
+
+      final request = DownloadRequest(
+        repoId: 'bartowski/Llama-3.2-1B-Instruct-GGUF',
+        fileName: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        url: Uri.parse('https://huggingface.co/x/resolve/main/x.gguf'),
+        expectedSizeBytes: 5,
+      );
+
+      final progressEvents = <DownloadProgress>[];
+      final sub = manager.progress.listen(progressEvents.add);
+      addTearDown(sub.cancel);
+
+      await manager.enqueue(request, freeBytes: 1 << 30);
+      await repo.createConversation(title: 'unrelated chat');
+
+      await repo.clearAllHistory();
+
+      // The conversation is gone...
+      expect(await repo.listConversations(), isEmpty);
+      // ...but the in-flight download is still tracked and keeps
+      // forwarding backend updates — proving DownloadManager's state
+      // wasn't reset or corrupted by an unrelated table's DELETE.
+      backend.emit(
+        BackendProgressUpdate(
+          request.taskId,
+          progress: 0.5,
+          expectedFileSizeBytes: request.expectedSizeBytes,
+        ),
+      );
+      await pumpEventQueue();
+      expect(
+        progressEvents.any(
+          (e) => e.taskId == request.taskId && e.state == DownloadState.running,
+        ),
+        isTrue,
+      );
     });
   });
 }
