@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
+import '../../../data/hf_api/mobile_suitability.dart';
 import '../../../data/hf_api/models/hf_model_summary.dart';
 
 final class ModelSearchState {
@@ -60,7 +61,9 @@ class ModelSearchController extends AsyncNotifier<ModelSearchState> {
     final result = await client.searchGgufModels(query: query);
     return ModelSearchState(
       query: query,
-      items: result.items,
+      // Deprioritize obviously-too-large models (70B/34B/13B by name) so
+      // phone-suitable ones rank up within HF's own popularity order.
+      items: rankByMobileSuitability(result.items, (m) => m.id),
       nextCursor: result.nextCursor,
     );
   }
@@ -96,7 +99,10 @@ class ModelSearchController extends AsyncNotifier<ModelSearchState> {
       );
       state = AsyncData(
         current.copyWith(
-          items: [...current.items, ...page.items],
+          items: [
+            ...current.items,
+            ...rankByMobileSuitability(page.items, (m) => m.id),
+          ],
           nextCursor: page.nextCursor,
           clearNextCursor: page.nextCursor == null,
           loadingMore: false,

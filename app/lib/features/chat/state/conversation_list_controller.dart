@@ -4,6 +4,8 @@
 /// while a query is active — `ChatRepository.search` isn't folder-scoped).
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
@@ -64,6 +66,13 @@ class ConversationListController extends AsyncNotifier<ConversationListState> {
 
   @override
   Future<ConversationListState> build() async {
+    // UX-hardening A2: refresh (preserving folder/search filter) when a
+    // conversation is created or cleared from outside this controller
+    // (`ChatController` lazy-create, settings clear-all) — see
+    // `conversationListRevisionProvider`.
+    ref.listen(conversationListRevisionProvider, (_, _) {
+      unawaited(refresh());
+    });
     final folders = await _repo.listFolders();
     final conversations = await _repo.listConversations();
     return ConversationListState(

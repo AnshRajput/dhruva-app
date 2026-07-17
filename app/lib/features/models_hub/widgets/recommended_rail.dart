@@ -24,6 +24,20 @@ class RecommendedRail extends ConsumerWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
     final memory = ref.watch(deviceMemoryProvider);
 
+    // Device-aware ranking (Phase B, D5): once RAM is known, sort so the
+    // models that run best on THIS device (comfortable → possible → not
+    // recommended) come first. Before RAM resolves, keep declaration order.
+    final ram = memory.value?.totalBytes;
+    final models = ram == null
+        ? starterModelCatalog
+        : (starterModelCatalog.toList()..sort((a, b) {
+            int rank(StarterModel m) => classifyModelTier(
+              fileSizeBytes: m.approxSizeBytes,
+              totalRamBytes: ram,
+            ).index;
+            return rank(a).compareTo(rank(b));
+          }));
+
     return Padding(
       padding: EdgeInsets.only(top: tokens.spacing.sm),
       child: Column(
@@ -42,11 +56,11 @@ class RecommendedRail extends ConsumerWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-              itemCount: starterModelCatalog.length,
+              itemCount: models.length,
               separatorBuilder: (context, i) =>
                   SizedBox(width: tokens.spacing.sm),
               itemBuilder: (context, i) {
-                final model = starterModelCatalog[i];
+                final model = models[i];
                 return _RecommendedCard(
                   model: model,
                   tier: switch (memory) {

@@ -15,8 +15,10 @@ import '../../../data/downloads/download_manager.dart';
 import '../../../data/hf_api/models/model_license_info.dart';
 import '../../../data/hf_api/models/quant_variant.dart';
 import '../state/download_actions_controller.dart';
+import '../state/downloads_controller.dart';
 import '../state/failure_message.dart';
 import '../state/model_detail_provider.dart';
+import '../widgets/download_progress_ring.dart';
 import '../widgets/failure_view.dart';
 import '../widgets/license_chip.dart';
 import '../widgets/verdict_chip.dart';
@@ -150,18 +152,14 @@ class _QuantTile extends ConsumerWidget {
     final actions = ref.watch(downloadActionsControllerProvider);
     final pending = actions.isPending(request.taskId);
     final error = actions.errorFor(request.taskId);
-    // A vision quant also enqueues its paired mmproj projector (Loop-7 T2
-    // D2) — same resumable DownloadManager, chained after the model file
-    // completes. A plain quant keeps using the controller's generic enqueue.
-    Future<void> download() => quant.isVision
-        ? ref
-              .read(downloadActionsControllerProvider.notifier)
-              .enqueueVisionQuant(
-                repoId: repoId,
-                quant: quant,
-                license: license,
-              )
-        : ref.read(downloadActionsControllerProvider.notifier).enqueue(request);
+    // Designer Phase B blocker: the button used to revert to "Download" the
+    // instant `enqueue()` returned (it only tracked the enqueue CALL, not the
+    // download TASK). Watch the real per-taskId progress stream so a running
+    // download shows a persistent ring here too — same feed the listing row
+    // and the Downloads screen use.
+    final progress = ref
+        .watch(downloadsControllerProvider)
+        .value?[request.taskId];
 
     return Card(
       child: Padding(
@@ -195,16 +193,12 @@ class _QuantTile extends ConsumerWidget {
                   ? const Text(
                       'Requires Hugging Face sign-in — not supported yet',
                     )
-                  : FilledButton.icon(
-                      icon: pending
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download),
-                      label: Text(pending ? 'Starting…' : 'Download'),
-                      onPressed: pending ? null : download,
+                  : _downloadAffordance(
+                      context,
+                      ref,
+                      request,
+                      pending,
+                      progress,
                     ),
             ),
             if (error != null)
@@ -218,6 +212,75 @@ class _QuantTile extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// The download button's state machine, now driven by the REAL per-taskId
+  /// progress (`downloadsControllerProvider`) instead of just the enqueue
+  /// call — so it doesn't snap back to "Download" the moment the task is
+  /// handed off. Active → persistent ring (cancellable); complete →
+  /// "Installed"; otherwise → Download (or the brief "Starting…" enqueue
+  /// window).
+  Widget _downloadAffordance(
+    BuildContext context,
+    WidgetRef ref,
+    DownloadRequest request,
+    bool pending,
+    DownloadProgress? progress,
+  ) {
+    final state = progress?.state;
+    final isActive =
+        state == DownloadState.queued ||
+        state == DownloadState.running ||
+        state == DownloadState.paused ||
+        state == DownloadState.verifying;
+    if (isActive) {
+      final total = progress!.totalBytes ?? 0;
+      final fraction = total > 0
+          ? (progress.downloadedBytes / total).clamp(0.0, 1.0)
+          : 0.0;
+      return DownloadProgressRing(
+        progress: fraction,
+        onCancel: () => ref
+            .read(downloadsControllerProvider.notifier)
+            .cancel(request.taskId),
+      );
+    }
+    if (state == DownloadState.complete) {
+      return const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 18),
+          SizedBox(width: 6),
+          Text('Installed'),
+        ],
+      );
+    }
+    return FilledButton.icon(
+      icon: pending
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.download),
+      label: Text(pending ? 'Starting…' : 'Download'),
+      // A vision quant also enqueues its paired mmproj projector (Loop-7 T2
+      // D2) — same resumable DownloadManager, chained after the model file
+      // completes. A plain quant keeps using the controller's generic enqueue.
+      onPressed: pending
+          ? null
+          : () => quant.isVision
+                ? ref
+                      .read(downloadActionsControllerProvider.notifier)
+                      .enqueueVisionQuant(
+                        repoId: repoId,
+                        quant: quant,
+                        license: license,
+                      )
+                : ref
+                      .read(downloadActionsControllerProvider.notifier)
+                      .enqueue(request),
     );
   }
 }

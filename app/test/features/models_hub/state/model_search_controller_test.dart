@@ -137,6 +137,30 @@ void main() {
   });
 
   test(
+    'results are re-ranked so phone-suitable models sort above huge ones',
+    () async {
+      final container = _containerWith(
+        (request) => http.Response(
+          jsonEncode([
+            {'id': 'org/Giant-70B-GGUF', 'downloads': 9999},
+            {'id': 'org/Popular-Unknown-GGUF', 'downloads': 5000},
+            {'id': 'org/Tiny-1B-GGUF', 'downloads': 10},
+          ]),
+          200,
+        ),
+      );
+      final state = await container.read(modelSearchControllerProvider.future);
+      // Small floats to the top despite fewest downloads; 70B sinks to bottom
+      // despite the most downloads; unknown keeps its middle spot.
+      expect(state.items.map((m) => m.id).toList(), [
+        'org/Tiny-1B-GGUF',
+        'org/Popular-Unknown-GGUF',
+        'org/Giant-70B-GGUF',
+      ]);
+    },
+  );
+
+  test(
     'refresh() re-runs the current query without blanking the list',
     () async {
       final container = _containerWith(

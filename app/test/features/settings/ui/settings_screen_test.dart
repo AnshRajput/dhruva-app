@@ -88,50 +88,43 @@ void main() {
     expect(find.text('1 model · 800 MB used'), findsOneWidget);
   });
 
-  testWidgets(
-    'clear all history requires two confirmations, then deletes every '
-    'conversation without touching installed models',
-    (tester) async {
-      final modelId = await db
-          .into(db.installedModels)
-          .insert(
-            InstalledModelsCompanion.insert(
-              repoId: 'r/m',
-              fileName: 'x.gguf',
-              sizeBytes: 1,
-              localPath: '/models/x.gguf',
-              downloadedAt: DateTime.utc(2026, 7, 17),
-            ),
-          );
-      await repo.createConversation(title: 'Old chat', modelId: modelId);
+  testWidgets('clear all history requires two confirmations, then deletes every '
+      'conversation without touching installed models', (tester) async {
+    final modelId = await db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'r/m',
+            fileName: 'x.gguf',
+            sizeBytes: 1,
+            localPath: '/models/x.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+    await repo.createConversation(title: 'Old chat', modelId: modelId);
 
-      await pump(tester);
+    await pump(tester);
 
-      await tester.tap(find.text('Clear all chat history'));
-      await tester.pumpAndSettle();
-      expect(find.text('Clear all chat history?'), findsOneWidget);
+    await tester.tap(find.text('Clear all chat history'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear all chat history?'), findsOneWidget);
 
-      // First confirmation only advances to the second dialog — nothing is
-      // deleted yet.
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
-      expect(find.text('Are you sure?'), findsOneWidget);
-      expect(await repo.listConversations(), hasLength(1));
+    // First confirmation only advances to the second dialog — nothing is
+    // deleted yet.
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Are you sure?'), findsOneWidget);
+    expect(await repo.listConversations(), hasLength(1));
 
-      await tester.tap(find.text('Clear all history'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear all history'));
+    await tester.pumpAndSettle();
 
-      expect(await repo.listConversations(), isEmpty);
-      expect(await db.select(db.installedModels).get(), hasLength(1));
-      expect(
-        find.text(
-          'Chat history cleared. Pull to refresh the Chat tab to '
-          'see it.',
-        ),
-        findsOneWidget,
-      );
-    },
-  );
+    expect(await repo.listConversations(), isEmpty);
+    expect(await db.select(db.installedModels).get(), hasLength(1));
+    // UX-hardening A2: the apologetic "pull to refresh" instruction is gone
+    // — the Chat list now refreshes itself via conversationListRevisionProvider.
+    expect(find.text('Chat history cleared.'), findsOneWidget);
+  });
 
   testWidgets('cancelling the first dialog deletes nothing', (tester) async {
     await repo.createConversation(title: 'Keep me');
@@ -161,7 +154,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('About Dhruva AI'), findsOneWidget);
-      expect(find.text('Version 1.0.0'), findsOneWidget);
+      expect(find.text('Version 0.2.0'), findsOneWidget);
     },
   );
 }

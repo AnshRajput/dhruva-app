@@ -8,6 +8,7 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
+import 'package:dhruva/features/chat/state/conversation_list_controller.dart';
 import 'package:dhruva/features/chat/state/engine_session.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
@@ -152,6 +153,34 @@ void main() {
       expect(assistant.content, isNotEmpty);
       expect(assistant.content.trim().split(' ').length, lessThan(20));
       expect(state.isGenerating, isFalse);
+    },
+  );
+
+  test(
+    'UX-hardening A2/BUG3: the conversation lazily created in sendMessage '
+    'refreshes the kept-alive conversation list without a pull-to-refresh',
+    () async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService(scriptedTokens: const ['hi']);
+      final container = buildContainer(engine);
+
+      // The Chat tab's list, primed and held alive — starts empty.
+      final before = await container.read(
+        conversationListControllerProvider.future,
+      );
+      container.listen(conversationListControllerProvider, (_, _) {});
+      expect(before.conversations, isEmpty);
+
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      await container
+          .read(chatControllerProvider(args).notifier)
+          .sendMessage('hi');
+      await pumpEventQueue();
+
+      final after = container.read(conversationListControllerProvider).value!;
+      expect(after.conversations, hasLength(1));
     },
   );
 

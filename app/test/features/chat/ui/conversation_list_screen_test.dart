@@ -144,17 +144,23 @@ void main() {
     },
   );
 
-  testWidgets('FAB with no installed models routes to the models hub', (
-    tester,
-  ) async {
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'UX-hardening A4: FAB with no installed models gives a guided CTA — a '
+    '"download a model" snackbar — then routes to Models, not a silent bounce',
+    (tester) async {
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(FloatingActionButton));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pump(); // let _startNewChat resolve + show the snackbar
+      await tester.pump(); // build the snackbar frame
 
-    expect(find.text('models hub'), findsOneWidget);
-  });
+      expect(find.text('Download a model to start chatting.'), findsOneWidget);
+
+      await tester.pumpAndSettle();
+      expect(find.text('models hub'), findsOneWidget);
+    },
+  );
 
   testWidgets('search filters to matching conversations', (tester) async {
     await insertModel();

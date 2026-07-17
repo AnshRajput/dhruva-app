@@ -201,3 +201,41 @@ downloader's notification config), chat/convo start + reply (incl. the Android
 on-device inference path — R10 residual may be the real culprit), model
 discovery (mobile-optimized filter, ranking, device-spec recommendations,
 delete on listing), general usability + performance, state-bug fixes.
+
+## SCOPE AMENDMENT 6 — REAL END-TO-END VERIFICATION (2026-07-18)
+Context: Phase A hotfix shipped but the user reports on-device it STILL fails —
+can't chat, model still needs a restart to appear, download button still no
+loader/notification (Phase B not shipped yet). Root problem in HOW we verify:
+unit tests with FAKES pass while the real app fails. User demand: "test end to
+end yourself." Also reaffirmed "use riverpod" — we already do; keep it.
+Decision: adopt REAL end-to-end verification as a hard gate. Before ANY
+UX-hardening build ships again, an integration_test drives the REAL app on
+macOS (real DownloadManager, real drift, real EngineService + real model, real
+widget tree — NO fakes) through: launch → Models → download a real small model
+→ model appears in the picker WITHOUT restart → start chat → send → REAL reply
+tokens render. If it fails, that's the bug to fix. This becomes the "run" skill
+for this project. Fakes remain for unit tests; they no longer substitute for a
+real-flow proof. On-device Android inference remains the one item only the
+human's retest can close (documented, not hidden).
+Goal for this loop: make the real end-to-end flow provably work by RUNNING it,
+fix the Phase B QA bugs + designer blockers, ship, iterate on the user's
+report. Repeat until the user confirms a working chat on device.
+
+## E2E VERIFICATION METHOD — corrected (2026-07-18)
+The full-widget-tree E2E driving the REAL cross-isolate llama engine cannot be
+made to pass under flutter_test — the reply-wait never settles (the harness
+can't pump real native isolate generation to completion). That test was removed
+rather than kept broken/skip-gated. The REAL-component proof of the chain is
+two tests that genuinely PASS on macOS:
+  - installed_models_refresh_on_download_test.dart: REAL DownloadManager
+    completion → new model visible to chat picker + character picker + storage
+    with NO restart and NO manual invalidate (proves the A1 "restart required"
+    fix for real, not with a faked manager).
+  - chat_controller_real_engine_test.dart: REAL SmolLM2 streams a real reply
+    ("...Paris, France.").
+Plus VERSION DISCIPLINE (root cause of "still broken" on device): every prior
+build shipped as 1.0.0+1 — Android won't cleanly reinstall a same-versionCode
+APK, so the user was likely retesting an OLD binary. Fixed: pubspec 0.2.0+2,
+distribute.sh now stamps a unique monotonic build number (git commit count) per
+ship, and About shows the version so the user can confirm they're on the new
+build. On-device Android inference remains the human's retest to confirm.

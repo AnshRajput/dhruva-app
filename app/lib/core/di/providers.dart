@@ -137,8 +137,12 @@ final modelsDirectoryProvider = FutureProvider<Directory>((ref) async {
 
 final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
   final modelsDir = await ref.watch(modelsDirectoryProvider.future);
+  final backend = BackgroundDownloaderBackend();
+  // D4: register the OS notification (progress bar + POST_NOTIFICATIONS
+  // request) once, before any enqueue. Mobile-only; harmless on desktop.
+  await backend.configureNotifications();
   final manager = DownloadManager(
-    backend: BackgroundDownloaderBackend(),
+    backend: backend,
     db: ref.watch(appDatabaseProvider),
     modelsDirectory: modelsDir,
   );
@@ -160,6 +164,24 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository(db: ref.watch(appDatabaseProvider));
 });
+
+/// Cross-feature "the conversation list changed outside its own controller"
+/// signal (UX-hardening A2). Bumped by paths that mutate conversations but
+/// don't live in `features/chat`'s list controller — `features/settings`'
+/// clear-all and `ChatController`'s lazy row creation. Lives in `core/di`
+/// (shared, imported downward) so neither feature has to import the other,
+/// per ADR-002. `conversationListControllerProvider` refreshes on every bump.
+final conversationListRevisionProvider =
+    NotifierProvider<ConversationListRevision, int>(
+      ConversationListRevision.new,
+    );
+
+class ConversationListRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
+}
 
 final characterRepositoryProvider = Provider<CharacterRepository>((ref) {
   final repo = CharacterRepository(db: ref.watch(appDatabaseProvider));
