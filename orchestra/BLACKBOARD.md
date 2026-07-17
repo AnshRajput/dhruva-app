@@ -1665,3 +1665,17 @@ Quant; schema v4 monotonic; download controllers separate+both present). All
 QA+designer fixes confirmed. Trust/privacy intact (no new network, typed
 failures on bad image/mmproj, 100% local). Real vision tests intact. Loop 7
 APPROVED — QA PASS + designer SIGN-OFF + reviewer APPROVE.
+
+### [LOOP-08] [orchestrator → native-engine] [STATUS] 2026-07-18T08:10
+Loop 8 PLAN — Imagine (on-device image generation). Branch loop/08-imagine.
+Package check: NO Dart/Flutter binding for stable-diffusion.cpp exists on
+pub.dev (checked stable_diffusion*/sd_cpp). sd.cpp (leejet) is active (commit
+2026-07-16). So this is the "own it" path — vendor sd.cpp + ffigen, like the
+engine fallback we scoped in ADR-001. Highest native risk in the project.
+Decision: FEASIBILITY SPIKE FIRST (bounded), like voice/vision — prove the
+native path builds + a minimal txt2img works on THIS machine before committing
+the full loop's UI. If it's a multi-session native yak-shave, scope Loop 8 to a
+correctly-built + tested FFI binding flagged needs-on-device-verification and
+keep moving. Gate (full loop, once feasible): image generated on ≥1 platform
+build; flagged OFF below the RAM floor; steps/seed/size controls; enhance-prompt
+via loaded LLM; gallery; designer SIGN-OFF + QA + reviewer; ship.
