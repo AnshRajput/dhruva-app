@@ -132,3 +132,24 @@ day one (amendment 4a) is worth its weight; keep shipping every loop.
 add to the architecture checklist so it's caught at BUILD not REVIEW.
 (4) Six review/QA rounds (QA→fix→designer→fix→reviewer→fix) all found real
 issues — the adversarial chain earns its cost on the flagship feature.
+
+## LOOP 5 — Characters (2026-07-17)
+Goal: create/edit/chat characters; 10 starters; community card import/export.
+Exit gate (all met): CRUD+chat works, persona changes real-model behavior
+(Captain Byte pirate vs neutral) ✅ · cards round-trip JSON+PNG ✅ · 10 starters
+seeded ✅ · designer SIGN-OFF ✅ · QA PASS ✅ · reviewer APPROVE ✅ · CI green ✅
+Shipped: drift v3 (characters + conversations.characterId, migration tested),
+CharacterRepository + chatContextFor, TavernAI CharacterCard V2 interop
+(JSON + pure-Dart PNG tEXt/iTXt chunk r/w, CRC32 pinned), gallery/create/edit/
+detail UI, 10 built-in personas (region-safe guardrails), persona→engine
+system-prompt binding (snapshotted at creation). 589 tests, coverage 79.8%.
+Retro: (1) Untrusted-import trust boundary was the risk center — QA's HIGH
+(sampling TypeError) + reviewer's zlib-bomb nit both lived there; lesson: any
+"import a file from anywhere" feature gets an explicit adversarial-input pass
+on EVERY field path, not just the happy parse. (2) Batching designer+QA
+findings into one fix pass (vs serial) saved a round-trip — keep doing it when
+both reviews land close together. (3) pumpAndSettle hangs on real dart:io
+file I/O under the fake clock — established pattern now: unit-level repro for
+I/O bugs, not settling widget tests. (4) Persona snapshot-at-creation (vs
+live-link) was the right call — reviewer confirmed; document as the pattern
+for Loop 7+ (vision/docs attaching context to a conversation).
