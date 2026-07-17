@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'core/theme/app_theme.dart';
 
 void main() {
   // Loop 3: ProviderScope wraps the app so core/di/providers.dart's
@@ -17,13 +18,17 @@ class DhruvaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Loop 3: models_hub is the app home via go_router. Plain Material 3 —
-    // real theming (design-tokens.json) lands in Loop 4; every color here
-    // comes from Theme.of(context)'s semantic roles so it re-themes for
-    // free.
+    // Loop 4: real theming from design-tokens.json (ADR-003). Dark is the
+    // hero/default (design-tokens.json meta.defaultTheme); themeMode.system
+    // still lets a light-preference device get the recalibrated light
+    // theme. Every screen already reads Theme.of(context)'s semantic roles,
+    // so both modes light up for free — see the designer's spot-check note
+    // on the Loop-4 blackboard entry for any role-misuse fixes.
     return MaterialApp.router(
       title: 'Dhruva',
-      theme: ThemeData(useMaterial3: true),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       routerConfig: appRouter,
     );
   }
