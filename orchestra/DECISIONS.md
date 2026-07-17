@@ -131,3 +131,17 @@ to main auto-deploy production. astro.config auto-detects Vercel (root base)
 vs GitHub Pages (/dhruva-website); tokens.css falls back to the committed
 copy on machines without the app checkout (drift check still guards on CI).
 Deployment protection disabled (public site). GitHub Pages pipeline unchanged.
+
+## SCOPE AMENDMENT 3 — human directive (2026-07-17)
+The website must be built out end-to-end NOW (Loop 12 pulled forward) and to
+a high bar: not a basic landing page — it must SHOW what we are building.
+Requirements: visual storytelling per feature pillar (chat, HF browser,
+characters, vision, imagine, voice, docs RAG, toolbox, playground+news),
+build-in-public progress (loops closed, real repo activity), honest UI
+representations (no fake screenshots passed off as real; stylized mockups
+derived from design tokens + chat-spec are fine and must read as design
+mockups), premium design quality (UI-taste skills applied, Playwright visual
+verification, mobile+desktop), model compatibility, manifesto, docs.
+Vercel (dhruvaai.vercel.app) is the primary deploy; auto-deploys on main.
+The formal Loop 12 gate (Lighthouse 95+, real screenshots) still runs later —
+this amendment raises the interim bar.
