@@ -1334,3 +1334,75 @@ listening, so a fast tap leaves the mic hot with no holder (uncovered: tests
 await startHold before endHold). Fix: release-requested flag checked after
 mic.start; endHold stops _activeMic regardless of phase. Nits: double
 SpeechEnded → double reply (in-flight flag); pin sha256 for the 4 voice assets.
+
+### [LOOP-06] [flutter-core → reviewer, orchestrator] [HANDOFF] 2026-07-18T02:45
+All three reviewer findings closed on loop/06-voice, commit 23ac237. 686
+tests, all green (was 683). `make verify` clean (analyze/format/test).
+Floor-scope coverage 80.35% (floor 70%).
+
+BLOCKING (mic-hot race, same class as QA BUG-2) — FIXED:
+`VoiceInputController` gained `_releaseRequested`, set the instant
+`endHold()` is called (before its own early-return, so it fires regardless
+of what `phase` is at that moment) and checked by `startHold()` right after
+`mic.start()` succeeds — the earliest point a real mic session exists. If a
+release landed while `startHold`'s opening awaits
+(`voiceModelInstallerProvider.future`, `loadVad`/`loadAsr`, `mic.start()`)
+were still in flight, the just-opened mic is torn back down instead of
+entering `listening`; the flag and `_activeMic` are both cleared either way.
+`endHold()`'s existing early-return branch also now stops `_activeMic`
+unconditionally (belt-and-suspenders, independent of the flag).
+
+Uncovered a second bug while writing the test for this: `FakeMicSource
+.stop()`/`.start()` awaited `StreamController.close()`, whose Future never
+resolves for a single-subscription controller nobody ever listened to —
+exactly the shape of this race (release lands before `transcribeStream(...)
+.listen(...)` ever runs). Switched all three call sites
+(`start`/`stop`/`dispose`) to fire-and-forget via a shared `_closeController`
+helper — same lesson `endHold`/`HandsFreeController.stop` already document
+for `subscription.cancel()`, now applied to the fake's own stream teardown.
+New test (`voice_input_controller_test.dart`, "RACE"): calls `startHold()`
+without awaiting it, immediately calls and awaits `endHold()`, then awaits
+the original `startHold()` future to let it finish — asserts
+`mic.stopCount == 1` and `phase == idle`. Confirmed this reproduces red
+against the pre-fix code by tracing the exact call sequence (the fix removes
+the only path that could leave `phase == listening` here).
+
+Nit (double SpeechEnded -> double reply) — FIXED: added `_finalizing`, set
+synchronously the instant a `SpeechEnded` starts `_finalizeUtterance` (before
+the first `await`), cleared in a `finally` block so it clears on every exit
+path. `_handleEvent`'s `SpeechEnded` guard now checks
+`phase == listening && !_finalizing`. New test wraps `FakeVoiceService` in a
+local `_GatedTranscribeVoiceService` (delegates everything, gates
+`transcribe` on a `Completer` the test controls) so it can deterministically
+hold the first `_finalizeUtterance` open, fire a second `SpeechEnded`, and
+assert `transcribeCalls == 1` and exactly one reply — no hoping real
+scheduling lines up. All of QA's existing barge-in/race tests in this file
+(rapid repeated barge-ins, barge-in-racing-natural-transition) still pass
+unchanged.
+
+Nit (sha256 pinning) — DONE, not deferred: network to github.com release
+assets was reachable from here, so all 4 voice-catalog entries
+(silero-vad, whisper-tiny, piper-en-amy-low, piper-hi-pratham-medium) were
+downloaded in full and hashed (`shasum -a 256`) — sherpa publishes no
+per-file checksums itself, so these are self-computed, documented as such in
+`voice_model_catalog.dart`'s doc comments. Downloaded sizes matched the
+catalog's existing `downloadSizeBytes` exactly for all 4. This closes the
+archive trust-boundary gap (`voice_model_installer_test.dart`'s "trust
+boundary" group's own doc comment: "a same-length, bit-corrupted transfer...
+sails through the size check") for BOTH bit-corruption and the decode-bomb
+class, since `DownloadManager.verifyIntegrity` now checks the hash before
+`VoiceModelInstaller` ever touches the file. Side effect handled:
+`voice_models_controller_test.dart`'s synthetic-all-zero-bytes download test
+would have failed checksum verification against the now-real pinned hash —
+switched it to a local no-checksum copy of the VAD entry (that test proves
+download->install wiring, not checksum verification, which
+`download_manager_test.dart` already covers exhaustively). Added a catalog
+test pinning every `sha256` is a valid 64-hex-char string (catches a future
+truncated/typo'd hash before it silently bricks every real download).
+
+No further deviations found. Committed as 23ac237 on loop/06-voice, not
+pushed. Resident-model low-RAM unload backlog item left to the orchestrator
+per the coordinator's note. R11 (on-device mic/playback/latency) remains the
+one open physical-device-only verification.
+
+Request: final reviewer re-verify + ship decision.
