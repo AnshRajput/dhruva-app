@@ -24,6 +24,8 @@ import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
+import '../../imagine_engine/image_gen_service.dart';
+import '../../imagine_engine/sd_image_gen_service.dart';
 import '../../vision/image_attach_source.dart';
 import '../../voice/mic_audio_source.dart';
 import '../../voice/sherpa_voice_service.dart';
@@ -48,6 +50,27 @@ final engineServiceProvider = Provider<EngineService>((ref) {
     // is defensive (safe on an unloaded engine).
     unawaited(service.dispose());
   });
+  return service;
+});
+
+/// On-device image generation (Loop 8): stable-diffusion.cpp via
+/// `SdImageGenService`. Override with `FakeImageGenService` in tests/previews.
+/// The worker isolate spins up lazily on the first `loadModel`.
+///
+/// One heavy model at a time (RAM gate): the SD context peaks ~2-4 GB, so it
+/// refuses to load while the LLM engine is resident — `isOtherHeavyModelResident`
+/// reads the engine's `isLoaded`. The app coordinates by unloading the LLM
+/// before an image load. The device-RAM floor (feature hidden below
+/// `SdImageGenService.recommendedMinRamBytes`) is enforced by the Imagine
+/// feature shell, not here.
+final imageGenServiceProvider = Provider<ImageGenService>((ref) {
+  final service = SdImageGenService(
+    // Android ships libstable-diffusion.so in the app's lib dir (dlopen by
+    // basename); iOS/macOS static-link into the process (null → process).
+    libraryPath: Platform.isAndroid ? 'libstable-diffusion.so' : null,
+    isOtherHeavyModelResident: () => ref.read(engineServiceProvider).isLoaded,
+  );
+  ref.onDispose(() => unawaited(service.dispose()));
   return service;
 });
 

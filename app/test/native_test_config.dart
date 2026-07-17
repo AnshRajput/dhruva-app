@@ -62,3 +62,26 @@ VisionPaths? resolveVisionPaths() {
   }
   return VisionPaths(lib, model, mmproj);
 }
+
+// Loop 8 (imagine): the stable-diffusion.cpp dylib + an SD checkpoint. Built
+// via engine/sd/build-macos.sh (dylib copied to .dev-native/macos-sd) and the
+// SD 1.5 safetensors downloaded into .dev-native/models. Env overrides for CI.
+const _defaultSdLibDir = '.dev-native/macos-sd';
+const _defaultSdModel = '.dev-native/models/v1-5-pruned-emaonly.safetensors';
+
+class SdPaths {
+  final String libraryPath;
+  final String modelPath;
+  const SdPaths(this.libraryPath, this.modelPath);
+}
+
+/// Resolve the sd.cpp dylib + an SD checkpoint for the real image-gen tests.
+/// Null when either artifact is missing so the tests skip cleanly.
+SdPaths? resolveSdPaths() {
+  final lib =
+      Platform.environment['SD_CPP_LIB'] ??
+      '$_defaultSdLibDir/libstable-diffusion.dylib';
+  final model = Platform.environment['DHRUVA_SD_MODEL'] ?? _defaultSdModel;
+  if (!File(lib).existsSync() || !File(model).existsSync()) return null;
+  return SdPaths(lib, model);
+}
