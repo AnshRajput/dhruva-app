@@ -88,9 +88,8 @@ void main() {
     tester,
   ) async {
     await _pump(tester, 3 * 1024 * 1024 * 1024);
-    final smallest =
-        starterModelCatalog.toList()
-          ..sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
+    final smallest = starterModelCatalog.toList()
+      ..sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
     expect(find.text(smallest.first.displayName), findsOneWidget);
   });
 

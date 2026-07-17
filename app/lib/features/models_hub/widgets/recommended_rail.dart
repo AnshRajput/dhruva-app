@@ -56,9 +56,8 @@ class RecommendedRail extends ConsumerWidget {
         );
       } else {
         // Nothing fits — offer the smallest few to try, honestly framed.
-        final smallest =
-            starterModelCatalog.toList()
-              ..sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
+        final smallest = starterModelCatalog.toList()
+          ..sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
         rail = (
           models: smallest.take(3).toList(),
           header: 'Smallest models to try',
