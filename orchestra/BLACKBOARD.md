@@ -562,3 +562,74 @@ not an animation).
 Request: adversarial pass — hostile paste into the composer, rapid
 send-during-load races, folder/search edge cases, sampling-sheet
 out-of-range typed entry, regenerate/edit under a mid-flight generation.
+
+### [LOOP-04] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T10:46
+SCOPE AMENDMENT 4 app-side items complete on branch loop/04-chat, commit
+824b7d5, plus the human's mid-task About-page follow-up. Third bottom-nav
+destination `features/settings/` (Settings): Storage section (installed
+count + total size via a new `storageSummaryProvider` over
+`StorageManager`, links to `/models`), Data section (Clear all chat
+history — two sequential `AlertDialog` confirmations naming exactly what's
+deleted, calls the new `ChatRepository.clearAllHistory()`), About row
+linking to a dedicated `/settings/about` page (added mid-loop per the
+human: app identity + star motif, version, three Fraunces pull quotes
+drawn from brand-proposal.md §a/§d — pole star myth, the onboarding
+privacy line verbatim, device-ownership — developer credit block, links
+row for GitHub/website/Apache-2.0 license, privacy one-liner). Credit row
+("Made with ❤️ by Ansh Singh Rajput" → anshgandharva.online, Amendment 2b)
+lives on the About page as the canonical copy, with the same widget
+(`features/settings/widgets/credit_row.dart`) reused as a slim Settings
+shortcut. `core/theme/brand_star.dart`: a deliberate, documented
+duplication of chat's `DhruvaStar` painter (ponytail-commented) rather
+than a cross-feature import — ADR-002 bans those, and chat's copy also
+carries chat-only widgets (TrustMark/TypingIndicator) not worth uprooting
+for one new consumer this loop.
+Global download indicator (Amendment 4b): `core/router/app_shell.dart`
+(now `ConsumerWidget`) watches the existing `downloadsControllerProvider`
+and shows a `Badge` on the Models nav destination whenever any tracked
+download is queued/running/paused/verifying — no second subscription to
+`DownloadManager.progress`, reuses `DownloadsController`'s accumulation.
+Recommended rail (Amendment 4c): `features/models_hub/widgets/
+recommended_rail.dart` + a hardcoded `starterModelCatalog` const (the
+verified Loop-0 repo ids/sizes from BLACKBOARD.md's "Starter models
+confirmed" line) in `state/recommended_models_provider.dart`, tier-
+annotated via the existing `classifyModelTier`+`ModelVerdictChip` — shown
+above search results only while the query is empty, tap routes to the
+same `/models/repo/:id` detail screen search results use. Empty-state
+copy in `models_hub_screen.dart` now points at the rail when the query is
+empty.
+Data layer: one new method, `ChatRepository.clearAllHistory()` — deletes
+every `Conversations` row, cascading to `Messages` via the existing FK
+(`onDelete: KeyAction.cascade`, PRAGMA foreign_keys already ON); installed
+models untouched. Unit-tested (deletes conversations+messages, leaves
+`installed_models` alone).
+Deps added: `url_launcher` (credit row + About/GitHub/website/license
+links — BSD-3, same federated-plugin family as `share_plus`/
+`path_provider` already in this file), `url_launcher_platform_interface`
+(dev-only, widget-test fakes — same pattern as the existing
+`path_provider_platform_interface` dev dep). `package_info_plus` was
+deliberately NOT added: version/build are two hand-maintained consts in
+`features/settings/app_info.dart`, cross-checked against `pubspec.yaml`.
+Known gap, flagged not hidden: clearing history while the Chat tab is
+alive in the `StatefulShellRoute`'s preserved branch state doesn't
+auto-refresh `ConversationListController` (that's a `features/chat/`
+provider — out of this loop's scope per the brief's directory list, and
+cross-feature invalidation would itself violate ADR-002). The snackbar
+after Clear All tells the user to pull-to-refresh the Chat tab, which
+already has a working `RefreshIndicator` that requeries and shows the
+empty state correctly.
+Tests: 9 new test files (settings screen, About page, credit row via the
+settings screen test, app-shell download-badge, recommended rail across
+all three `ModelTier`s, `clearAllHistory`). Full suite 431/431 green
+(`make verify`: `flutter analyze --fatal-infos` clean, `dart format
+--set-exit-if-changed` clean); one real-HTTP-server e2e test flaked once
+mid-run and was reproduced-green in isolation immediately after — no
+diff touches `data/downloads/` or its tests, pre-existing timing
+flakiness, not this loop's regression. Coverage 79.7% project-wide
+(floor 70%); every new/changed file individually 71-100%.
+Request: designer/QA pass on the About page's pull-quote typography at
+both themes (Fraunces `headlineSmall` italic against the chat-spec's
+existing blockquote left-border language, applied at keepsake scale for
+the first time) and the Models-tab download badge against a real device's
+notch/safe-area — both unverified on-device this loop (simulator/
+`flutter test` only, per the machine's own limits).
