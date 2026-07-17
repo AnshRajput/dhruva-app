@@ -210,3 +210,118 @@ Gate attempt 1 failed on CI coverage (38% raw): native-test skips on CI were
 counted against the floor. Ruling COVERAGE FLOOR SCOPE recorded — glue +
 temporary debug harness excluded per §9 intent; floor-scope coverage is 86%.
 CI step updated. Attempt 2 running.
+
+### [LOOP-03] [orchestrator → all] [STATUS] 2026-07-17T06:10
+Loop 3 PLAN — Model Manager & Hugging Face hub. Branch loop/03-models-hub.
+Goal: browse HF GGUF repos in-app, device-aware "will this run?" verdicts,
+resumable downloads with integrity checks, local import, storage manager.
+Tasks: (T1) CI paths-ignore for orchestra/**+docs/** — orchestrator;
+(T2) foundation: riverpod/drift/go_router/background_downloader/freezed deps,
+EngineService via Riverpod DI (Loop 2 retro carry-in), core/device_info RAM
+detection + Comfortable/Possible/NotRecommended tiering — flutter-platform;
+(T3) data/hf_api client: GGUF search, repo file trees + quant variants,
+license + gated fields, resolve URLs (unit tests on canned real JSON from
+orchestra/research/hf-api.md endpoints) — flutter-platform;
+(T4) data/downloads: resumable manager over background_downloader, size/
+checksum integrity, partial-file cleanup, drift schema for installed models —
+flutter-platform;
+(T5) features/models_hub UI (plain Material, theming is Loop 4): search,
+model detail (quants/license/gated/verdict), downloads, storage manager,
+local GGUF import — flutter-core pattern agent;
+(T6) QA adversarial pass incl. mocked-HF e2e download of a real small file,
+offline mid-download, resume, corrupt checksum; (T7) review + merge.
+Exit gate: [G1] e2e download flow passes (mocked HF API + real small file)
+[G2] offline/resume/corrupt states all handled with typed failures [G3] make
+verify green, floor-scope coverage ≥70% [G4] QA PASS + reviewer APPROVE
+[G5] CI green on merged PR.
+
+### [LOOP-03] [flutter-platform → flutter-core] [HANDOFF] 2026-07-17T07:10
+T2-T4 complete (commit 5909564): Riverpod DI root (core/di/providers.dart),
+device_info_plus-backed RAM/storage service + pure classifyModelTier
+(boundary-tested), HfApiClient (search w/ cursor pagination, recursive tree,
+license/gated, resolve URLs, quant parser), shared AppFailure taxonomy
+(core/failures/), drift installed_models + upsert fix, download stack
+(neutral backend interface + background_downloader adapter + pure tested core:
+GGUF magic bytes, size+streamed-sha256 integrity, free-space guard,
+partial-file cleanup), storage manager, local GGUF import.
+125 new tests; make verify green; floor-scope coverage 77%.
+Deviation: no download_tasks table — background_downloader's own persistence
+covers in-flight state; drift rows only on verified completion.
+Provider surface for UI: engineServiceProvider, deviceInfoServiceProvider,
+appDatabaseProvider, hfApiClientProvider, modelsDirectoryProvider,
+downloadManagerProvider (enqueue/pause/resume/cancel + progress stream),
+storageManagerProvider, classifyModelTier(), importLocalGguf().
+Request: build features/models_hub UI on this surface only — no direct
+http/drift/plugin imports.
+
+### [LOOP-03] [orchestrator → all] [STATUS] 2026-07-17T07:50
+SCOPE AMENDMENT 1 recorded (human directive): Loop 10.5 added — model
+Playground (prompt lab, live sampling tweaks, template inspector, tuning
+presets, benchmarks moved up, live RAM/thermal meters) + AI News reader
+(opt-in, user-initiated public feeds; privacy amendment recorded — zero
+telemetry unchanged). Designer review is BLOCKING at every gate from Loop 4.
+Firebase deferred to Loop 13 (GCP quota, human ruling). Website Loop-12
+build-ahead running in parallel (web-builder). Loop 3 UI in flight.
+
+### [LOOP-03] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T08:20
+models_hub UI complete (commit e0b47a6): go_router shell (/models home,
+/models/repo/:id, /models/downloads, /debug-chat), search with cursor
+pagination + separate page-2 error channel, detail with license/gated BEFORE
+download + per-quant device verdict chips, gated-repo explanation card,
+downloads screen (progress/pause/resume/cancel), installed view with delete +
+GGUF import (file_selector — documented UI-only exception). All state in
+Riverpod notifiers; widgets render-only; Theme.of() semantic roles only.
+38 new tests; suite 204/204; floor-scope coverage 76%; make verify green.
+Live-API validation ran the production HfApiClient against huggingface.co
+(llama search, bartowski detail w/ 18 quants, meta-llama gated=manual).
+Request: adversarial pass per Loop 3 gate — e2e download (mocked HF + real
+small file), offline mid-download, resume, corrupt checksum, gated block.
+
+### [LOOP-03] [qa-tester → builders] [REVIEW] 2026-07-17T09:10
+Verdict: PASS for the Loop 3 gate (commit 625c73b, 219/219, make verify
+green). E2E proven over a real loopback HttpServer (search→detail→enqueue→
+range-resume→integrity→drift). Offline mid-download pinned: partial deleted,
+no drift row. Corrupt sha/size rejected pre-registration. Free-space guard
+pre-network. Gated CTA absent. Hostile API responses + percent-encoding all
+handled. Import magic/dupe handled.
+BUG (HIGH): DownloadManager.enqueue never sanitizes fileName — traversal
+escapes modelsDirectory via p.join; safe today only because the single call
+site basenames it. Fix at the choke point (basename/sanitize inside enqueue).
+GAP (MEDIUM): downloads_screen has no retry on failed rows (only dismiss);
+retry requires re-navigating to detail.
+Note (architectural, pinned not filed): backend errorMessage is a raw string;
+async download failures never re-enter the typed taxonomy.
+
+### [LOOP-03] [flutter-platform + flutter-core → reviewer] [HANDOFF] 2026-07-17T10:20
+QA fixes complete. (1) HIGH traversal fixed at the choke point (commit 78eaf09):
+sanitizeLocalFileName in download_core — basenames subfolder paths for the
+local target, rejects empty/./..///-class results with typed ValidationFailure
+pre-I/O; remote resolve URL untouched; QA's pinned repro flipped to assert the
+fix. Bonus: DownloadProgress.failure (typed AppFailure) added additively;
+plugin TaskException mapping documented as deferral (untested native adapter).
+(2) MEDIUM retry fixed (flutter-core): failed rows render _FailedDownloadTile
+with Retry/Dismiss; retry rebuilds the request (resolveDownloadUrl + backfilled
+size; checksum dropped on screen-initiated retry, documented) and re-enqueues
+through the real manager; widget test observes the actual enqueue.
+Suite 232/232, make verify green, floor-scope coverage 77%.
+Request: staff review of the full loop/03-models-hub diff vs main.
+
+### [LOOP-03] [reviewer → flutter-platform] [REVIEW] 2026-07-17T10:50
+Verdict: REQUEST_CHANGES. Strong diff — trust boundary complete (incl.
+local_import), privacy grep clean, resources closed, ADR-002 exceptions only
+the two documented, E2E is real orchestration not theater, deps clean.
+BLOCKING: app-restart drops in-flight completions — _active is memory-only,
+no trackTasks/resumeFromBackground; _handleUpdate early-returns unknown
+taskIds → post-restart completion never integrity-checked/registered (orphan
+file invisible to Loop 4 picker); database.dart comment overstates behavior.
+Nits: (2) streamingSha256 lacks error path (skipped close, digest! NPE, no
+typed StorageIoFailure, partial not cleaned); (3) basename-flatten collision
+for same-basename subfolder files — note before multi-subfolder repos;
+(4) Loop-4 read model: listInstalledModels unordered, no get-by-id, no
+lastUsedAt writer.
+
+### [LOOP-03] [reviewer → orchestrator] [REVIEW] 2026-07-17T11:40
+Verdict: APPROVE (8900ad5). rehydrate() flush-free → _active rebuilt → 
+flushMissedUpdates() after; interface matches the real invariant; race test
+proven non-vacuous via inversion-hang check. 246/246. Only carry-forward:
+deferred subfolder-basename collision (documented in code + backlog).

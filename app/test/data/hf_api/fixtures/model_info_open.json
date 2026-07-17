@@ -1,0 +1,7 @@
+{
+  "id": "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
+  "license": "apache-2.0",
+  "gated": false,
+  "private": false,
+  "tags": ["gguf", "license:apache-2.0"]
+}

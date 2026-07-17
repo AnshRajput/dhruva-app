@@ -3,8 +3,9 @@
 ## ROADMAP (locked 2026-07-17, Loop 0 gate)
 L1 skeleton+org → L2 engine online → L3 model manager+HF hub → L4 chat →
 L5 characters → L6 voice → L7 vision → L8 imagine → L9 docs RAG → L10 toolbox →
-L11 polish+arena → L12 website → L13 distribution → L14 hardening+handover →
-CONTINUOUS MODE.
+L10.5 playground+AI-news (SCOPE AMENDMENT 1) → L11 polish+arena → L12 website →
+L13 distribution → L14 hardening+handover → CONTINUOUS MODE.
+Designer review BLOCKING at every gate from L4 on (AMENDMENT 1b).
 
 **MVP (Loops 1–4):** install → browse HF → download a recommended model →
 genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
@@ -31,6 +32,9 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Downloads: same-basename subfolder collision (a/model.gguf vs b/model.gguf
+  flatten to one local name) — encode subfolder into on-disk name when a real
+  repo needs it (reviewer carry-forward, Loop 3)
 - Engine follow-up (reviewer nit, Loop 2): widen worker bootstrap try to cover
   ChatTemplate.fromModel/LlamaSession; add timeout on ready.future (leak+hang
   path, low probability) — fold into Loop 3 or 4 engine touch
