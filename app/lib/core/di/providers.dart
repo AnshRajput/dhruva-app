@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/characters/character_repository.dart';
 import '../../data/chat/chat_repository.dart';
 import '../../data/db/database.dart';
 import '../../data/downloads/background_downloader_backend.dart';
@@ -92,4 +93,13 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository(db: ref.watch(appDatabaseProvider));
+});
+
+final characterRepositoryProvider = Provider<CharacterRepository>((ref) {
+  final repo = CharacterRepository(db: ref.watch(appDatabaseProvider));
+  // Fire-and-forget: idempotent, tolerates the starter-pack asset being
+  // absent (see CharacterRepository.seedBuiltInsIfPresent), so there's
+  // nothing worth blocking provider construction on.
+  unawaited(repo.seedBuiltInsIfPresent());
+  return repo;
 });

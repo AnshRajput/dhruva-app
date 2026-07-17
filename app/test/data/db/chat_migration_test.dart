@@ -56,10 +56,11 @@ void main() {
       expect(v1.schemaVersion, 1);
       await v1.close();
 
-      // Reopen with the real (v2) AppDatabase over the same file — this
-      // must trigger the real onUpgrade(1, 2).
+      // Reopen with the real (current, v3) AppDatabase over the same file —
+      // this must trigger the real onUpgrade(1, 3), running both the v1->v2
+      // and v2->v3 branches in one jump (see database.dart's migration doc).
       final v2 = AppDatabase(NativeDatabase(dbFile));
-      expect(v2.schemaVersion, 2);
+      expect(v2.schemaVersion, 3);
 
       final installedRows = await v2.select(v2.installedModels).get();
       expect(installedRows, hasLength(1));
@@ -102,9 +103,9 @@ void main() {
     },
   );
 
-  test('a fresh v2 database creates all four tables directly', () async {
+  test('a fresh database creates all five tables directly', () async {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 2);
+    expect(db.schemaVersion, 3);
     expect(
       db.allTables.map((t) => t.actualTableName),
       containsAll(<String>[
@@ -112,6 +113,7 @@ void main() {
         'folders',
         'conversations',
         'messages',
+        'characters',
       ]),
     );
     await db.close();
