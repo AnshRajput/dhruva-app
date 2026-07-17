@@ -108,6 +108,8 @@ class TokenMotion {
   Duration get moderate => TokenMotionDuration.moderate;
   Duration get slow => TokenMotionDuration.slow;
   Duration get slower => TokenMotionDuration.slower;
+  Duration get pulseMedium => TokenMotionDuration.pulseMedium;
+  Duration get pulseSlow => TokenMotionDuration.pulseSlow;
   Curve get standard => TokenMotionCurve.standard;
   Curve get decelerate => TokenMotionCurve.decelerate;
   Curve get accelerate => TokenMotionCurve.accelerate;

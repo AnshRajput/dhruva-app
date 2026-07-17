@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../state/voice_input_controller.dart';
 
@@ -28,10 +29,21 @@ class MicButton extends ConsumerStatefulWidget {
 
 class _MicButtonState extends ConsumerState<MicButton>
     with SingleTickerProviderStateMixin {
+  // Bootstrap value only — no `BuildContext`/theme at field-initializer
+  // time (same precedent as chat's `TypingIndicator`); didChangeDependencies
+  // immediately overwrites this with the real theme value below.
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: TokenMotionDuration.pulseMedium,
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _pulse.duration = Theme.of(
+      context,
+    ).extension<DhruvaTokens>()!.motion.pulseMedium;
+  }
 
   @override
   void dispose() {

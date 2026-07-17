@@ -445,6 +445,13 @@ class TokenMotionDuration {
   static const moderate = Duration(milliseconds: 300);
   static const slow = Duration(milliseconds: 450);
   static const slower = Duration(milliseconds: 600);
+
+  /// Breathing-rate durations for perpetually-looping state indicators
+  /// (hold-to-talk mic pulse, hands-free phase star) — see design-tokens
+  /// .json motion.pulseNote. Distinct from the one-shot transition scale
+  /// above, which tops out at [slower] (600ms).
+  static const pulseMedium = Duration(milliseconds: 900);
+  static const pulseSlow = Duration(milliseconds: 1400);
 }
 
 class TokenMotionCurve {

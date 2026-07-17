@@ -34,8 +34,24 @@ import 'voice_service.dart';
 /// decoder if a much larger bundle ever ships.
 List<String> extractTarBz2(File archive, Directory destDir) {
   final bytes = archive.readAsBytesSync();
-  final tarBytes = BZip2Decoder().decodeBytes(bytes);
-  final decoded = TarDecoder().decodeBytes(tarBytes);
+  // QA BUG-1 (Loop 6): a real-but-truncated stream (same length checks
+  // upstream can't catch — no sha256 is published for voice-catalog
+  // entries, see voice_model_catalog.dart) makes the bzip2/tar decoders
+  // throw untyped exceptions (RangeError, FormatException, ...) — wrap them
+  // the same way sherpa_voice_service.dart wraps its native calls, so a
+  // corrupt/truncated archive is always a typed VoiceFailure, never an
+  // unhandled async error that strands a caller mid-install.
+  final List<int> tarBytes;
+  final Archive decoded;
+  try {
+    tarBytes = BZip2Decoder().decodeBytes(bytes);
+    decoded = TarDecoder().decodeBytes(tarBytes);
+  } catch (e) {
+    throw VoiceModelLoadFailure(
+      'corrupt or truncated archive: ${archive.path}',
+      cause: e,
+    );
+  }
 
   destDir.createSync(recursive: true);
   final destRoot = p.canonicalize(destDir.path);

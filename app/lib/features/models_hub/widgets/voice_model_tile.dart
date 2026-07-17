@@ -42,7 +42,9 @@ class VoiceModelTile extends StatelessWidget {
               state.errorMessage != null)
             Text(
               state.errorMessage!,
-              style: TextStyle(color: theme.colorScheme.error),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
         ],
       ),

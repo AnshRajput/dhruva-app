@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/brand_star.dart';
+import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../state/handsfree_controller.dart';
 
@@ -95,28 +96,45 @@ class _ConversationView extends StatelessWidget {
         const Spacer(),
         _PhaseIndicator(phase: state.phase),
         SizedBox(height: tokens.spacing.lg),
-        Text(_phaseLabel(state.phase), style: theme.textTheme.titleMedium),
+        // Designer nit: a screen reader can't see the star pulse change
+        // rate/color, so Listening -> Thinking -> Speaking needs to be
+        // announced as it happens, not just read once on focus.
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            _phaseLabel(state.phase),
+            style: theme.textTheme.titleMedium,
+          ),
+        ),
         SizedBox(height: tokens.spacing.xl),
-        if (state.lastUserText != null)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-            child: Text(
-              '"${state.lastUserText}"',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+        Semantics(
+          liveRegion: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (state.lastUserText != null)
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
+                  child: Text(
+                    '"${state.lastUserText}"',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              if (state.lastAssistantText != null)
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
+                  child: Text(
+                    state.lastAssistantText!,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge,
+                  ),
+                ),
+            ],
           ),
-        if (state.lastAssistantText != null)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-            child: Text(
-              state.lastAssistantText!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge,
-            ),
-          ),
+        ),
         if (state.errorMessage != null)
           Padding(
             padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
@@ -164,25 +182,47 @@ class _PhaseIndicator extends StatefulWidget {
 
 class _PhaseIndicatorState extends State<_PhaseIndicator>
     with SingleTickerProviderStateMixin {
+  // Bootstrap value only — no `BuildContext`/theme at field-initializer
+  // time (same precedent as chat's `TypingIndicator`/`MicButton`);
+  // didChangeDependencies immediately overwrites this with the real theme
+  // value.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: _durationFor(widget.phase),
+    duration: _rawDurationFor(widget.phase),
   )..repeat(reverse: true);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = _durationFor(context, widget.phase);
+  }
 
   @override
   void didUpdateWidget(covariant _PhaseIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.phase != widget.phase) {
-      _controller.duration = _durationFor(widget.phase);
+      _controller.duration = _durationFor(context, widget.phase);
     }
   }
 
-  static Duration _durationFor(HandsFreePhase phase) => switch (phase) {
-    HandsFreePhase.listening => const Duration(milliseconds: 1400),
-    HandsFreePhase.thinking => const Duration(milliseconds: 700),
-    HandsFreePhase.speaking => const Duration(milliseconds: 500),
-    _ => const Duration(milliseconds: 1400),
+  static Duration _rawDurationFor(HandsFreePhase phase) => switch (phase) {
+    HandsFreePhase.listening => TokenMotionDuration.pulseSlow,
+    HandsFreePhase.thinking => TokenMotionDuration.pulseMedium,
+    // Same cadence as chat's typing indicator (`motion.moderate`) — both
+    // mark "the AI is actively outputting."
+    HandsFreePhase.speaking => TokenMotionDuration.moderate,
+    _ => TokenMotionDuration.pulseSlow,
   };
+
+  static Duration _durationFor(BuildContext context, HandsFreePhase phase) {
+    final motion = Theme.of(context).extension<DhruvaTokens>()!.motion;
+    return switch (phase) {
+      HandsFreePhase.listening => motion.pulseSlow,
+      HandsFreePhase.thinking => motion.pulseMedium,
+      HandsFreePhase.speaking => motion.moderate,
+      _ => motion.pulseSlow,
+    };
+  }
 
   @override
   void dispose() {

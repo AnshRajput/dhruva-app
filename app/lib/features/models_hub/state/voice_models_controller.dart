@@ -190,6 +190,19 @@ class VoiceModelsController extends AsyncNotifier<List<VoiceModelState>> {
           errorMessage: e.message,
         ),
       );
+    } catch (e) {
+      // QA BUG-1 defense-in-depth: `install()` is now expected to only ever
+      // throw a typed `VoiceFailure` (see `extractTarBz2`'s decode
+      // wrapping), but a tile stuck on "installing" forever from ANY
+      // uncaught error — typed or not — is worse than a generic failed
+      // state, so this is a deliberate catch-all, not a silent swallow.
+      _update(
+        entry.id,
+        (s) => s.copyWith(
+          status: VoiceModelStatus.failed,
+          errorMessage: 'install failed: $e',
+        ),
+      );
     } finally {
       _installing.remove(entry.id);
     }

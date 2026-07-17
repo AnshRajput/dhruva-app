@@ -19,6 +19,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../voice/mic_audio_source.dart' show MicSource;
 import '../../../voice/voice_model_catalog.dart';
 import '../../../voice/voice_service.dart';
 
@@ -62,10 +63,21 @@ class VoiceInputController extends Notifier<VoiceInputState> {
   StreamSubscription<Transcript>? _sub;
   Completer<void>? _streamDone;
 
+  /// Captured in [startHold] so [build]'s `ref.onDispose` can release the
+  /// mic without touching `ref` (not allowed inside a dispose callback —
+  /// same reasoning as `HandsFreeController._activeMic`). QA BUG-2: without
+  /// this, disposing mid-hold (e.g. back-navigation while the mic button is
+  /// still pressed — this provider is `.autoDispose`) only cancelled the
+  /// downstream `transcribeStream` subscription; the upstream `record`
+  /// capture — a real OS mic session — kept running with no UI left to stop
+  /// it.
+  MicSource? _activeMic;
+
   @override
   VoiceInputState build() {
     ref.onDispose(() {
       unawaited(_sub?.cancel());
+      unawaited(_activeMic?.stop());
     });
     return const VoiceInputState();
   }
@@ -105,6 +117,7 @@ class VoiceInputController extends Notifier<VoiceInputState> {
       state = state.copyWith(phase: VoiceInputPhase.permissionDenied);
       return;
     }
+    _activeMic = mic;
 
     state = VoiceInputState(phase: VoiceInputPhase.listening, liveText: '');
     final done = Completer<void>();
@@ -138,6 +151,7 @@ class VoiceInputController extends Notifier<VoiceInputState> {
     if (state.phase != VoiceInputPhase.listening) return '';
     final mic = ref.read(micSourceProvider);
     await mic.stop();
+    _activeMic = null;
     final done = _streamDone;
     if (done != null) {
       await done.future.timeout(const Duration(seconds: 5), onTimeout: () {});

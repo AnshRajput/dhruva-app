@@ -192,8 +192,11 @@
       "base": 200,
       "moderate": 300,
       "slow": 450,
-      "slower": 600
+      "slower": 600,
+      "pulseMedium": 900,
+      "pulseSlow": 1400
     },
+    "pulseNote": "pulseMedium/pulseSlow are breathing-rate durations for perpetually-looping state indicators (hold-to-talk mic, hands-free phase star) — distinct from the base scale above, which is entrance/exit/transition timing for one-shot interactions and tops out at slower=600.",
     "easing": {
       "standard": "cubic-bezier(0.2, 0, 0, 1)",
       "decelerate": "cubic-bezier(0.16, 1, 0.3, 1)",
