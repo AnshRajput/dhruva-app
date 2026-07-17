@@ -20,11 +20,12 @@ import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import '../../support/mock_hf_client.dart';
 
 /// A real GGUF-magic file's bytes: "GGUF" + a deterministic ~2MB filler
 /// payload — big enough to observe multiple real progress events over
@@ -344,9 +345,8 @@ void main() {
   }) async {
     const repoId = 'local/e2e-test-repo';
     const fileName = 'e2e-test-model-Q4_K_M.gguf';
-    final client = HfApiClient(
-      baseUrl: server.baseUri,
-      client: MockClient((request) async {
+    final client = mockHfClient(
+      MockClient((request) async {
         if (request.url.path.contains('/api/models') &&
             !request.url.path.contains(repoId)) {
           return http.Response(
@@ -386,6 +386,7 @@ void main() {
           200,
         );
       }),
+      baseUrl: server.baseUri,
     );
     addTearDown(client.close);
 

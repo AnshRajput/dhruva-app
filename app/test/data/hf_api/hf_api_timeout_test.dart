@@ -6,13 +6,14 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../../support/mock_hf_client.dart';
 
 void main() {
   test('hung request surfaces NetworkOfflineFailure after the timeout '
       'instead of spinning forever', () {
     fakeAsync((async) {
-      final client = HfApiClient(
-        client: MockClient((request) {
+      final client = mockHfClient(
+        MockClient((request) {
           return Completer<http.Response>().future; // hangs forever
         }),
       );

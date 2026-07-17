@@ -8,6 +8,7 @@ import 'package:dhruva/data/hf_api/vision_pairing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../../support/mock_hf_client.dart';
 
 String _fixture(String name) =>
     File('test/data/hf_api/fixtures/$name').readAsStringSync();
@@ -15,8 +16,8 @@ String _fixture(String name) =>
 void main() {
   group('HfApiClient.searchGgufModels', () {
     test('parses a real search response shape', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           expect(request.url.path, '/api/models');
           expect(request.url.queryParameters['filter'], 'gguf');
           expect(request.url.queryParameters['search'], 'qwen');
@@ -46,8 +47,8 @@ void main() {
     });
 
     test('parses a Link header into nextCursor', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           return http.Response(
             '[]',
             200,
@@ -64,8 +65,8 @@ void main() {
     });
 
     test('offline (SocketException) maps to NetworkOfflineFailure', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           throw const SocketException('no route to host');
         }),
       );
@@ -77,10 +78,8 @@ void main() {
     });
 
     test('429 maps to NetworkRateLimitFailure', () async {
-      final client = HfApiClient(
-        client: MockClient(
-          (request) async => http.Response('rate limited', 429),
-        ),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('rate limited', 429)),
       );
 
       await expectLater(
@@ -90,10 +89,8 @@ void main() {
     });
 
     test('500 maps to NetworkHttpFailure with statusCode', () async {
-      final client = HfApiClient(
-        client: MockClient(
-          (request) async => http.Response('server error', 500),
-        ),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('server error', 500)),
       );
 
       await expectLater(
@@ -109,10 +106,8 @@ void main() {
     });
 
     test('malformed JSON maps to NetworkUnknownFailure', () async {
-      final client = HfApiClient(
-        client: MockClient(
-          (request) async => http.Response('not json{{{', 200),
-        ),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('not json{{{', 200)),
       );
 
       await expectLater(
@@ -122,8 +117,8 @@ void main() {
     });
 
     test('empty results array parses to an empty list, no crash', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async => http.Response('[]', 200)),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('[]', 200)),
       );
 
       final result = await client.searchGgufModels(query: 'no-such-model-xyz');
@@ -135,8 +130,8 @@ void main() {
 
   group('HfApiClient.getRepoFiles', () {
     test('parses the tree response and extracts lfs sha256', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           if (request.url.path.endsWith('/mmproj')) {
             return http.Response(_fixture('mmproj_tree.json'), 200);
           }
@@ -168,8 +163,8 @@ void main() {
 
     test('quantVariantsFrom filters to files with a recognized quant token, '
         'excluding mmproj projector files themselves', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async {
+      final client = mockHfClient(
+        MockClient((request) async {
           if (request.url.path.endsWith('/mmproj')) {
             return http.Response(_fixture('mmproj_tree.json'), 200);
           }
@@ -190,8 +185,8 @@ void main() {
     });
 
     test('404 on a repo maps to NetworkHttpFailure', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async => http.Response('not found', 404)),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('not found', 404)),
       );
       await expectLater(
         () => client.getRepoFiles('nonexistent/repo'),
@@ -209,8 +204,8 @@ void main() {
       'an lfs.oid of the wrong length is treated as absent, not misread as sha256 '
       '(attack #7: hostile tree entries)',
       () async {
-        final client = HfApiClient(
-          client: MockClient(
+        final client = mockHfClient(
+          MockClient(
             (request) async => http.Response(
               jsonEncode([
                 {
@@ -232,8 +227,8 @@ void main() {
     test(
       'a tree entry missing "path" entirely does not crash the walk',
       () async {
-        final client = HfApiClient(
-          client: MockClient(
+        final client = mockHfClient(
+          MockClient(
             (request) async => http.Response(
               jsonEncode([
                 {'type': 'file', 'size': 100},
@@ -253,8 +248,8 @@ void main() {
         'quant list, each model quant is marked vision, exact-quant matches '
         'win, and a quant with no exact match falls back to the smallest F16 '
         'projector', () async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async => http.Response(_fixture('smolvlm_tree.json'), 200),
         ),
       );
@@ -282,8 +277,8 @@ void main() {
 
     test('a repo with no mmproj files at all: every quant has isVision false '
         'and a null mmprojFile', () async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async => http.Response(
             jsonEncode([
               {
@@ -311,8 +306,8 @@ void main() {
 
     test('fallback rule 3: no exact quant match and no F16 projector published '
         '-> falls back to the smallest mmproj file overall', () async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async => http.Response(
             jsonEncode([
               {'type': 'file', 'path': 'ModelX-Q4_K_M.gguf', 'size': 500000000},
@@ -349,8 +344,8 @@ void main() {
 
   group('HfApiClient.getModelLicenseInfo', () {
     test('open repo: license + gated:false', () async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async =>
               http.Response(_fixture('model_info_open.json'), 200),
         ),
@@ -364,8 +359,8 @@ void main() {
     });
 
     test('gated repo: license + gated:"manual"', () async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async =>
               http.Response(_fixture('model_info_gated.json'), 200),
         ),
@@ -377,10 +372,8 @@ void main() {
     });
 
     test('401 on a gated repo maps to NetworkGatedFailure', () async {
-      final client = HfApiClient(
-        client: MockClient(
-          (request) async => http.Response('unauthorized', 401),
-        ),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('unauthorized', 401)),
       );
       await expectLater(
         () => client.getModelLicenseInfo('meta-llama/Llama-2-7b-hf'),
@@ -389,8 +382,8 @@ void main() {
     });
 
     test('403 also maps to NetworkGatedFailure', () async {
-      final client = HfApiClient(
-        client: MockClient((request) async => http.Response('forbidden', 403)),
+      final client = mockHfClient(
+        MockClient((request) async => http.Response('forbidden', 403)),
       );
       await expectLater(
         () => client.getModelLicenseInfo('meta-llama/Llama-2-7b-hf'),
@@ -454,8 +447,8 @@ void main() {
   });
 
   test('json decode helper is exercised via a non-list search body', () async {
-    final client = HfApiClient(
-      client: MockClient(
+    final client = mockHfClient(
+      MockClient(
         (request) async => http.Response(jsonEncode({'not': 'a list'}), 200),
       ),
     );
@@ -463,5 +456,57 @@ void main() {
       () => client.searchGgufModels(query: 'x'),
       throwsA(isA<NetworkUnknownFailure>()),
     );
+  });
+
+  group('transient-error retry (dio migration)', () {
+    test('a connection abort is retried, then succeeds', () async {
+      var calls = 0;
+      final client = mockHfClient(
+        MockClient((request) async {
+          calls++;
+          if (calls == 1) throw const SocketException('connection aborted');
+          return http.Response('[]', 200);
+        }),
+        maxRetries: 2,
+      );
+      final result = await client.searchGgufModels(query: 'x');
+      expect(calls, 2); // failed once, retried once, succeeded
+      expect(result.items, isEmpty);
+    });
+
+    test(
+      'retries are exhausted, then NetworkOfflineFailure surfaces',
+      () async {
+        var calls = 0;
+        final client = mockHfClient(
+          MockClient((request) async {
+            calls++;
+            throw const SocketException('down');
+          }),
+          maxRetries: 2,
+        );
+        await expectLater(
+          () => client.searchGgufModels(query: 'x'),
+          throwsA(isA<NetworkOfflineFailure>()),
+        );
+        expect(calls, 3); // initial attempt + 2 retries
+      },
+    );
+
+    test('a 429 is NOT retried (deterministic server answer)', () async {
+      var calls = 0;
+      final client = mockHfClient(
+        MockClient((request) async {
+          calls++;
+          return http.Response('rate limited', 429);
+        }),
+        maxRetries: 2,
+      );
+      await expectLater(
+        () => client.searchGgufModels(query: 'x'),
+        throwsA(isA<NetworkRateLimitFailure>()),
+      );
+      expect(calls, 1);
+    });
   });
 }

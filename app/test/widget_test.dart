@@ -5,7 +5,6 @@
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/data/db/database.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/main.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,14 +12,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/mock_hf_client.dart';
+
 void main() {
   Future<void> pumpApp(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           hfApiClientProvider.overrideWithValue(
-            HfApiClient(
-              client: MockClient((request) async => http.Response('[]', 200)),
+            mockHfClient(
+              MockClient((request) async => http.Response('[]', 200)),
             ),
           ),
           deviceInfoServiceProvider.overrideWithValue(

@@ -12,7 +12,6 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/models_hub/state/listing_download_controller.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
@@ -20,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../../../support/mock_hf_client.dart';
 
 const _repoId = 'bartowski/Test-1B-Instruct-GGUF';
 const _fileName = 'Test-1B-Instruct-Q4_K_M.gguf';
@@ -123,8 +123,8 @@ void main() {
           modelsDirectoryProvider.overrideWith((ref) async => modelsDir),
           downloadManagerProvider.overrideWith((ref) async => manager),
           hfApiClientProvider.overrideWithValue(
-            HfApiClient(
-              client: MockClient((r) async => (responder ?? _hfResponder)(r)),
+            mockHfClient(
+              MockClient((r) async => (responder ?? _hfResponder)(r)),
             ),
           ),
         ],

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show SocketException;
 
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../../core/failures/app_failure.dart';
 import 'models/hf_model_summary.dart';
@@ -17,13 +17,39 @@ import 'vision_pairing.dart';
 /// real curl calls — see orchestra/research/hf-api.md. Public/unauthenticated
 /// only (no HF token support yet — gated repos surface as
 /// [NetworkGatedFailure] rather than being downloadable).
+///
+/// Transport is `dio` (migrated off `package:http`): per-request connect +
+/// receive timeouts and a light retry on transient network errors (mobile
+/// links drop mid-request — a real connection-abort was hit on-device). The
+/// public API and the typed [AppFailure] mapping are unchanged; only the
+/// wire layer moved. Model file DOWNLOADS still go through
+/// `background_downloader`, not dio.
 final class HfApiClient {
-  final http.Client _client;
+  final Dio _dio;
   final Uri _base;
+  final int _maxRetries;
+  final Duration _retryBackoff;
 
-  HfApiClient({http.Client? client, Uri? baseUrl})
-    : _client = client ?? http.Client(),
-      _base = baseUrl ?? Uri.parse('https://huggingface.co');
+  HfApiClient({
+    Dio? dio,
+    Uri? baseUrl,
+    int maxRetries = 2,
+    Duration retryBackoff = const Duration(milliseconds: 250),
+  }) : _dio = dio ?? _defaultDio(),
+       _base = baseUrl ?? Uri.parse('https://huggingface.co'),
+       _maxRetries = maxRetries,
+       _retryBackoff = retryBackoff;
+
+  static Dio _defaultDio() => Dio(
+    BaseOptions(
+      connectTimeout: requestTimeout,
+      receiveTimeout: requestTimeout,
+      // Raw body: we decode JSON ourselves (same as the old http path) so a
+      // malformed body surfaces as [NetworkUnknownFailure], not a dio parse
+      // error, and the exact bytes reach [_decodeJson].
+      responseType: ResponseType.plain,
+    ),
+  );
 
   /// `GET /api/models?filter=gguf&search=...&sort=...&limit=...[&cursor=...]`
   Future<HfSearchResult> searchGgufModels({
@@ -43,7 +69,7 @@ final class HfApiClient {
       },
     );
     final response = await _get(uri);
-    final decoded = _decodeJson(response.body);
+    final decoded = _decodeJson(response.data ?? '');
     if (decoded is! List) {
       throw const NetworkUnknownFailure('search response was not a JSON array');
     }
@@ -53,7 +79,7 @@ final class HfApiClient {
         .toList(growable: false);
     return HfSearchResult(
       items: items,
-      nextCursor: _nextCursorFrom(response.headers['link']),
+      nextCursor: _nextCursorFrom(response.headers.value('link')),
     );
   }
 
@@ -75,7 +101,7 @@ final class HfApiClient {
         ? '/api/models/$repoId/tree/main'
         : '/api/models/$repoId/tree/main/$subPath';
     final response = await _get(_base.replace(path: path));
-    final decoded = _decodeJson(response.body);
+    final decoded = _decodeJson(response.data ?? '');
     if (decoded is! List) {
       throw const NetworkUnknownFailure('tree response was not a JSON array');
     }
@@ -111,7 +137,7 @@ final class HfApiClient {
   /// single repo (the search endpoint doesn't carry `gated`).
   Future<ModelLicenseInfo> getModelLicenseInfo(String repoId) async {
     final response = await _get(_base.replace(path: '/api/models/$repoId'));
-    final decoded = _decodeJson(response.body);
+    final decoded = _decodeJson(response.data ?? '');
     if (decoded is! Map<String, dynamic>) {
       throw const NetworkUnknownFailure(
         'model info response was not a JSON object',
@@ -225,44 +251,85 @@ final class HfApiClient {
   /// forever instead of reaching the typed error state.
   static const requestTimeout = Duration(seconds: 15);
 
-  Future<http.Response> _get(Uri uri) async {
-    final http.Response response;
-    try {
-      response = await _client.get(uri).timeout(requestTimeout);
-    } on TimeoutException catch (e) {
-      throw NetworkOfflineFailure(
-        'request timed out after ${requestTimeout.inSeconds}s',
-        cause: e,
-      );
-    } on SocketException catch (e) {
-      throw NetworkOfflineFailure('no network connection', cause: e);
-    } on http.ClientException catch (e) {
-      throw NetworkOfflineFailure(
-        'request failed to reach the server',
-        cause: e,
-      );
+  Future<Response<String>> _get(Uri uri) async {
+    // Outer hard ceiling (a Dart timer, so `fakeAsync` can drive it, and a
+    // belt over dio's own receiveTimeout for a truly hung socket). Never
+    // retried — a request that blows the whole ceiling is treated as offline.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await _dio.getUri<String>(uri).timeout(requestTimeout);
+      } on TimeoutException catch (e) {
+        throw NetworkOfflineFailure(
+          'request timed out after ${requestTimeout.inSeconds}s',
+          cause: e,
+        );
+      } on DioException catch (e) {
+        if (_isTransient(e) && attempt < _maxRetries) {
+          await Future<void>.delayed(_retryBackoff * (attempt + 1));
+          continue;
+        }
+        throw _mapDioException(e);
+      }
     }
-    final status = response.statusCode;
+  }
+
+  /// Only connection-level failures are worth retrying — a mid-request abort,
+  /// a dropped socket, or a per-request timeout on a flaky mobile link. A
+  /// [DioExceptionType.badResponse] (429/gated/http) is a deterministic server
+  /// answer and is surfaced immediately.
+  bool _isTransient(DioException e) =>
+      e.type == DioExceptionType.connectionError ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.sendTimeout;
+
+  AppFailure _mapDioException(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.transformTimeout:
+        return NetworkOfflineFailure(
+          'request timed out after ${requestTimeout.inSeconds}s',
+          cause: e,
+        );
+      case DioExceptionType.connectionError:
+        return NetworkOfflineFailure('no network connection', cause: e);
+      case DioExceptionType.badResponse:
+        return _mapStatus(e.response?.statusCode ?? 0);
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.cancel:
+      case DioExceptionType.unknown:
+        // A raw SocketException surfacing as `unknown` is still an offline
+        // condition (e.g. thrown by a custom adapter or DNS failure).
+        if (e.error is SocketException) {
+          return NetworkOfflineFailure('no network connection', cause: e);
+        }
+        return NetworkUnknownFailure(
+          'request to huggingface.co failed',
+          cause: e,
+        );
+    }
+  }
+
+  AppFailure _mapStatus(int status) {
     if (status == 429) {
-      throw NetworkRateLimitFailure(
+      return NetworkRateLimitFailure(
         'rate limited by huggingface.co',
         cause: status,
       );
     }
     if (status == 401 || status == 403) {
-      throw NetworkGatedFailure(
+      return NetworkGatedFailure(
         'this repo is gated and requires authentication',
         cause: status,
       );
     }
-    if (status < 200 || status >= 300) {
-      throw NetworkHttpFailure(
-        'huggingface.co returned HTTP $status',
-        statusCode: status,
-      );
-    }
-    return response;
+    return NetworkHttpFailure(
+      'huggingface.co returned HTTP $status',
+      statusCode: status,
+    );
   }
 
-  void close() => _client.close();
+  void close() => _dio.close();
 }

@@ -3,12 +3,12 @@ import 'dart:io';
 
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/failures/app_failure.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/models_hub/state/model_search_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../../../support/mock_hf_client.dart';
 
 String _fixture(String name) =>
     File('test/data/hf_api/fixtures/$name').readAsStringSync();
@@ -19,7 +19,7 @@ ProviderContainer _containerWith(
   final container = ProviderContainer(
     overrides: [
       hfApiClientProvider.overrideWithValue(
-        HfApiClient(client: MockClient((request) async => responder(request))),
+        mockHfClient(MockClient((request) async => responder(request))),
       ),
     ],
   );

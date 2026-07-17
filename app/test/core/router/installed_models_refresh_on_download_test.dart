@@ -19,7 +19,6 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
-import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/characters/state/installed_models_provider.dart'
     as char_installed;
 import 'package:dhruva/features/chat/state/installed_models_provider.dart'
@@ -31,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -75,8 +75,8 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
           hfApiClientProvider.overrideWithValue(
-            HfApiClient(
-              client: MockClient((request) async => http.Response('[]', 200)),
+            mockHfClient(
+              MockClient((request) async => http.Response('[]', 200)),
             ),
           ),
         ],

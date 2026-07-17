@@ -46,6 +46,12 @@ dependencies:
   device_info_plus: ^13.2.0 # RAM (physicalRamSize/availableRamSize) + disk
   # (freeDiskSize/totalDiskSize) on Android + iOS — verified in package source,
   # no custom MethodChannel needed.
+  # HF metadata API client transport (hf_api/hf_api_client.dart). Replaced
+  # package:http — dio gives us typed DioException mapping, per-request
+  # connect/receive timeouts, and a light retry on flaky mobile networks
+  # (a real connection-abort was hit on-device). Model file DOWNLOADS still
+  # go through background_downloader, NOT dio.
+  dio: ^5.10.0
   drift: ^2.34.2
   drift_flutter: ^0.3.1 # bundles sqlite3_flutter_libs; native lib loading for drift.
   file_selector: ^1.1.0
@@ -65,7 +71,6 @@ dependencies:
   flutter_riverpod: ^3.3.2
   freezed_annotation: ^3.1.0
   go_router: ^17.3.0
-  http: ^1.6.0
   # Loop 7 (vision): gallery + camera capture for the chat attach button.
   # First-party (flutter/packages federated plugin), BSD-3 — same license
   # family as share_plus/path_provider/url_launcher already in this file.
@@ -119,6 +124,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   freezed: ^3.2.5
+  # Test-only: the hf_api tests build fake responses with http.Response and a
+  # tiny custom dio HttpClientAdapter (test/support/mock_hf_client.dart) feeds
+  # them to the migrated dio-based HfApiClient. Production code uses dio only.
+  http: ^1.6.0
   json_serializable: ^6.14.0
   path_provider_platform_interface: ^2.1.3
   plugin_platform_interface: ^2.1.8
