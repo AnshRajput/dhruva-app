@@ -633,3 +633,81 @@ existing blockquote left-border language, applied at keepsake scale for
 the first time) and the Models-tab download badge against a real device's
 notch/safe-area — both unverified on-device this loop (simulator/
 `flutter test` only, per the machine's own limits).
+
+### [LOOP-04] [qa-tester → flutter-core] [REVIEW] 2026-07-17T16:40
+Verdict: PASS against the gate (205f60d, 454/454, coverage 81%). MVP journey
+proven with real engine incl. genuine restart simulation (same on-disk db,
+fresh container/engine → history round-trips, second turn works, export
+reflects both sessions). clearAllHistory proven disjoint from models +
+in-flight downloads. Rail/indicator/navigation/think-tag hostility all pass.
+BUGS: (1 MED) ghost bubble on 0-token response — empty-content guard only
+active while streaming id set (chat_thread_screen); (2 MED) switchModel lacks
+isGenerating guard — persists+flips chip mid-stream while engine stays on old
+model (chat_controller); (3 LOW) nested/sequential <think> pairs leak literal
+tags into visible content (parser, documented tradeoff — undersold?);
+(4 MED) malformed /chat/:id deep link → uncaught FormatException red screen
+(app_router int.parse).
+Info: About page ships zero Devanagari — bundled Noto fonts have no live
+consumer yet.
+
+### [LOOP-04] [flutter-core → qa-tester + designer] [HANDOFF] 2026-07-17T11:34
+Both rounds closed in one pass on loop/04-chat: QA's four bugs (commit
+282efec) and the designer's REQUEST_CHANGES (commit 548377b), on top of
+main's network hotfix merge (6e98733). Every QA repro test from 205f60d
+flipped from pinning the bug to asserting the fix, per file:
+BUG-1 (ghost bubble): `MessageBubble` now renders "No response — try
+regenerating." for a finalized, contentless, reasoningless assistant turn
+instead of an empty bubble shell — fix lives in the widget itself (knows
+both `isStreaming` and the finalized-empty case), not
+`chat_thread_screen.dart`'s streaming-only guard. `chat_thread_screen_test.
+dart`'s repro flipped to assert the placeholder text.
+BUG-2 (switchModel no isGenerating guard): one-line guard added, matching
+regenerate/editMessage exactly. `chat_controller_test.dart`'s repro flipped
+to assert modelId/loadedModelIdProvider both stay on the OLD model
+mid-stream, plus a new assertion that the persisted `Conversations.modelId`
+never moved either.
+BUG-3 (think-tag leakage): `splitThinkContent` now strips literal
+`<think>`/`</think>` markers out of `content` even when a second/nested
+pair isn't parsed into `reasoning` (that capture ceiling stays, ponytail-
+commented with the upgrade path: parse every pair if a cataloged model is
+ever observed doing a second reasoning pass). Both `think_tag_parser_test.
+dart` repros flipped to assert `content` contains no raw tag text.
+BUG-4 (malformed deep link crash): `int.tryParse` instead of `int.parse`
+in `app_router.dart`'s `/chat/:id` builder, folding a malformed id into
+the same draft-conversation path `"new"` already takes. `app_router_test.
+dart`'s repro flipped to assert no exception + the same "No model
+installed yet" fallback the nonexistent-numeric-id case gets.
+Designer BLOCKING, closed same pass: (1) Composer hidden whenever
+`state.model == null` — both the brand-new-draft case and the real repro
+(existing conversation, model uninstalled via `Conversations.modelId`'s
+`ON DELETE SET NULL`); new widget test covers the second case explicitly,
+since QA's suite hadn't exercised it. (2) Regenerate/edit/copy-code icons
+swapped from bare `InkWell`+`Icon` to `IconButton` (tooltip + semantic
+label for free, explicit >=44px `constraints` without inflating the 16px
+icon) — `message_bubble_test.dart` now asserts all three tooltips.
+(3) "ध्रुव" added under the "Dhruva AI" headline on the About page
+(design-tokens.json `meta.story`), Fraunces-role text so it's the bundled
+Noto Serif Devanagari fallback's first live consumer — asserted in
+`about_screen_test.dart`.
+Nits, all closed: (4) `brand_motif.dart`'s `TypingIndicator` bootstrap
+duration now reads `TokenMotionDuration.moderate` instead of a raw
+`Duration(milliseconds: 300)` literal. (5) the "↓ New message" pill now
+fades via `AnimatedOpacity` (`motion.fast`/`motion.standard`) instead of a
+bare conditional mount. (6) sheet transitions source duration from
+`motion.moderate`/`motion.fast` via `sheetAnimationStyle` — the
+entrance/exit CURVE is a **documented deviation**, not forced: verified
+against the Flutter SDK source that `AnimationStyle.curve`/`reverseCurve`
+are never read by `_ModalBottomSheetRoute`'s transition builder for
+`showModalBottomSheet`, so there's no public hook without reimplementing
+the route; noted in `chat-spec.md` §10 next to the affected row.
+Tests: net +9 across the two commits (2 new widget tests for the composer-
+hidden repro + tooltip assertions + ध्रुव assertion, on top of every
+flipped QA pin). Full suite 456/456 green, `make verify` clean (`flutter
+analyze --fatal-infos`, `dart format --set-exit-if-changed`), coverage
+80.5% (floor 70%). Not pushed.
+Request: re-run the gate — both the QA bug list and the designer's
+blocking items should now read PASS; flag if the composer-hidden fix or
+the IconButton hit-target change reads differently on-device than the
+`flutter test` harness suggests (this machine has no simulator open this
+pass, so BLOCKING #1/#2's exact visual weight is still simulator/`flutter
+test`-only, same on-device caveat as the prior HANDOFF).
