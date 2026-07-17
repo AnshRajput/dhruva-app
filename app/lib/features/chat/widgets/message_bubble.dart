@@ -326,7 +326,7 @@ class _EditAffordance extends StatelessWidget {
 
 String _relativeTime(DateTime time) {
   final diff = DateTime.now().difference(time);
-  if (diff.inSeconds < 60) return 'now';
+  if (diff.inSeconds < 60) return 'just now';
   if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
   if (diff.inHours < 24) return '${diff.inHours}h ago';
   return '${diff.inDays}d ago';
@@ -476,53 +476,92 @@ class _CodeBlockState extends State<_CodeBlock> {
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
     final theme = widget.theme;
-    final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+    final scheme = theme.colorScheme;
+    final onVariant = scheme.onSurfaceVariant;
+    final copyColor = _copied ? tokens.success : onVariant;
+    // mk-code (mock.css): a bordered well on `surface`, a thin uppercase
+    // header divided from the body, language label left + copy affordance
+    // right. Corners clip the header's divider flush to the radius.
     return Container(
       width: double.infinity,
       margin: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-      padding: EdgeInsets.all(tokens.spacing.sm),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(tokens.radius.sm),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (widget.language != null)
-                Text(
-                  widget.language!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: onSurfaceVariant,
-                  ),
-                )
-              else
-                const SizedBox.shrink(),
-              IconButton(
-                onPressed: _copy,
-                tooltip: _copied ? 'Copied' : 'Copy code',
-                icon: Icon(
-                  _copied ? Icons.check : Icons.copy,
-                  size: 16,
-                  color: _copied ? tokens.success : onSurfaceVariant,
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                visualDensity: VisualDensity.compact,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                tokens.spacing.sm,
+                tokens.spacing.xs,
+                tokens.spacing.xs,
+                tokens.spacing.xs,
               ),
-            ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    (widget.language ?? 'code').toUpperCase(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: onVariant,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                  Tooltip(
+                    message: _copied ? 'Copied' : 'Copy code',
+                    child: InkWell(
+                      onTap: _copy,
+                      borderRadius: BorderRadius.circular(tokens.radius.xs),
+                      child: Padding(
+                        padding: EdgeInsets.all(tokens.spacing.xs),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _copied ? Icons.check : Icons.copy,
+                              size: 13,
+                              color: copyColor,
+                            ),
+                            SizedBox(width: tokens.spacing.xs),
+                            Text(
+                              _copied ? 'Copied' : 'Copy',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: copyColor,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SelectableText(
-              widget.code,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: onSurfaceVariant,
-                fontFamily: 'monospace',
-                height: 1.429,
+          Padding(
+            padding: EdgeInsets.all(tokens.spacing.sm),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SelectableText(
+                widget.code,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurface,
+                  fontFamily: 'monospace',
+                  height: 1.5,
+                ),
               ),
             ),
           ),

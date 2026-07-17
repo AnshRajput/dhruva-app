@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../voice/voice_model_catalog.dart' show VoiceModelRole;
 import '../state/failure_message.dart';
@@ -144,18 +145,35 @@ class _SearchTabState extends ConsumerState<_SearchTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(modelSearchControllerProvider);
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    // mk-composer (mock.css): a soft pill on `surfaceVariant` with a hairline
+    // outline — not a boxy outlined field.
+    final pillBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(tokens.radius.full),
+      borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
+    );
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(tokens.spacing.md),
           child: TextField(
             controller: _queryCtrl,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
               hintText: 'Search GGUF models on Hugging Face',
-              border: OutlineInputBorder(),
+              hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              filled: true,
+              fillColor: theme.colorScheme.surfaceContainerHighest,
               isDense: true,
+              border: pillBorder,
+              enabledBorder: pillBorder,
+              focusedBorder: pillBorder.copyWith(
+                borderSide: BorderSide(color: theme.colorScheme.primary),
+              ),
             ),
             textInputAction: TextInputAction.search,
             onSubmitted: (query) =>

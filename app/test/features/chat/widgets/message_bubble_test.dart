@@ -108,7 +108,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('bold'), findsOneWidget);
-      expect(find.text('dart'), findsOneWidget); // language label
+      expect(find.text('DART'), findsOneWidget); // language label (mk-code)
       expect(find.byIcon(Icons.copy), findsOneWidget);
       // DESIGNER BLOCKING #2: real tooltip/semantic label, not a bare
       // unlabeled InkWell.

@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/device_info/model_tier.dart';
+import '../../../core/theme/dhruva_theme_extension.dart';
 
 class ModelVerdictChip extends StatelessWidget {
   final ModelTier tier;
@@ -29,18 +30,22 @@ class ModelVerdictChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = theme.extension<DhruvaTokens>()!;
+    // mk-verdict (mock.css): a flat rounded pill, no Material chip chrome.
+    // good = success tint, ok = primary-container, no = error-container.
     final (label, background, foreground, icon) = switch (tier) {
       ModelTier.comfortable => (
         'Comfortable',
-        scheme.primaryContainer,
-        scheme.onPrimaryContainer,
+        tokens.success.withValues(alpha: 0.24),
+        tokens.success,
         Icons.check_circle,
       ),
       ModelTier.possible => (
         'Possible',
-        scheme.tertiaryContainer,
-        scheme.onTertiaryContainer,
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
         Icons.info,
       ),
       ModelTier.notRecommended => (
@@ -52,12 +57,36 @@ class ModelVerdictChip extends StatelessWidget {
     };
     return Tooltip(
       message: explanation,
-      child: Chip(
-        avatar: Icon(icon, size: 16, color: foreground),
-        label: Text(label),
-        backgroundColor: background,
-        labelStyle: TextStyle(color: foreground),
-        visualDensity: VisualDensity.compact,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.sm,
+          vertical: tokens.spacing.xs / 2,
+        ),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(tokens.radius.full),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: foreground),
+            SizedBox(width: tokens.spacing.xs),
+            // Flexible so a full-width list row shows the label in full while
+            // the narrow recommended-rail card ellipsizes rather than
+            // overflowing its 220px width.
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

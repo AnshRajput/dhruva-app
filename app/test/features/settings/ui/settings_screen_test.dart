@@ -154,7 +154,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('About Dhruva AI'), findsOneWidget);
-      expect(find.text('Version 0.2.0'), findsOneWidget);
+      expect(find.text('Version 0.2.1'), findsOneWidget);
     },
   );
 }

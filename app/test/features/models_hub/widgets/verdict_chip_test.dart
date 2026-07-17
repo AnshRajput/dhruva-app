@@ -2,14 +2,18 @@
 // one-line RAM explanation (T5 test requirement).
 
 import 'package:dhruva/core/device_info/model_tier.dart';
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/features/models_hub/widgets/verdict_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _gib = 1024 * 1024 * 1024;
 
+// AppTheme.dark carries the DhruvaTokens extension the chip reads for its
+// success tint / radius / spacing.
 Future<void> _pump(WidgetTester tester, Widget child) => tester.pumpWidget(
   MaterialApp(
+    theme: AppTheme.dark,
     home: Scaffold(body: Center(child: child)),
   ),
 );

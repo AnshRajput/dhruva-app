@@ -23,20 +23,50 @@ class RecommendedRail extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final memory = ref.watch(deviceMemoryProvider);
-
-    // Device-aware ranking (Phase B, D5): once RAM is known, sort so the
-    // models that run best on THIS device (comfortable → possible → not
-    // recommended) come first. Before RAM resolves, keep declaration order.
     final ram = memory.value?.totalBytes;
-    final models = ram == null
-        ? starterModelCatalog
-        : (starterModelCatalog.toList()..sort((a, b) {
-            int rank(StarterModel m) => classifyModelTier(
-              fileSizeBytes: m.approxSizeBytes,
-              totalRamBytes: ram,
-            ).index;
-            return rank(a).compareTo(rank(b));
-          }));
+
+    // The rail must never contradict itself: a section titled "Recommended
+    // for your device" showing "Not recommended" cards reads as broken.
+    // So, once RAM is known, show ONLY the models that actually fit
+    // (comfortable → possible), best-first. If NONE fit (a low-RAM device),
+    // fall back to the smallest models under an honest header + a gentle
+    // "may be slow" note instead of an alarming red "Not recommended" chip.
+    final ({List<StarterModel> models, String header, bool fallback}) rail;
+    if (ram == null) {
+      rail = (
+        models: starterModelCatalog.toList(),
+        header: 'Recommended for your device',
+        fallback: false,
+      );
+    } else {
+      ModelTier tierOf(StarterModel m) => classifyModelTier(
+        fileSizeBytes: m.approxSizeBytes,
+        totalRamBytes: ram,
+      );
+      final fitting =
+          starterModelCatalog
+              .where((m) => tierOf(m) != ModelTier.notRecommended)
+              .toList()
+            ..sort((a, b) => tierOf(a).index.compareTo(tierOf(b).index));
+      if (fitting.isNotEmpty) {
+        rail = (
+          models: fitting,
+          header: 'Recommended for your device',
+          fallback: false,
+        );
+      } else {
+        // Nothing fits — offer the smallest few to try, honestly framed.
+        final smallest =
+            starterModelCatalog.toList()
+              ..sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
+        rail = (
+          models: smallest.take(3).toList(),
+          header: 'Smallest models to try',
+          fallback: true,
+        );
+      }
+    }
+    final models = rail.models;
 
     return Padding(
       padding: EdgeInsets.only(top: tokens.spacing.sm),
@@ -45,10 +75,7 @@ class RecommendedRail extends ConsumerWidget {
         children: [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-            child: Text(
-              'Recommended for your device',
-              style: theme.textTheme.titleSmall,
-            ),
+            child: Text(rail.header, style: theme.textTheme.titleSmall),
           ),
           SizedBox(height: tokens.spacing.xs),
           SizedBox(
@@ -71,6 +98,9 @@ class RecommendedRail extends ConsumerWidget {
                     _ => null,
                   },
                   totalRamBytes: memory.value?.totalBytes,
+                  // In fallback mode every card is too big for the device;
+                  // show a gentle note, not a red "Not recommended" chip.
+                  fallback: rail.fallback,
                 );
               },
             ),
@@ -91,10 +121,16 @@ class _RecommendedCard extends StatelessWidget {
   final ModelTier? tier;
   final int? totalRamBytes;
 
+  /// True when this card is in the "Smallest models to try" fallback (nothing
+  /// fits the device): render a muted "may be slow" note instead of the red
+  /// "Not recommended" verdict chip, which would contradict the section.
+  final bool fallback;
+
   const _RecommendedCard({
     required this.model,
     required this.tier,
     required this.totalRamBytes,
+    this.fallback = false,
   });
 
   @override
@@ -141,7 +177,14 @@ class _RecommendedCard extends StatelessWidget {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  if (tier != null)
+                  if (fallback)
+                    Text(
+                      'May be slow',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: tokens.warning,
+                      ),
+                    )
+                  else if (tier != null)
                     ModelVerdictChip(
                       tier: tier!,
                       fileSizeBytes: model.approxSizeBytes,
