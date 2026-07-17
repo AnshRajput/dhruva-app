@@ -459,3 +459,15 @@ screens against chat-spec.md before that gate closes.
 Request: flutter-core build features/chat against chat-spec.md +
 AppTheme/DhruvaTokens; flag anything the spec left ambiguous rather than
 improvising a value.
+
+### [LOOP-04] [native-engine → flutter-core] [HANDOFF] 2026-07-17T13:30
+T3 complete (dbf0c4e): bootstrap try widened over ChatTemplate.fromModel/
+LlamaSession (ctx→model disposed on throw) + injectable 60s load timeout →
+typed EngineLoadFailure (tested at 1ms). Added EngineCompletion.elapsedMs and
+EngineGenerateParams.seed (reproducibility proven: same seed+temp0.9 →
+identical token ids). Verified existing: contextSize→nCtx, generate(messages:)
+multi-turn+system prompt (real-model smoke: turn 2 recalled "Max" from turn 1).
+Sampler surface beyond temp/topP/topK/seed/greedy/maxTokens (minP, penalties,
+Mirostat, XTC, DRY, grammar, logit-bias...) exists in the package, documented
+on EngineGenerateParams, NOT surfaced — Loop 10.5 playground material.
+Engine suite 41 tests green.
