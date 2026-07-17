@@ -126,5 +126,118 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 3)),
     );
+
+    // Loop 4 D3: a genuine 2-turn conversation over the messages/ChatTemplate
+    // path — system prompt + prior turns fed back in — where turn 2 can only be
+    // answered from turn 1's context.
+    test(
+      'multi-turn: system prompt + history; turn 2 references turn 1',
+      () async {
+        await engine.load(
+          paths!.modelPath,
+          params: const EngineLoadParams(contextSize: 1024, gpuLayers: 0),
+        );
+
+        Future<String> ask(List<ChatTurn> messages) async {
+          final buf = StringBuffer();
+          await for (final e in engine.generate(
+            messages: messages,
+            params: const EngineGenerateParams(maxTokens: 48, greedy: true),
+          )) {
+            if (e is EngineToken) buf.write(e.text);
+          }
+          return buf.toString();
+        }
+
+        const system = ChatTurn.system(
+          'You are a helpful assistant. Answer briefly.',
+        );
+        // Turn 1 establishes the name; turn 2's question contains NO name, so a
+        // correct answer can only come from the history (proves the template
+        // path threads prior turns, not just the latest message).
+        const user1 = ChatTurn.user('My name is Max. Say hi to me.');
+
+        final reply1 = await ask(const [system, user1]);
+        expect(reply1.trim(), isNotEmpty, reason: 'turn 1 produced no text');
+
+        // Turn 2 carries the full history (system + user1 + assistant + user2).
+        final turn2 = await ask([
+          system,
+          user1,
+          ChatTurn.assistant(reply1),
+          const ChatTurn.user('What is my name?'),
+        ]);
+        // ignore: avoid_print
+        print('MULTITURN turn-2 => "$turn2"');
+        expect(
+          turn2.toLowerCase(),
+          contains('max'),
+          reason: 'turn 2 did not recall the name from turn 1',
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
+
+    // Loop 4 D4: seed reaches the native sampler. With temperature>0 a fixed
+    // seed makes generation reproducible; the two runs must match token-for-
+    // token. (Without seed plumbing each run gets a random seed and diverges.)
+    test(
+      'seed reaches the sampler: fixed seed → reproducible output',
+      () async {
+        await engine.load(
+          paths!.modelPath,
+          params: const EngineLoadParams(contextSize: 512, gpuLayers: 0),
+        );
+
+        Future<List<int>> run() async {
+          final ids = <int>[];
+          await for (final e in engine.generate(
+            prompt: 'List three animals:',
+            params: const EngineGenerateParams(
+              maxTokens: 24,
+              temperature: 0.9,
+              topK: 60,
+              topP: 0.95,
+              seed: 424242,
+            ),
+          )) {
+            if (e is EngineToken) ids.add(e.tokenId);
+          }
+          return ids;
+        }
+
+        final a = await run();
+        final b = await run();
+        expect(a, isNotEmpty);
+        expect(
+          b,
+          equals(a),
+          reason: 'same seed must reproduce the same tokens',
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
+
+    // Loop 4 D1: load's ready.future timeout. A 1ms ceiling fires long before
+    // native init can signal ready, proving load() gives up with a typed
+    // EngineLoadFailure instead of hanging forever.
+    test(
+      'load times out with EngineLoadFailure when ready never arrives',
+      () async {
+        final slow = LlamaEngineService(
+          libraryPath: paths!.libraryPath,
+          loadTimeout: const Duration(milliseconds: 1),
+        );
+        await expectLater(
+          () => slow.load(
+            paths.modelPath,
+            params: const EngineLoadParams(contextSize: 512, gpuLayers: 0),
+          ),
+          throwsA(isA<EngineLoadFailure>()),
+        );
+        expect(slow.isLoaded, isFalse);
+        await slow.dispose();
+      },
+    );
   }, skip: skip);
 }
