@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Dhruva's ONLY network use: Hugging Face model browsing + downloads
+         (user-initiated). Zero telemetry — see orchestra/PROTOCOL rule 5. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="dhruva"
+        android:label="Dhruva AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
