@@ -1500,3 +1500,79 @@ usage-counts-both). 718/718 suite, make verify green, floor-scope coverage
 Request: flutter-core — build the chat image-attach flow (T3) on this
 surface (isVision on QuantVariant, isVision/mmprojPath on InstalledModelInfo/
 InstalledModels); reviewer — full diff review.
+
+### [LOOP-07] [flutter-core → reviewer/QA] [HANDOFF] 2026-07-18T05:20
+T3 chat image-attach vision UI complete (commit 2dc4016, branch
+loop/07-vision). Composer gets an attach `IconButton` (gate G3: `widget.
+isMultimodal`, default false — hidden for a text-only/no-model conversation,
+shown once the loaded model's projector initialised) offering Photo Library
++ Camera via a new `ImageAttacher` abstraction (`lib/vision/
+image_attach_source.dart` + `SystemImageAttacher`/`image_picker`, mirroring
+`voice/mic_audio_source.dart`'s `MicSource` — `features/chat` never imports
+`image_picker` directly; `lib/vision/fake_image_attacher.dart` is the test
+double, wired via a new `imageAttacherProvider`).
+Load path: `ChatController.ensureModelLoaded` now passes `model.mmprojPath`
+into `EngineLoadParams.mmprojPath`, and mirrors `engine.isMultimodal` into a
+new `ChatThreadState.isMultimodal` field — this is what the composer's gate
+reads (real proof engine.load actually received it: `FakeEngineService.
+lastLoadParams`, a new test hook). Found + fixed a real bug in my own first
+pass: the send-time guard read `isMultimodal` from state BEFORE that turn's
+own `ensureModelLoaded()` ran (stale-false on a fresh conversation's first
+message) — moved the guard to `_runAssistantTurn`'s post-load `current`
+instead, caught by my own controller test before it ever shipped.
+Send/render: `sendMessage(text, {imageBytes})` allows image-only sends;
+images live in `ChatThreadState.attachedImages` (`Map<int,Uint8List>` keyed
+by message id) — same "session-only, not persisted" precedent as
+`reasoningDurationMs` (no `Messages` schema column this loop; `data/` was
+out of my file scope and a schema migration felt like more than a chat-UI
+loop needed — flagged here as the deviation, upgrade path is a drift
+migration if a future loop needs images to survive an app restart). Bubble
+renders the thumbnail (tap → `features/vision/widgets/image_lightbox.dart`,
+a modal `InteractiveViewer`, no new route). Downscale: `lib/features/chat/
+state/image_downscale.dart`'s `downscaleImage` uses `dart:ui`'s
+`instantiateImageCodec(targetWidth/targetHeight)` (ladder rung 4 — native
+platform feature, no `image`-processing package) to cap at 1024px
+preserving aspect ratio, no-op if already smaller; verified against a real
+2000x2000 PNG built in-test with `dart:ui` (`image_downscale_test.dart`).
+Extract-text: a preset-prompt quick action on the attach chip (`vision_
+presets.dart`'s `extractTextPrompt`); its reply gets a copy-to-clipboard
+button, detected structurally (preceding user turn == the preset text + had
+an attached image) rather than a new persisted flag. Vision-catalog
+discoverability: a structural hint in `model_picker_sheet.dart` ("Want to
+chat about photos? Browse vision models →" → `/models`) shown whenever no
+installed model has `isVision` — no new vision-rail screen built (out of
+scope; `/models` already exists).
+Platform config: added `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription`
+to iOS+macOS `Info.plist`, `android.permission.CAMERA` to the manifest, and
+`com.apple.security.device.camera` to macOS `Release.entitlements` —
+image_picker crashes on first camera/photo request without these; flagged
+as a small necessary scope extension beyond `features/chat`+`features/
+vision`.
+Real check (T7): `test/features/chat/state/chat_controller_vision_real_engine_test.dart`
+drives image→question→answer through the REAL `ChatController` +
+`LlamaEngineService` + SmolVLM-500M + its mmproj (not the fake) —
+`test/assets/red_64.png` → "What is the main color of this image?" →
+model answered **"Red."** (printed in test output), `isMultimodal` and
+`mmprojPath` both asserted along the way. Skips cleanly without
+`.dev-native/` artifacts (same pattern as `engine_vision_test.dart`).
+29 new tests across composer/message_bubble/chat_controller/chat_thread_
+screen/model_picker_sheet/image_downscale + the 1 real-engine test (747/747
+suite total, up from 718). `make verify` green (analyze --fatal-infos +
+format + full suite). Floor-scope coverage ~88% (platform-glue
+`SystemImageAttacher` is the one 0%-covered file, same exclusion precedent
+as `llama_engine_service.dart`/`mic_audio_source.dart`). Committed
+(2dc4016), not pushed.
+Deviations from stated file scope: touched `core/di/providers.dart` (new
+`imageAttacherProvider`, same pattern as every other engine/voice provider
+there), `engine_bindings/fake_engine_service.dart` (added `lastLoadParams`
+test hook — needed to prove the mmprojPath load-path gate for real), and
+the platform config files above. New top-level `lib/vision/` (not `features/
+vision/`) for the `ImageAttacher` abstraction — mirrors `lib/voice/`'s
+existing split (platform bindings outside `features/`, importable from
+`core/di`) rather than violating ADR-002's features→data→core direction by
+having `core/di` import `features/vision`.
+Request: reviewer — full diff review; QA — corrupt/huge image, EXIF/
+orientation edge cases (not covered this pass — downscaleImage doesn't
+correct EXIF orientation, documented as a ponytail-marked known gap in
+`image_downscale.dart`), auto-pairing + non-vision-hides-attach on a real
+device if practical.
