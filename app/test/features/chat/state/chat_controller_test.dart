@@ -39,6 +39,13 @@ void main() {
         );
   }
 
+  // B1: chatControllerProvider is autoDispose, kept alive in the real app
+  // by the ChatThreadScreen's own `ref.watch` for as long as it's mounted.
+  // Every test below stands that in for with a `container.listen(...)`
+  // right after its first `.future` read — without it, the provider can
+  // be reclaimed between there and a later `container.read(...).value!`
+  // in the same test, since nothing else in a widget-less container test
+  // holds a subscription open.
   ProviderContainer buildContainer(FakeEngineService engine) {
     final container = ProviderContainer(
       overrides: [
@@ -62,6 +69,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
 
       final observedLengths = <int>[];
       container.listen(chatControllerProvider(args), (previous, next) {
@@ -103,6 +111,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
 
       final sendFuture = notifier.sendMessage('go');
@@ -138,6 +147,7 @@ void main() {
           final container = buildContainer(engine);
           final args = ChatRouteArgs(initialModelId: modelId);
           await container.read(chatControllerProvider(args).future);
+          container.listen(chatControllerProvider(args), (_, _) {});
           final notifier = container.read(
             chatControllerProvider(args).notifier,
           );
@@ -165,6 +175,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
 
       await notifier.sendMessage('hi');
@@ -181,6 +192,7 @@ void main() {
       final container = buildContainer(FakeEngineService());
       const args = ChatRouteArgs();
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
 
       await notifier.sendMessage('hi');
@@ -208,6 +220,7 @@ void main() {
         final container = buildContainer(engine);
         final args = ChatRouteArgs(initialModelId: modelId);
         await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
         final notifier = container.read(chatControllerProvider(args).notifier);
 
         await notifier.sendMessage('explain');
@@ -231,6 +244,7 @@ void main() {
         final container = buildContainer(engine);
         final args = ChatRouteArgs(initialModelId: modelId);
         await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
         final notifier = container.read(chatControllerProvider(args).notifier);
 
         await notifier.sendMessage('explain');
@@ -254,6 +268,7 @@ void main() {
         final container = buildContainer(engine);
         final args = ChatRouteArgs(initialModelId: modelId);
         await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
         final notifier = container.read(chatControllerProvider(args).notifier);
 
         await notifier.sendMessage('hi');
@@ -267,6 +282,53 @@ void main() {
         expect(assistant.reasoningContent, isNull);
       },
     );
+
+    test('N1 (staff review): nested <think> markers streamed one character at '
+        'a time never let the persisted row diverge from the final in-memory '
+        'content — even where a re-derived split shrinks relative to what '
+        'was already pushed, `_flush` rewrites the row instead of appending '
+        'a delta against a stale prefix. Same QA nested-think sequence as '
+        'think_tag_parser_test.dart\'s repro, run through the real '
+        'controller/repository instead of the pure parser function.', () async {
+      final modelId = await insertModel();
+      const raw = '<think>outer <think>inner</think> tail</think>after';
+      // One character per token, spread comfortably past the 100ms
+      // flush tick relative to the 7-char opening tag — this reliably
+      // lands a periodic flush mid-formation of "<think>" (still short
+      // enough to hit `safeThinkPrefix`'s own <=holdback bypass and read
+      // as plain content), then a later flush resolving it into the
+      // real opener shrinks `content` — exactly N1's guard case.
+      final engine = FakeEngineService(
+        scriptedTokens: raw.split(''),
+        tokenDelay: const Duration(milliseconds: 20),
+      );
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      await notifier.sendMessage('explain');
+
+      final state = container.read(chatControllerProvider(args)).value!;
+      final assistant = state.messages.last;
+      // Same expectations as think_tag_parser_test.dart's fixed repro:
+      // only the first opener/closer pair becomes reasoning, and the
+      // leftover literal tag markers are stripped rather than leaked.
+      expect(assistant.reasoningContent, 'outer <think>inner');
+      expect(assistant.content, ' tailafter');
+
+      // N1's actual point: the persisted row matches that exactly —
+      // no divergence from an append-only delta computed against a
+      // `_pushedContent` a mid-stream shrink left stale.
+      final persisted =
+          (await container
+                  .read(chatRepositoryProvider)
+                  .getMessages(state.conversationId!))
+              .last;
+      expect(persisted.content, assistant.content);
+      expect(persisted.reasoningContent, assistant.reasoningContent);
+    }, timeout: const Timeout(Duration(seconds: 10)));
   });
 
   test(
@@ -277,6 +339,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
       await notifier.sendMessage('hi');
       final firstAssistantId = container
@@ -307,6 +370,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
       await notifier.sendMessage('what is 2+2');
       final userMsgId = container
@@ -340,6 +404,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelA);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
       await notifier.sendMessage('start');
 
@@ -371,6 +436,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
 
       final sendFuture = notifier.sendMessage('hi');
@@ -409,6 +475,7 @@ void main() {
       final container = buildContainer(engine);
       final args = ChatRouteArgs(initialModelId: modelId);
       await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
       final notifier = container.read(chatControllerProvider(args).notifier);
 
       final sendFuture = notifier.sendMessage('what is 2+2');
@@ -440,6 +507,7 @@ void main() {
     final container = buildContainer(engine);
     final args = ChatRouteArgs(initialModelId: modelA);
     await container.read(chatControllerProvider(args).future);
+    container.listen(chatControllerProvider(args), (_, _) {});
     final notifier = container.read(chatControllerProvider(args).notifier);
 
     final sendFuture = notifier.sendMessage('hi');
@@ -484,6 +552,7 @@ void main() {
     final container = buildContainer(engine);
     final args = ChatRouteArgs(initialModelId: modelId);
     await container.read(chatControllerProvider(args).future);
+    container.listen(chatControllerProvider(args), (_, _) {});
     final notifier = container.read(chatControllerProvider(args).notifier);
 
     final sendFuture = notifier.sendMessage('go');
@@ -511,6 +580,7 @@ void main() {
     final container = buildContainer(engine);
     final args = ChatRouteArgs(initialModelId: modelId);
     await container.read(chatControllerProvider(args).future);
+    container.listen(chatControllerProvider(args), (_, _) {});
     final notifier = container.read(chatControllerProvider(args).notifier);
 
     await notifier.sendMessage('hi');
@@ -535,6 +605,7 @@ void main() {
     final container = buildContainer(engine);
     final args = ChatRouteArgs(initialModelId: modelId);
     await container.read(chatControllerProvider(args).future);
+    container.listen(chatControllerProvider(args), (_, _) {});
     final notifier = container.read(chatControllerProvider(args).notifier);
 
     await notifier.sendMessage('explain');
@@ -544,5 +615,78 @@ void main() {
     expect(assistant.reasoningContent, 'just reasoning');
     expect(assistant.content, isEmpty);
     expect(state.reasoningDurationMs[assistant.id], isNotNull);
+  });
+
+  // ---- Staff review B1: autoDispose + keepAlive lifecycle -----------------
+
+  group('B1: autoDispose + keepAlive lifecycle', () {
+    test('idle (not generating): once its only listener is dropped, the '
+        'provider is disposed and rebuilt fresh on the next read', () async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService();
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+
+      final sub = container.listen(chatControllerProvider(args), (_, _) {});
+      await container.read(chatControllerProvider(args).future);
+      expect(container.exists(chatControllerProvider(args)), isTrue);
+
+      // Simulates navigating away: the widget that was watching this
+      // thread stops listening, and nothing is generating.
+      sub.close();
+      await container.pump();
+
+      expect(container.exists(chatControllerProvider(args)), isFalse);
+    });
+
+    test(
+      'while generating: dropping the listener does NOT dispose the '
+      'provider (the self-held keepAlive covers it); completion releases '
+      'that keepAlive and the now-idle provider becomes reclaimable again',
+      () async {
+        final modelId = await insertModel();
+        final engine = FakeEngineService(
+          scriptedTokens: List.generate(10, (i) => 'tok$i '),
+          tokenDelay: const Duration(milliseconds: 30),
+        );
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+
+        final sub = container.listen(chatControllerProvider(args), (_, _) {});
+        await container.read(chatControllerProvider(args).future);
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        final sendFuture = notifier.sendMessage('hi');
+        await Future<void>.delayed(const Duration(milliseconds: 45));
+        expect(
+          container.read(chatControllerProvider(args)).value!.isGenerating,
+          isTrue,
+        );
+
+        // Drop the only external listener mid-stream (simulates
+        // navigating away while a reply is still streaming in).
+        sub.close();
+        await container.pump();
+        expect(
+          container.exists(chatControllerProvider(args)),
+          isTrue,
+          reason:
+              'the in-flight generation holds its own keepAlive — '
+              'losing the last widget listener must not kill the stream',
+        );
+
+        await sendFuture;
+        expect(
+          container.read(chatControllerProvider(args)).value!.isGenerating,
+          isFalse,
+        );
+
+        // Generation is over, its keepAlive released, and (from the
+        // `sub.close()` above) there is still no listener — now the
+        // provider is reclaimable like any other idle autoDispose provider.
+        await container.pump();
+        expect(container.exists(chatControllerProvider(args)), isFalse);
+      },
+    );
   });
 }

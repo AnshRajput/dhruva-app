@@ -8,15 +8,20 @@
 /// on a `DhruvaTokens.motion.instant` (100ms) timer per chat-spec.md §3.2 —
 /// never a rebuild per token. `<think>` extraction is
 /// `think_tag_parser.dart`'s job; this controller just calls it per flush
-/// and persists the resulting deltas via `ChatRepository.
-/// updateStreamingMessage` (append-only, so a re-derived split must never
-/// re-push text already pushed — see `_pushedContentLen`/
-/// `_pushedReasoningLen`).
+/// and persists the result via `ChatRepository.updateStreamingMessage`
+/// (append-only) when the re-derived split is a genuine extension of what
+/// was pushed last flush (`_pushedContent`/`_pushedReasoning` hold the
+/// exact last-pushed strings, not just lengths, so that's a real prefix
+/// check) — falling back to `ChatRepository.setStreamingContent` (a full
+/// overwrite) on the rare flush where it ISN'T an extension, e.g.
+/// `think_tag_parser.dart`'s tag-stripping shrinking `content` when a
+/// stray literal tag completes mid-stream (staff review N1).
 library;
 
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../../../core/di/providers.dart';
 import '../../../data/chat/chat_repository.dart';
@@ -162,12 +167,20 @@ final class ChatThreadState {
   }
 }
 
-final chatControllerProvider =
-    AsyncNotifierProvider.family<
-      ChatController,
-      ChatThreadState,
-      ChatRouteArgs
-    >((arg) => ChatController(args: arg));
+/// `autoDispose` (staff review B1): without it, every thread a user ever
+/// opens keeps its `ChatController` — full messages list, `_errorDetails`,
+/// the works — alive for the whole app session, since `ref.onDispose`
+/// never fires while the provider itself is kept around by a plain
+/// `.family` (no listener-count-based reclamation at all). `keepAlive()`
+/// is acquired only while a generation is in flight (see
+/// `_runAssistantTurn`/`_resetStreamState`) so navigating away mid-stream
+/// doesn't kill the background generation, but an idle thread the user
+/// has simply stopped looking at gets reclaimed — `build()` re-hydrates
+/// it from the repository on the next visit either way.
+final chatControllerProvider = AsyncNotifierProvider.autoDispose
+    .family<ChatController, ChatThreadState, ChatRouteArgs>(
+      (arg) => ChatController(args: arg),
+    );
 
 /// One flush's worth of the ≤100ms batching budget (chat-spec.md §3.2,
 /// `DhruvaTokens.motion.instant`). Not read from the theme extension —
@@ -183,11 +196,22 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   StreamSubscription<EngineEvent>? _genSub;
   Timer? _flushTimer;
   String _rawBuffer = '';
-  int _pushedContentLen = 0;
-  int _pushedReasoningLen = 0;
+
+  /// The exact `content`/`reasoning` strings already persisted for the
+  /// active streaming message — the full text, not just a length, so
+  /// `_flush` can check a genuine `startsWith` extension (N1) rather than
+  /// assuming length growth implies a compatible prefix.
+  String _pushedContent = '';
+  String _pushedReasoning = '';
   int? _activeAssistantId;
   DateTime? _reasoningStartedAt;
   final List<DateTime> _tokenArrivals = [];
+
+  /// Held only while `isGenerating` (see `_runAssistantTurn`'s acquire and
+  /// `_resetStreamState`'s release, the single choke point every
+  /// completion/error/cancel path already runs through) — B1's
+  /// autoDispose-with-keepAlive guard.
+  KeepAliveLink? _keepAliveLink;
 
   /// Raw failure text for the "Copy error details" affordance
   /// (`EngineUnknownFailure`, chat-spec.md §8) — not persisted (`Messages`
@@ -469,9 +493,21 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     required List<MessageInfo> historyMessages,
     required int? parentMessageId,
   }) async {
+    // B1: acquire BEFORE the first `await` in this method, not after —
+    // `ensureModelLoaded()` below does real async work (can load a whole
+    // model), and with no active widget listener (autoDispose's normal
+    // keepalive) an interrupted `sendMessage` call could otherwise get
+    // this provider disposed mid-load, before generation ever visibly
+    // "starts." Released on every early-return path below, and in
+    // `_resetStreamState` once a real stream actually finishes.
+    _keepAliveLink ??= ref.keepAlive();
     await ensureModelLoaded();
     var current = state.value!;
-    if (current.modelLoadError != null) return;
+    if (current.modelLoadError != null) {
+      _keepAliveLink?.close();
+      _keepAliveLink = null;
+      return;
+    }
     if (current.modelId == null) {
       state = AsyncData(
         current.copyWith(
@@ -480,6 +516,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           ),
         ),
       );
+      _keepAliveLink?.close();
+      _keepAliveLink = null;
       return;
     }
 
@@ -517,8 +555,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
     _activeAssistantId = assistantId;
     _rawBuffer = '';
-    _pushedContentLen = 0;
-    _pushedReasoningLen = 0;
+    _pushedContent = '';
+    _pushedReasoning = '';
     _reasoningStartedAt = null;
     _tokenArrivals.clear();
 
@@ -580,30 +618,50 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           .inMilliseconds;
     }
 
-    final reasoningDelta = split.reasoning.length > _pushedReasoningLen
-        ? split.reasoning.substring(_pushedReasoningLen)
-        : '';
-    final contentDelta = split.content.length > _pushedContentLen
-        ? split.content.substring(_pushedContentLen)
-        : '';
-    if (reasoningDelta.isEmpty &&
-        contentDelta.isEmpty &&
+    final contentChanged = split.content != _pushedContent;
+    final reasoningChanged = split.reasoning != _pushedReasoning;
+    if (!contentChanged &&
+        !reasoningChanged &&
         closedDurationMs == null &&
         !isFinal) {
       return;
     }
 
-    if (reasoningDelta.isNotEmpty || contentDelta.isNotEmpty) {
-      unawaited(
-        _repo.updateStreamingMessage(
-          id,
-          contentDelta: contentDelta.isEmpty ? null : contentDelta,
-          reasoningDelta: reasoningDelta.isEmpty ? null : reasoningDelta,
-        ),
-      );
+    if (contentChanged || reasoningChanged) {
+      // N1 (staff review): a re-derived split is NOT guaranteed to be a
+      // pure extension of what's already persisted — think_tag_parser.
+      // dart's tag-stripping can SHRINK `content` across a flush boundary
+      // when a stray literal tag completes mid-stream. Appending a delta
+      // in that case would silently diverge the persisted row from
+      // in-memory state; a `startsWith` check catches it, and a rare full
+      // rewrite (`setStreamingContent`) beats that silent divergence.
+      final isExtension =
+          split.content.startsWith(_pushedContent) &&
+          split.reasoning.startsWith(_pushedReasoning);
+      if (isExtension) {
+        final contentDelta = split.content.substring(_pushedContent.length);
+        final reasoningDelta = split.reasoning.substring(
+          _pushedReasoning.length,
+        );
+        unawaited(
+          _repo.updateStreamingMessage(
+            id,
+            contentDelta: contentDelta.isEmpty ? null : contentDelta,
+            reasoningDelta: reasoningDelta.isEmpty ? null : reasoningDelta,
+          ),
+        );
+      } else {
+        unawaited(
+          _repo.setStreamingContent(
+            id,
+            content: split.content,
+            reasoningContent: split.reasoning.isEmpty ? null : split.reasoning,
+          ),
+        );
+      }
+      _pushedContent = split.content;
+      _pushedReasoning = split.reasoning;
     }
-    _pushedContentLen = split.content.length;
-    _pushedReasoningLen = split.reasoning.length;
 
     final now = DateTime.now();
     _tokenArrivals.removeWhere(
@@ -731,12 +789,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _resetStreamState() {
     _activeAssistantId = null;
     _rawBuffer = '';
-    _pushedContentLen = 0;
-    _pushedReasoningLen = 0;
+    _pushedContent = '';
+    _pushedReasoning = '';
     _reasoningStartedAt = null;
     _tokenArrivals.clear();
     _genSub = null;
     _flushTimer = null;
+    _keepAliveLink?.close();
+    _keepAliveLink = null;
   }
 
   /// Raw failure text for a finalized error message's "Copy error details"

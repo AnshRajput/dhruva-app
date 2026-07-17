@@ -38,6 +38,15 @@ void main() {
 
   Future<void> pumpSheet(WidgetTester tester) async {
     await container.read(chatControllerProvider(args).future);
+    // chatControllerProvider is autoDispose (B1) — in the real app it's
+    // kept alive by the ChatThreadScreen's own `ref.watch`, which stays
+    // mounted (just covered by the modal) for as long as this sheet is
+    // open. This test's Scaffold never watches the provider itself, so a
+    // manual `container.listen` stands in for that always-present screen
+    // subscription rather than the provider getting disposed the instant
+    // this bare `.read` above returns.
+    final sub = container.listen(chatControllerProvider(args), (_, _) {});
+    addTearDown(sub.close);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

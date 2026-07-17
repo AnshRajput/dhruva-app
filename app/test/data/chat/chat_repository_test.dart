@@ -460,6 +460,57 @@ void main() {
     );
   });
 
+  group('setStreamingContent', () {
+    test(
+      'overwrites content/reasoningContent absolutely, not appending',
+      () async {
+        final id = await repo.createConversation();
+        final messageId = await repo.appendMessage(
+          conversationId: id,
+          role: MessageRole.assistant,
+        );
+        await repo.updateStreamingMessage(
+          messageId,
+          contentDelta: 'stale prefix',
+          reasoningDelta: 'stale reasoning',
+        );
+
+        await repo.setStreamingContent(
+          messageId,
+          content: 'corrected content',
+          reasoningContent: 'corrected reasoning',
+        );
+
+        final message = (await repo.getMessages(id)).single;
+        expect(message.content, 'corrected content');
+        expect(message.reasoningContent, 'corrected reasoning');
+      },
+    );
+
+    test(
+      'a null reasoningContent clears the column rather than leaving the '
+      'old value in place (unlike updateStreamingMessage\'s COALESCE-and-'
+      'append path — this call means "make the row match exactly")',
+      () async {
+        final id = await repo.createConversation();
+        final messageId = await repo.appendMessage(
+          conversationId: id,
+          role: MessageRole.assistant,
+        );
+        await repo.updateStreamingMessage(
+          messageId,
+          reasoningDelta: 'will be cleared',
+        );
+
+        await repo.setStreamingContent(messageId, content: 'plain answer');
+
+        final message = (await repo.getMessages(id)).single;
+        expect(message.content, 'plain answer');
+        expect(message.reasoningContent, isNull);
+      },
+    );
+  });
+
   group('search', () {
     test('matches on conversation title', () async {
       final id = await repo.createConversation(title: 'Trip to Paris');

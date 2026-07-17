@@ -364,6 +364,31 @@ final class ChatRepository {
     );
   }
 
+  /// Absolute overwrite of a streaming message's `content`/
+  /// `reasoningContent` — the rare counterpart to [updateStreamingMessage]'s
+  /// append-only path (staff review N1). `ChatController._flush` reaches
+  /// for this only when a re-derived `<think>` split ISN'T a genuine
+  /// extension of what was already pushed (e.g. tag-stripping shrinking
+  /// `content` mid-stream) — appending a delta in that case would silently
+  /// diverge the row from the true in-memory text, so a full rewrite beats
+  /// that. [reasoningContent] null clears the column (unlike the append
+  /// path's `COALESCE`, this call is meant to make the row match the
+  /// caller's state exactly, not preserve whatever was there before).
+  Future<void> setStreamingContent(
+    int messageId, {
+    required String content,
+    String? reasoningContent,
+  }) async {
+    await (_db.update(
+      _db.messages,
+    )..where((t) => t.id.equals(messageId))).write(
+      MessagesCompanion(
+        content: Value(content),
+        reasoningContent: Value(reasoningContent),
+      ),
+    );
+  }
+
   /// Sets a message's terminal [status]/stats once generation stops, and
   /// bumps the parent conversation's `updatedAt` to reflect completion time
   /// (not just when the message started streaming).
