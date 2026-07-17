@@ -239,3 +239,15 @@ APK, so the user was likely retesting an OLD binary. Fixed: pubspec 0.2.0+2,
 distribute.sh now stamps a unique monotonic build number (git commit count) per
 ship, and About shows the version so the user can confirm they're on the new
 build. On-device Android inference remains the human's retest to confirm.
+
+## SCOPE AMENDMENT 7 — app UI matches the website mockups (2026-07-18)
+Human: the website's phone mockups (dhruva-website/src/components/mockups/*.astro
++ mock.css) show a more refined rendition of the app than the real screens; make
+the ACTUAL app UI match those mockups. The mockups were derived from
+chat-spec.md + design tokens, so the app already has every element structurally
+— this is a visual-polish/alignment pass (spacing, code-block styling, per-
+message metadata, send-button prominence, bubble treatment, empty states) so the
+app looks as designed. Priority screens (most-used + prominently shown): Chat +
+Models hub, then Characters/Voice/Vision. Verify each in the emulator against the
+mockup (build → install → drive → screenshot → compare → adjust). The mockup
+.astro/CSS is the exact spec; keep everything token-derived (no hardcoded colors).
