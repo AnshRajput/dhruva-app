@@ -1094,3 +1094,140 @@ mic/playback/latency needs physical verification).
 Request: build T2 voice UI on this surface — hold-to-talk composer w/ live
 partial transcript, per-character TTS playback, hands-free mode (VAD turn-
 taking + barge-in).
+
+### [LOOP-06] [flutter-core → qa-tester, reviewer] [HANDOFF] 2026-07-18T01:00
+T2 voice UI complete on branch loop/06-voice, built on native-engine's
+VoiceService/FakeVoiceService/catalog/installer surface. D1-D5 all pass.
+
+[D1/D2] Hold-to-talk (`features/voice/state/voice_input_controller.dart`,
+`VoiceInputController extends Notifier`, `.autoDispose`): press-and-hold mic
+button (`features/voice/widgets/mic_button.dart`) wired into
+`features/chat/widgets/composer.dart`. Press checks VAD+ASR installed (else
+`noModel` -> routes to `/models`), then mic permission (`micSourceProvider`,
+new — else `permissionDenied` -> clear SnackBar message), then opens
+`voice.transcribeStream(audio)`; each closed VAD segment's transcript appends
+to a `liveText` shown in a listening overlay that swaps in for the composer's
+TextField. Release finalizes `liveText` into the TextField, editable —
+**never auto-sent** (chat-spec philosophy: composer content is always
+user-owned until send). Test: `test/features/voice/state/
+voice_input_controller_test.dart` (4) + `test/features/chat/widgets/
+composer_test.dart`'s new "hold-to-talk" group (4, incl. no-model +
+permission-denied).
+
+[D2] TTS playback (`features/voice/state/voice_playback_controller.dart`,
+plain `NotifierProvider`): speaker button (`features/voice/widgets/
+tts_button.dart`) on every non-empty assistant bubble's metadata row
+(`message_bubble.dart`). Tap synthesizes + plays via a new `AudioSink`
+interface (`voice/voice_player.dart` — same DI-seam pattern as `VoiceService`/
+`MicSource`; `VoicePlayer implements AudioSink`, `FakeAudioSink` for tests)
+tap again stops; only one message plays at a time. No-TTS-installed degrades
+to a SnackBar, not a crash. Test: `voice_playback_controller_test.dart` (5).
+
+[D3, the orchestration gate] Hands-free mode (`features/voice/state/
+handsfree_controller.dart` + `features/voice/ui/handsfree_screen.dart`).
+State machine: `HandsFreePhase { listening, thinking, speaking, noModel,
+permissionDenied, idle }`. Design: ONE continuous `voice.segment(audio)`
+subscription opened in `start()` and held for the whole session (not
+cancelled/resubscribed per turn — matches the T1 HANDOFF's own barge-in note).
+`SpeechStarted` while `speaking` = barge-in: stops the `AudioSink`, calls
+`voice.cancel()`, flips straight to `listening` — the SAME utterance's later
+`SpeechEnded` is then processed as an ordinary listening-phase turn (the
+phase check already fell through), so words spoken over the reply become the
+next turn instead of being dropped. `SpeechEnded` while `listening` ->
+transcribe -> `thinking` -> caller's `onUserUtterance(text)` callback ->
+`speaking` -> synthesize+play; `AudioSink.onComplete` returns to `listening`
+when nothing interrupted it. Screen: big pulsing brand star
+(`core/theme/brand_star.dart`, rate/color per phase), live user/assistant
+text, exit button, honest `noModel`/`permissionDenied` views. Test:
+`handsfree_controller_test.dart` (5, **G3 barge-in asserted explicitly**:
+`SpeechStarted` during `speaking` -> `sink.stopCount`==1, `voice.cancelCount`
+==1, phase->`listening` immediately, not waiting for the reply; the
+interrupting utterance's `SpeechEnded` then produces a second reply,
+`sink.playCount`==2) + `handsfree_screen_test.dart` (3, UI-level: no-model,
+permission-denied, full Listening->Speaking walk with both sides of the
+conversation visible).
+
+BARGE-IN WIRING (ADR-002 note): `HandsFreeScreen` never imports
+`features/chat` — `onUserUtterance` is injected. `ChatThreadScreen
+._openHandsFree` (new AppBar icon, gated same as the composer on
+`state.model != null`) builds the closure against its own `ChatController`
+(`await controller.sendMessage(text)` already awaits full generation per
+`_runAssistantTurn`'s completer, so the last visible assistant message is
+ready the instant it returns) and hands it as `extra` on
+`context.push('/voice/handsfree', extra: closure)`; `core/router/
+app_router.dart` (the existing composition root) is the only file that
+imports both features.
+
+[D4] Voice models in models hub: NEW "Voice" tab in `models_hub_screen.dart`
+(3 tabs now), grouped by role (VAD/ASR/TTS), via new `features/models_hub/
+state/voice_models_controller.dart` bridging `voiceModelCatalog` onto the
+SAME `DownloadManager` GGUF uses + `VoiceModelInstaller.install()` for
+archive entries. Found + fixed a real bug in doing this: `voiceModelDownload
+Request()` registers into `InstalledModels` (same drift table as GGUF
+models), which would have put `sherpa-voice/whisper-tiny` etc. rows in the
+chat model picker — selecting one would hand a whisper .onnx path to
+`EngineService.load()`. Fixed at the 3 read call sites (`features/chat` +
+`features/characters`'s `installed_models_provider.dart`, `models_hub`'s
+`storage_controller.dart`) with a `repoId.startsWith('sherpa-voice/')`
+filter — kept out of the shared `StorageManager`/`data/downloads` layer
+deliberately (Settings' storage-usage total should still count real disk
+bytes voice models occupy). Test: `voice_models_controller_test.dart` (4,
+incl. a full enqueue->progress->complete->installed round-trip against
+`FakeDownloadBackend`) + `voice_model_tile_test.dart` (4).
+
+PER-CHARACTER VOICE GAP (as flagged in the build brief): `CharacterInfo`
+(`data/characters/character_repository.dart`) has no `voiceId` field — no
+loop before this one gave characters a bindable TTS voice, unlike
+`defaultModelId`/`samplingParams`. `features/voice/state/default_voice.dart`
+picks a voice by the LANGUAGE of the text being spoken (Devanagari ->
+Hindi voice, else English) since that's the only signal available without
+the field; documented in that file's doc comment as the follow-up
+(`Characters.voiceId` nullable column + `CharacterChatContext` threading).
+A character's mere existence carries no extra signal absent a stored
+preference, so it isn't used as a proxy.
+
+DEVIATIONS / bugs found+fixed while building (all now covered by tests or
+fixed in the shipped code, not left as known gaps):
+- Two `await subscription.cancel()` hangs (`VoiceInputController.endHold`,
+  `HandsFreeController.stop`) where cancelling a subscription to an async*
+  chain whose upstream hadn't produced/closed yet left the cancel Future
+  pending well past the point the work was actually done — both switched to
+  fire-and-forget `unawaited(...)` (mirrors `HandsFreeController.build`'s
+  `ref.onDispose`, which was already fire-and-forget for the same reason).
+  Root-caused via a hung `flutter test` (30s timeout) on the widget-level
+  composer test, not caught by the pure-Dart controller test (real
+  `Future.delayed` masked it well enough there to pass).
+- `MicButton`'s pulse `AnimationController` was unconditionally `repeat()`-ing
+  — hung `pumpAndSettle()` in every no-model/permission-denied widget test
+  (and would never have let a real device's frame scheduler idle). Now only
+  animates while `listening`.
+- `HandsFreeScreen`'s "Open models hub" button called `onExit()` (async,
+  pops) AND `context.push('/models')` without awaiting the first — the two
+  navigations raced, and the pop (once `stop()` resolved) yanked the user
+  back off `/models`. Fixed: that button doesn't need to tear anything down
+  (`start()` never opened the mic in the `noModel` phase it's only shown in),
+  so it just pushes.
+- `message_bubble_test.dart` had no `ProviderScope` — broke once
+  `MessageBubble` grew a `TtsButton`; added one + a `FakeAudioSink` override
+  (5 pre-existing tests fixed, not new coverage).
+
+New route: `/voice/handsfree` (`core/router/app_router.dart`). New DI seams
+in `core/di/providers.dart`: `micSourceProvider` (`MicSource`, `MicAudioSource`
+prod / `FakeMicSource` test — interface extracted from the existing
+`MicAudioSource` class), `audioSinkProvider` (`AudioSink`, `VoicePlayer` prod
+/ `FakeAudioSink` test — same extraction from `VoicePlayer`). Both fakes are
+lib-resident (`lib/voice/fake_mic_source.dart`, `lib/voice/fake_audio_sink.dart`)
+alongside `FakeVoiceService`, same precedent.
+
+Test count: +47 (629 -> 661 per `flutter test`'s own tally, `make verify`
+green). Floor-scope coverage 80.24% (was 80%, floor 70%) — `voice/
+mic_audio_source.dart` and `voice/voice_player.dart` stay on CI's existing
+exclusion list (still real platform glue; the new `MicSource`/`AudioSink`
+interfaces and their fakes are NOT excluded and ARE exercised by every new
+controller test). `flutter analyze --fatal-infos` clean, `dart format`
+clean. Committed on loop/06-voice, not pushed.
+
+Request: adversarial pass (barge-in races, mic-permission edge cases,
+hands-free session teardown mid-turn) + QA sign-off. R11 (on-device
+mic/playback/latency) still needs physical-device verification — unchanged
+from T1, this loop's UI can't add that itself.

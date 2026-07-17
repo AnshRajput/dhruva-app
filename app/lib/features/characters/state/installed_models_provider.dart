@@ -11,6 +11,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/providers.dart';
 import '../../../data/downloads/storage_manager.dart';
 
-final installedModelsProvider = FutureProvider<List<InstalledModelInfo>>((ref) {
-  return ref.watch(storageManagerProvider).listInstalledModels();
+final installedModelsProvider = FutureProvider<List<InstalledModelInfo>>((
+  ref,
+) async {
+  final models = await ref.watch(storageManagerProvider).listInstalledModels();
+  // Loop 6: same voice-model filter as `features/chat`'s copy of this file
+  // (see that file's doc comment) — a character's default model must be a
+  // loadable GGUF, never a `sherpa-voice/` ASR/TTS/VAD bundle.
+  return models.where((m) => !m.repoId.startsWith('sherpa-voice/')).toList();
 });

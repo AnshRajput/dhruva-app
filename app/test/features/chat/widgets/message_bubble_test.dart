@@ -1,9 +1,12 @@
+import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/features/chat/state/message_info_x.dart';
 import 'package:dhruva/features/chat/widgets/message_bubble.dart';
+import 'package:dhruva/voice/fake_audio_sink.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
@@ -42,10 +45,16 @@ MessageInfo _message({
 }
 
 Future<void> _pump(WidgetTester tester, Widget child) {
+  // `MessageBubble` renders a `TtsButton` (Loop 6, D2) on assistant bubbles
+  // — `ProviderScope` + a `FakeAudioSink` override keep that off the real
+  // `audioplayers` plugin channel in these widget tests.
   return tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.dark,
-      home: Scaffold(body: SingleChildScrollView(child: child)),
+    ProviderScope(
+      overrides: [audioSinkProvider.overrideWithValue(FakeAudioSink())],
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(body: SingleChildScrollView(child: child)),
+      ),
     ),
   );
 }
@@ -216,20 +225,26 @@ void main() {
     var regenerated = false;
     var edited = false;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark,
-        home: Scaffold(
-          body: Column(
-            children: [
-              MessageBubble(
-                message: _message(role: MessageRole.assistant, content: 'hi'),
-                onRegenerate: () => regenerated = true,
-              ),
-              MessageBubble(
-                message: _message(role: MessageRole.user, content: 'question'),
-                onEdit: () => edited = true,
-              ),
-            ],
+      ProviderScope(
+        overrides: [audioSinkProvider.overrideWithValue(FakeAudioSink())],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: Column(
+              children: [
+                MessageBubble(
+                  message: _message(role: MessageRole.assistant, content: 'hi'),
+                  onRegenerate: () => regenerated = true,
+                ),
+                MessageBubble(
+                  message: _message(
+                    role: MessageRole.user,
+                    content: 'question',
+                  ),
+                  onEdit: () => edited = true,
+                ),
+              ],
+            ),
           ),
         ),
       ),

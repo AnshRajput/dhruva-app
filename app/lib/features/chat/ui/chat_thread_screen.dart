@@ -164,6 +164,15 @@ class _ThreadScaffold extends ConsumerWidget {
         actions: [
           if (state.isGenerating)
             TokPerSecTicker(tokPerSec: state.liveTokPerSec),
+          // Loop 6, T2/D3: hands-free needs somewhere to send/receive
+          // through, same as the composer — gated on a model being picked,
+          // same condition the `Composer` below already uses.
+          if (state.model != null)
+            IconButton(
+              icon: const Icon(Icons.graphic_eq),
+              tooltip: 'Hands-free mode',
+              onPressed: () => _openHandsFree(context, ref),
+            ),
           PopupMenuButton<String>(
             onSelected: (value) => _export(context, ref, value == 'markdown'),
             itemBuilder: (context) => const [
@@ -362,6 +371,39 @@ class _ThreadScaffold extends ConsumerWidget {
     if (newText != null && newText.trim().isNotEmpty) {
       await controller.editMessage(message.id, newText);
     }
+  }
+
+  /// Loop 6, T2/D3: hands-free mode (`features/voice/ui/handsfree_screen
+  /// .dart`) knows nothing about `ChatController` (ADR-002 — it lives in
+  /// `features/voice`, which never imports `features/chat`). This builds
+  /// the one closure it needs — "say this, get the reply" — against THIS
+  /// screen's own `ChatController`, and hands it to the route as `extra`
+  /// (same pattern the model-picker's `extra: modelId` flow already uses in
+  /// `app_router.dart`) so `core/router` (the one file allowed to import
+  /// both features) can wire it into `HandsFreeScreen` without either
+  /// feature importing the other.
+  ///
+  /// `ChatController.sendMessage` already awaits the full generation
+  /// (`_runAssistantTurn`'s `completer.future`) before returning, so by the
+  /// time this `await` resolves, [state]'s messages list already carries
+  /// the finished reply (or a `MessageStatus.error` row) — no separate
+  /// "wait for isGenerating to flip back" dance needed.
+  void _openHandsFree(BuildContext context, WidgetRef ref) {
+    final provider = chatControllerProvider(args);
+    Future<String?> onUserUtterance(String text) async {
+      await controller.sendMessage(text);
+      final current = ref.read(provider).value;
+      final last = current?.visibleMessages.lastOrNull;
+      if (last == null ||
+          last.role != MessageRole.assistant ||
+          last.status == MessageStatus.error ||
+          last.content.trim().isEmpty) {
+        return null;
+      }
+      return last.content;
+    }
+
+    context.push('/voice/handsfree', extra: onUserUtterance);
   }
 
   Future<void> _pickModel(BuildContext context) async {

@@ -1,13 +1,22 @@
 /// Bottom composer (chat-spec.md §1.2): multiline input, send/stop
-/// crossfade, settings entry point, trust mark above it (§1.3).
+/// crossfade, settings entry point, trust mark above it (§1.3), plus the
+/// Loop 6 hold-to-talk mic button (D1): a live "Listening…" overlay swaps
+/// in for the text field while the button is held, and the finalized
+/// transcript lands in the field, editable, on release — never auto-sent
+/// (chat-spec.md's own philosophy: composer content is always user-owned
+/// until they hit send).
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../voice/state/voice_input_controller.dart';
+import '../../voice/widgets/mic_button.dart';
 import 'brand_motif.dart';
 
-class Composer extends StatefulWidget {
+class Composer extends ConsumerStatefulWidget {
   final bool isGenerating;
   final ValueChanged<String> onSend;
   final VoidCallback onCancel;
@@ -22,10 +31,10 @@ class Composer extends StatefulWidget {
   });
 
   @override
-  State<Composer> createState() => _ComposerState();
+  ConsumerState<Composer> createState() => _ComposerState();
 }
 
-class _ComposerState extends State<Composer> {
+class _ComposerState extends ConsumerState<Composer> {
   final _controller = TextEditingController();
   bool _hasText = false;
 
@@ -52,10 +61,37 @@ class _ComposerState extends State<Composer> {
     widget.onSend(text);
   }
 
+  void _appendFinalized(String text) {
+    final existing = _controller.text;
+    final needsSpace = existing.isNotEmpty && !existing.endsWith(' ');
+    _controller.text = existing.isEmpty
+        ? text
+        : '$existing${needsSpace ? ' ' : ''}$text';
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
+  }
+
+  void _onNoModel() => context.push('/models');
+
+  void _onPermissionDenied() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Microphone access is required for voice input — enable it in '
+          "your device's app settings.",
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final listening =
+        ref.watch(voiceInputControllerProvider).phase ==
+        VoiceInputPhase.listening;
     return SafeArea(
       top: false,
       // `Material` (not a raw `Container`) so the surface's elevation reads
@@ -84,21 +120,28 @@ class _ComposerState extends State<Composer> {
                     onPressed: widget.onOpenSettings,
                   ),
                   Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      style: theme.textTheme.bodyLarge,
-                      decoration: InputDecoration(
-                        filled: false,
-                        border: InputBorder.none,
-                        hintText: 'Message Dhruva…',
-                        hintStyle: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
+                    child: listening
+                        ? _ListeningOverlay(theme: theme)
+                        : TextField(
+                            controller: _controller,
+                            minLines: 1,
+                            maxLines: 6,
+                            textInputAction: TextInputAction.newline,
+                            style: theme.textTheme.bodyLarge,
+                            decoration: InputDecoration(
+                              filled: false,
+                              border: InputBorder.none,
+                              hintText: 'Message Dhruva…',
+                              hintStyle: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                  ),
+                  MicButton(
+                    onFinalized: _appendFinalized,
+                    onNoModel: _onNoModel,
+                    onPermissionDenied: _onPermissionDenied,
                   ),
                   SizedBox(width: tokens.spacing.sm),
                   _SendStopButton(
@@ -111,6 +154,27 @@ class _ComposerState extends State<Composer> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ListeningOverlay extends ConsumerWidget {
+  final ThemeData theme;
+  const _ListeningOverlay({required this.theme});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final liveText = ref.watch(voiceInputControllerProvider).liveText;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        liveText.isEmpty ? 'Listening…' : liveText,
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: liveText.isEmpty
+              ? theme.colorScheme.onSurfaceVariant
+              : theme.colorScheme.onSurface,
         ),
       ),
     );

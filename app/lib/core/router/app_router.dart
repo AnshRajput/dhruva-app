@@ -22,6 +22,7 @@ import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
+import '../../features/voice/ui/handsfree_screen.dart';
 import 'app_shell.dart';
 
 final appRouter = GoRouter(
@@ -136,6 +137,19 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/about',
       builder: (context, state) => const AboutScreen(),
+    ),
+    // Loop 6, T2/D3: `HandsFreeScreen` (`features/voice`) never imports
+    // `features/chat` (ADR-002) — `ChatThreadScreen._openHandsFree` builds
+    // the "say this, get the reply" closure against its own
+    // `ChatController` and passes it as `extra`; this route is the one
+    // place both features meet, same composition-root role this file's own
+    // doc comment already claims for the character-chat query-param wiring
+    // above.
+    GoRoute(
+      path: '/voice/handsfree',
+      builder: (context, state) => HandsFreeScreen(
+        onUserUtterance: state.extra! as Future<String?> Function(String),
+      ),
     ),
   ],
 );

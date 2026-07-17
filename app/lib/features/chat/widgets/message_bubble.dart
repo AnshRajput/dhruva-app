@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../voice/widgets/tts_button.dart';
 import '../state/message_info_x.dart';
 import 'reasoning_block.dart';
 
@@ -185,6 +186,10 @@ class _MetadataRow extends StatelessWidget {
       children: [
         Text(_relativeTime(message.createdAt), style: style),
         if (tokPerSec != null) Text(' · $tokPerSec tok/s', style: style),
+        if (message.content.isNotEmpty) ...[
+          SizedBox(width: tokens.spacing.xs),
+          TtsButton(messageId: message.id, text: message.content),
+        ],
         if (onRegenerate != null) ...[
           SizedBox(width: tokens.spacing.xs),
           // Designer BLOCKING #2: a bare InkWell+Icon here was a ~16px hit

@@ -24,9 +24,11 @@ import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
+import '../../voice/mic_audio_source.dart';
 import '../../voice/sherpa_voice_service.dart';
 import '../../voice/voice_model_catalog.dart';
 import '../../voice/voice_model_installer.dart';
+import '../../voice/voice_player.dart';
 import '../../voice/voice_service.dart';
 import '../device_info/device_info_service.dart';
 
@@ -56,6 +58,22 @@ final voiceServiceProvider = Provider<VoiceService>((ref) {
   final service = SherpaVoiceService();
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
+});
+
+/// The device mic (Loop 6 T2): `MicAudioSource` in production; override with
+/// `FakeMicSource` in tests/previews (same seam as [voiceServiceProvider]).
+final micSourceProvider = Provider<MicSource>((ref) {
+  final source = MicAudioSource();
+  ref.onDispose(() => unawaited(source.dispose()));
+  return source;
+});
+
+/// TTS playback (Loop 6 T2): `VoicePlayer` in production; override with
+/// `FakeAudioSink` in tests/previews.
+final audioSinkProvider = Provider<AudioSink>((ref) {
+  final sink = VoicePlayer();
+  ref.onDispose(() => unawaited(sink.dispose()));
+  return sink;
 });
 
 /// Resolves + extracts downloaded voice-model bundles under `models/voice/`.

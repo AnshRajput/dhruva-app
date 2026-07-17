@@ -40,7 +40,15 @@ class StorageController extends AsyncNotifier<StorageState> {
 
   Future<StorageState> _load() async {
     final manager = ref.watch(storageManagerProvider);
-    final items = await manager.listInstalledModels();
+    // Loop 6: voice models (`sherpa-voice/` repoId prefix) get their own
+    // "Voice" tab (`voice_models_controller.dart`) with install/delete UI
+    // that understands their archive-then-extract layout — this tab stays
+    // GGUF-only rather than mixing in rows a "Delete" here can't fully
+    // clean up (the installer's extracted `models/voice/<id>/` directory
+    // isn't touched by `StorageManager.delete`).
+    final items = (await manager.listInstalledModels())
+        .where((m) => !m.repoId.startsWith('sherpa-voice/'))
+        .toList();
     final total = items.fold<int>(0, (sum, m) => sum + m.sizeBytes);
     return StorageState(installed: items, totalBytes: total);
   }
