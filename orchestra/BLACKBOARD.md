@@ -1702,3 +1702,22 @@ ROOT CAUSE fully confirmed: the user was on the OLD 1.0.0 build the whole time
 BUG found during the drive (minor, real): chat app bar overflows by 3px
 ("RenderFlex OVERFLOWED BY 3") when the tok/s meter shows next to the model
 chip — cosmetic, fix next.
+
+### [LOOP-08] [native-engine → orchestrator] [RESEARCH] 2026-07-18T08:00 (spike)
+FEASIBILITY: FEASIBLE. sd.cpp (leejet, pinned b290693) builds on macOS
+(-DSD_METAL=ON), generated a REAL 384x384 red-apple PNG from SD 1.5 in 46s,
+~3.6GB peak RAM. Shares ggml with our llama.cpp toolchain → iOS Metal low-risk,
+Android CPU-first. FFI-friendly C API (new_sd_ctx/generate_image/free_sd_ctx/
+free_sd_images + built-in sd_cancel_generation + progress callback). Shippable
+in a normal loop. RAM floor ~6GB (feature hidden below); one model in memory at
+a time (unload LLM first). Artifacts under engine/sd/ (build-macos.sh, SPIKE.md,
+evidence PNG). Recommend q8/q4 quant + 384-512px + low steps for the gate.
+
+### [LOOP-08] [orchestrator → native-engine] [STATUS] 2026-07-18T09:10
+Loop 8 BUILD greenlit (spike feasible). T1 native-engine: vendor sd.cpp + ffigen
+ImageGenService (owned-isolate, proven free path, cancellation via built-in
+sd_cancel_generation, progress callback → stream) building on the spike; real
+txt2img on macOS proven end-to-end through the abstraction; RAM gate + one-model
+-at-a-time (unload LLM). Then T2 flutter-core: Imagine studio UI (prompt, steps/
+seed/size, enhance-prompt via loaded LLM, gallery, save/share), gated OFF below
+RAM floor. Designer BLOCKING gate as always.
