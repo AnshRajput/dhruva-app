@@ -999,3 +999,416 @@ checked; CRC32 correct/pinned), migration correct + tested both jump paths,
 persona snapshot at creation is the right call, privacy clean, ADR-002 held.
 One nit being closed pre-merge: iTXt zlib inflate unbounded (zlib bomb OOM on
 import) — capping. ponytail-deferred CRC-skip agreed non-blocking.
+
+### [LOOP-06] [orchestrator → all] [STATUS] 2026-07-17T22:50
+Loop 6 PLAN — Voice. Branch loop/06-voice. Designer gate BLOCKING.
+Package check (orchestrator-verified): sherpa_onnx 1.13.4 (pub, 2026-07-07) —
+STT + TTS + Silero VAD in ONE package. Chosen as the voice backbone (covers
+the orchestration story per Loop 0 research: voice differentiator is VAD/turn-
+taking/interruption, not raw STT/TTS). whisper_ggml 2.4.0 exists as an STT
+fallback if sherpa ASR quality disappoints — do NOT add both unless needed.
+Goal: hold-to-talk STT (auto lang incl. Hindi/Hinglish), TTS with per-character
+voice, hands-free conversation mode (VAD turn-taking + barge-in interruption).
+Tasks: (T1) native-engine/platform: engine/voice via sherpa_onnx — VoiceService
+abstraction (transcribe(stream)→partial+final, synthesize(text,voice)→audio,
+VAD segmenter); mic capture (record pkg) + playback (audioplayers/just_audio);
+voice models flow through the EXISTING Model Manager (add a voice-model catalog
+entry type: ASR + TTS + VAD model bundles from sherpa's HF releases). (T2)
+flutter-core: voice UI — hold-to-talk button in composer (partial transcript
+live), TTS playback on assistant messages (per-character voice from Loop 5
+default), hands-free mode screen (listening/thinking/speaking states, barge-in
+cancels TTS + starts listening). (T3) starter voice models in catalog +
+device-tier guidance. (T4) QA: recorded/synthetic-audio integration test of the
+STT→chat→TTS loop; VAD turn-taking; interruption; offline proof. (T5) designer
+BLOCKING + reviewer. (T6) merge + ship.
+Exit gate: [G1] voice loop works in an integration test (audio in → transcript
+→ chat → TTS out) [G2] voice models downloadable via Model Manager [G3] hands-
+free turn-taking + barge-in demonstrated in test [G4] designer SIGN-OFF + QA
+PASS + reviewer APPROVE [G5] CI green [G6] shipped. RISK: real mic/audio can't
+be device-verified here → integration test uses injected audio buffers; log
+on-device voice as needs-verification (folds into R1/R9).
+
+### [LOOP-06] [native-engine → qa-tester] [HANDOFF] 2026-07-17T23:40
+T1 voice service layer online on branch loop/06-voice. D1–D5 all pass.
+
+[D1] REAL sherpa_onnx round-trip VERIFIED on this macOS machine (not just a
+fake): synthesize "hello world" (Piper amy) → transcribe (Whisper tiny int8)
+recovers the words; VAD segments a silence→speech→silence buffer; hands-free
+transcribeStream yields the utterance. 5/5 integration tests green
+(test/voice/sherpa_voice_integration_test.dart). Gated: runs only on macOS with
+the dev dylib + models present, skips on CI/fresh-checkout (like the engine
+native tests). BLOCKER FOUND + WORKED AROUND: sherpa's pub-cache macOS dylib has
+an INVALID arm64 code signature → macOS SIGKILLs (exit 137) on DynamicLibrary
+.open. Fix: ad-hoc re-sign (`codesign -f -s -`); the test's voice_test_config
+self-heals this. Logged R11.
+
+[D2] VoiceService abstraction (lib/voice/voice_service.dart) mirrors
+EngineService: transcribe (buffer + VAD-segmented stream), synthesize, and VAD
+`segment()` as a FIRST-CLASS turn-taking primitive emitting SpeechStarted/
+SpeechEnded. Typed VoiceFailure taxonomy. All native work runs on an owned
+worker isolate (SherpaVoiceService) — whisper decode never touches the root
+isolate, same pattern as LlamaEngineService.
+
+[D3] Voice models flow through the EXISTING Model Manager: voiceModelDownload
+Request() bridges a curated catalog entry onto DownloadManager (resumable +
+integrity + storage-guard + drift row). ASR/TTS bundles are .tar.bz2 →
+VoiceModelInstaller extracts (pure, zip-slip-guarded, off-isolate) into
+models/voice/<id>/; VAD is a single .onnx (no extraction). Catalog
+(lib/voice/voice_model_catalog.dart), all URLs/sizes HTTP-HEAD-verified:
+- silero-vad (VAD)  629 KB   MIT
+- whisper-tiny (ASR, multilingual incl Hindi/Hinglish)  111 MB  MIT (OpenAI)
+- piper-en-amy-low (TTS, English)  64 MB  Piper/mimic3
+- piper-hi-pratham-medium (TTS, Hindi)  64 MB  Piper
+
+[D4] make verify GREEN — 629 tests (was 588), +41 voice tests. analyze
+(--fatal-infos) + format clean. Coverage 80% floor-scope (floor 70%); CI
+exclusion list extended with the sherpa/mic/player native+platform glue (same
+precedent as llama_engine_service.dart — real coverage is the on-device gated
+test). Pure voice logic (catalog 100% / installer 97% / fake 100% /
+audio_conversion 100%) is NOT excluded.
+
+[D5] voiceServiceProvider + voiceModelInstallerProvider + voiceModelDownload
+Request exposed in core/di/providers.dart. Not pushed.
+
+barge-in design: hands-free loop listens for SpeechStarted during TTS playback;
+caller stops VoicePlayer (main-isolate audio) + calls voice.cancel() which
+resets the VAD. Native synth/transcribe are synchronous on the worker and can't
+be interrupted mid-call (whisper-tiny ~1s on a short clip) — documented.
+
+Request: adversarial pass — empty/garbage audio buffers, load failures (bad
+paths), cancel/dispose races, corrupt archive extraction, zip-slip, and confirm
+the integration test skips cleanly where native libs/models are absent.
+
+### [LOOP-06] [native-engine → flutter-core] [HANDOFF] 2026-07-17T23:40
+T1 voice layer complete: sherpa_onnx 1.13.4 verified with a REAL STT↔TTS
+round-trip on this machine + VAD segmentation (5/5 integration tests green;
+sherpa macOS dylib codesign self-heal in dev only). VoiceService abstraction
+(transcribe stream partial+final, synthesize(text,voice), segment() VAD as
+first-class turn-taking primitive, cancel for barge-in). 4-model catalog
+(silero-vad 629KB, whisper-tiny multilingual/Hindi 111MB, piper-en-amy 64MB,
+piper-hi-pratham 64MB) rides the existing DownloadManager + a zip-slip-guarded
+VoiceModelInstaller for tar.bz2 bundles. Providers: voiceServiceProvider
+(FakeVoiceService for tests), voiceModelInstallerProvider,
+voiceModelDownloadRequest(). 629 tests, coverage 80%. R11 logged (on-device
+mic/playback/latency needs physical verification).
+Request: build T2 voice UI on this surface — hold-to-talk composer w/ live
+partial transcript, per-character TTS playback, hands-free mode (VAD turn-
+taking + barge-in).
+
+### [LOOP-06] [flutter-core → qa-tester, reviewer] [HANDOFF] 2026-07-18T01:00
+T2 voice UI complete on branch loop/06-voice, built on native-engine's
+VoiceService/FakeVoiceService/catalog/installer surface. D1-D5 all pass.
+
+[D1/D2] Hold-to-talk (`features/voice/state/voice_input_controller.dart`,
+`VoiceInputController extends Notifier`, `.autoDispose`): press-and-hold mic
+button (`features/voice/widgets/mic_button.dart`) wired into
+`features/chat/widgets/composer.dart`. Press checks VAD+ASR installed (else
+`noModel` -> routes to `/models`), then mic permission (`micSourceProvider`,
+new — else `permissionDenied` -> clear SnackBar message), then opens
+`voice.transcribeStream(audio)`; each closed VAD segment's transcript appends
+to a `liveText` shown in a listening overlay that swaps in for the composer's
+TextField. Release finalizes `liveText` into the TextField, editable —
+**never auto-sent** (chat-spec philosophy: composer content is always
+user-owned until send). Test: `test/features/voice/state/
+voice_input_controller_test.dart` (4) + `test/features/chat/widgets/
+composer_test.dart`'s new "hold-to-talk" group (4, incl. no-model +
+permission-denied).
+
+[D2] TTS playback (`features/voice/state/voice_playback_controller.dart`,
+plain `NotifierProvider`): speaker button (`features/voice/widgets/
+tts_button.dart`) on every non-empty assistant bubble's metadata row
+(`message_bubble.dart`). Tap synthesizes + plays via a new `AudioSink`
+interface (`voice/voice_player.dart` — same DI-seam pattern as `VoiceService`/
+`MicSource`; `VoicePlayer implements AudioSink`, `FakeAudioSink` for tests)
+tap again stops; only one message plays at a time. No-TTS-installed degrades
+to a SnackBar, not a crash. Test: `voice_playback_controller_test.dart` (5).
+
+[D3, the orchestration gate] Hands-free mode (`features/voice/state/
+handsfree_controller.dart` + `features/voice/ui/handsfree_screen.dart`).
+State machine: `HandsFreePhase { listening, thinking, speaking, noModel,
+permissionDenied, idle }`. Design: ONE continuous `voice.segment(audio)`
+subscription opened in `start()` and held for the whole session (not
+cancelled/resubscribed per turn — matches the T1 HANDOFF's own barge-in note).
+`SpeechStarted` while `speaking` = barge-in: stops the `AudioSink`, calls
+`voice.cancel()`, flips straight to `listening` — the SAME utterance's later
+`SpeechEnded` is then processed as an ordinary listening-phase turn (the
+phase check already fell through), so words spoken over the reply become the
+next turn instead of being dropped. `SpeechEnded` while `listening` ->
+transcribe -> `thinking` -> caller's `onUserUtterance(text)` callback ->
+`speaking` -> synthesize+play; `AudioSink.onComplete` returns to `listening`
+when nothing interrupted it. Screen: big pulsing brand star
+(`core/theme/brand_star.dart`, rate/color per phase), live user/assistant
+text, exit button, honest `noModel`/`permissionDenied` views. Test:
+`handsfree_controller_test.dart` (5, **G3 barge-in asserted explicitly**:
+`SpeechStarted` during `speaking` -> `sink.stopCount`==1, `voice.cancelCount`
+==1, phase->`listening` immediately, not waiting for the reply; the
+interrupting utterance's `SpeechEnded` then produces a second reply,
+`sink.playCount`==2) + `handsfree_screen_test.dart` (3, UI-level: no-model,
+permission-denied, full Listening->Speaking walk with both sides of the
+conversation visible).
+
+BARGE-IN WIRING (ADR-002 note): `HandsFreeScreen` never imports
+`features/chat` — `onUserUtterance` is injected. `ChatThreadScreen
+._openHandsFree` (new AppBar icon, gated same as the composer on
+`state.model != null`) builds the closure against its own `ChatController`
+(`await controller.sendMessage(text)` already awaits full generation per
+`_runAssistantTurn`'s completer, so the last visible assistant message is
+ready the instant it returns) and hands it as `extra` on
+`context.push('/voice/handsfree', extra: closure)`; `core/router/
+app_router.dart` (the existing composition root) is the only file that
+imports both features.
+
+[D4] Voice models in models hub: NEW "Voice" tab in `models_hub_screen.dart`
+(3 tabs now), grouped by role (VAD/ASR/TTS), via new `features/models_hub/
+state/voice_models_controller.dart` bridging `voiceModelCatalog` onto the
+SAME `DownloadManager` GGUF uses + `VoiceModelInstaller.install()` for
+archive entries. Found + fixed a real bug in doing this: `voiceModelDownload
+Request()` registers into `InstalledModels` (same drift table as GGUF
+models), which would have put `sherpa-voice/whisper-tiny` etc. rows in the
+chat model picker — selecting one would hand a whisper .onnx path to
+`EngineService.load()`. Fixed at the 3 read call sites (`features/chat` +
+`features/characters`'s `installed_models_provider.dart`, `models_hub`'s
+`storage_controller.dart`) with a `repoId.startsWith('sherpa-voice/')`
+filter — kept out of the shared `StorageManager`/`data/downloads` layer
+deliberately (Settings' storage-usage total should still count real disk
+bytes voice models occupy). Test: `voice_models_controller_test.dart` (4,
+incl. a full enqueue->progress->complete->installed round-trip against
+`FakeDownloadBackend`) + `voice_model_tile_test.dart` (4).
+
+PER-CHARACTER VOICE GAP (as flagged in the build brief): `CharacterInfo`
+(`data/characters/character_repository.dart`) has no `voiceId` field — no
+loop before this one gave characters a bindable TTS voice, unlike
+`defaultModelId`/`samplingParams`. `features/voice/state/default_voice.dart`
+picks a voice by the LANGUAGE of the text being spoken (Devanagari ->
+Hindi voice, else English) since that's the only signal available without
+the field; documented in that file's doc comment as the follow-up
+(`Characters.voiceId` nullable column + `CharacterChatContext` threading).
+A character's mere existence carries no extra signal absent a stored
+preference, so it isn't used as a proxy.
+
+DEVIATIONS / bugs found+fixed while building (all now covered by tests or
+fixed in the shipped code, not left as known gaps):
+- Two `await subscription.cancel()` hangs (`VoiceInputController.endHold`,
+  `HandsFreeController.stop`) where cancelling a subscription to an async*
+  chain whose upstream hadn't produced/closed yet left the cancel Future
+  pending well past the point the work was actually done — both switched to
+  fire-and-forget `unawaited(...)` (mirrors `HandsFreeController.build`'s
+  `ref.onDispose`, which was already fire-and-forget for the same reason).
+  Root-caused via a hung `flutter test` (30s timeout) on the widget-level
+  composer test, not caught by the pure-Dart controller test (real
+  `Future.delayed` masked it well enough there to pass).
+- `MicButton`'s pulse `AnimationController` was unconditionally `repeat()`-ing
+  — hung `pumpAndSettle()` in every no-model/permission-denied widget test
+  (and would never have let a real device's frame scheduler idle). Now only
+  animates while `listening`.
+- `HandsFreeScreen`'s "Open models hub" button called `onExit()` (async,
+  pops) AND `context.push('/models')` without awaiting the first — the two
+  navigations raced, and the pop (once `stop()` resolved) yanked the user
+  back off `/models`. Fixed: that button doesn't need to tear anything down
+  (`start()` never opened the mic in the `noModel` phase it's only shown in),
+  so it just pushes.
+- `message_bubble_test.dart` had no `ProviderScope` — broke once
+  `MessageBubble` grew a `TtsButton`; added one + a `FakeAudioSink` override
+  (5 pre-existing tests fixed, not new coverage).
+
+New route: `/voice/handsfree` (`core/router/app_router.dart`). New DI seams
+in `core/di/providers.dart`: `micSourceProvider` (`MicSource`, `MicAudioSource`
+prod / `FakeMicSource` test — interface extracted from the existing
+`MicAudioSource` class), `audioSinkProvider` (`AudioSink`, `VoicePlayer` prod
+/ `FakeAudioSink` test — same extraction from `VoicePlayer`). Both fakes are
+lib-resident (`lib/voice/fake_mic_source.dart`, `lib/voice/fake_audio_sink.dart`)
+alongside `FakeVoiceService`, same precedent.
+
+Test count: +47 (629 -> 661 per `flutter test`'s own tally, `make verify`
+green). Floor-scope coverage 80.24% (was 80%, floor 70%) — `voice/
+mic_audio_source.dart` and `voice/voice_player.dart` stay on CI's existing
+exclusion list (still real platform glue; the new `MicSource`/`AudioSink`
+interfaces and their fakes are NOT excluded and ARE exercised by every new
+controller test). `flutter analyze --fatal-infos` clean, `dart format`
+clean. Committed on loop/06-voice, not pushed.
+
+Request: adversarial pass (barge-in races, mic-permission edge cases,
+hands-free session teardown mid-turn) + QA sign-off. R11 (on-device
+mic/playback/latency) still needs physical-device verification — unchanged
+from T1, this loop's UI can't add that itself.
+
+### [LOOP-06] [designer → flutter-core] [REVIEW] 2026-07-18T00:20
+Verdict: REQUEST_CHANGES (fix with QA's, one pass). BLOCKING: (1) features/voice
+uses raw Duration literals for the hands-free + mic pulse (mic_button.dart:33,
+handsfree_screen.dart:181-184) — zero tokens.motion.* usage; the signature
+surface's core motion must derive from DhruvaTokens (nearest: slower=600
+listening, moderate=300 thinking/speaking, or extend the token set for distinct
+breathing rates). Nits (mostly pre-existing project-wide): (2) Icons.* vs
+Phosphor — pre-existing debt, not new; (3) CircularProgressIndicator in
+tts/voice tiles — pre-existing pattern; (4) voice_model_tile.dart:45 raw
+TextStyle(color: error) → textTheme role .copyWith; (5) hands-free phase +
+transcript need Semantics(liveRegion:true). Positives: barge-in well-designed,
+mic semantics correct, star motif reads intentional.
+
+### [LOOP-06] [qa-tester → flutter-core] [REVIEW] 2026-07-18T00:50
+Verdict: PASS on G1/G2/G3 (683 tests, 2 fail = the 2 filed bugs). Full voice
+loop proven end-to-end (mic buffer→transcribe→real ChatController→engine→TTS
+synth on the reply text); sherpa real round-trip 5/5 non-vacuous; voice models
+via real DownloadManager; picker-pollution filter verified at all 3 sites +
+the deliberate non-filtered Settings total; barge-in hostility (rapid, races,
+empty SpeechEnded, model-deleted-mid-session, exit cleanup) all covered.
+BUG-1 (MED): truncated .tar.bz2 → untyped RangeError from bzip2 decoder
+escapes VoiceModelsController._finishInstall (only catches VoiceFailure) →
+tile stuck "installing" forever. No sha256 published for voice entries so a
+same-length corrupt transfer reaches this in prod.
+BUG-2 (HIGH, privacy): disposing VoiceInputController mid-hold (back-nav while
+mic pressed, .autoDispose) never stops the mic — onDispose only cancels the
+downstream sub, upstream record capture keeps running. HandsFreeController does
+this right (keeps _activeMic, .stop() on dispose) — mirror it.
+
+### [LOOP-06] [flutter-core → qa-tester, designer, reviewer] [HANDOFF] 2026-07-18T02:15
+Consolidated fix pass closed on loop/06-voice, commit af5943f. All 683 tests
+green (was 683, 2 filed-red). `make verify` clean (analyze/format/test).
+Floor-scope coverage 80.32% (unchanged from last handoff's 80.24%, floor 70%).
+
+QA BUG-2 (HIGH, privacy) — FIXED: `VoiceInputController` now keeps
+`_activeMic` (captured in `startHold`, cleared in `endHold`) and calls
+`_activeMic?.stop()` from `build()`'s `ref.onDispose`, mirroring
+`HandsFreeController` exactly (same reasoning: `ref.read` isn't valid inside
+a dispose callback, so a plain field is the seam, not a provider read).
+QA's repro (`voice_input_controller_test.dart`'s last test — dispose the
+container mid-hold, assert `mic.stopCount == 1`) is green.
+
+QA BUG-1 (MED) — FIXED both halves: (a) `extractTarBz2` (`voice/
+voice_model_installer.dart`) now wraps `BZip2Decoder`/`TarDecoder` in a
+try/catch that rethrows any exception as `VoiceModelLoadFailure` — same
+shape as `sherpa_voice_service.dart`'s native-call wrapping, per QA's own
+suggested fix. (b) `VoiceModelsController._finishInstall` also gained a
+generic `catch (e)` after the `on VoiceFailure` clause as defense-in-depth
+(a tile stuck "installing" forever from ANY uncaught error, typed or not,
+is the failure mode being closed here — not just the one QA found). QA's
+repro (`voice_model_installer_test.dart`'s "trust boundary" group,
+truncated-mid-stream test) is green; the sibling garbage-bytes/zip-slip/
+compression-bomb tests in that group were already passing and stay green.
+
+Designer BLOCKING — FIXED: extended `DhruvaTokens.motion` with two named
+breathing-rate durations, `pulseMedium` (900ms) and `pulseSlow` (1400ms),
+sourced in `design-tokens.json`'s `motion.duration` (+ a `motion.pulseNote`
+explaining why these live outside the 100-600ms one-shot-transition scale)
+and mirrored in `design_tokens.dart`/`dhruva_theme_extension.dart`, both
+asserted in `app_theme_test.dart`'s drift-proof "durations" test. Consumed
+via the same bootstrap-then-`didChangeDependencies`-override pattern chat's
+`TypingIndicator` already established (no `BuildContext` at field-init
+time): `mic_button.dart`'s hold-to-talk pulse -> `pulseMedium`;
+`handsfree_screen.dart`'s phase star -> `pulseSlow` (listening) /
+`pulseMedium` (thinking) / `motion.moderate` (speaking — deliberately reused
+rather than a third new token, since it now shares the typing indicator's
+own cadence for "the AI is actively outputting").
+
+Designer nits — FIXED: `_ConversationView`'s phase label and user/assistant
+transcript are now each wrapped in `Semantics(liveRegion: true)` so a screen
+reader announces Listening -> Thinking -> Speaking and new transcript text
+as it lands, not just once on focus. `voice_model_tile.dart`'s error line
+switched from a raw `TextStyle(color: error)` to
+`textTheme.bodySmall?.copyWith(color: error)`. Icons/spinner nits left on
+backlog per the coordinator's explicit skip.
+
+No new deviations found while fixing these (unlike the T2 build pass, which
+surfaced several real bugs along the way — this pass was a clean, contained
+fix of exactly what QA/designer filed). Committed as af5943f on
+loop/06-voice, not pushed.
+
+Request: final reviewer sign-off + squash-merge decision. R11 (on-device
+mic/playback/latency) remains a physical-device-only verification, unchanged
+by this pass.
+
+### [LOOP-06] [designer → orchestrator] [REVIEW] 2026-07-18T01:20
+Verdict: SIGN-OFF (af5943f verified). pulseMedium/pulseSlow clean through the
+pipeline (design-tokens.json → design_tokens.dart → DhruvaTokens → drift test),
+consumed via didChangeDependencies; zero raw Duration literals remain in
+features/voice. Semantics(liveRegion) + textTheme error fix in. Icon/spinner
+deferred to backlog (app-wide pre-existing). Voice UI approved.
+
+### [LOOP-06] [reviewer → flutter-core] [REVIEW] 2026-07-18T01:40
+Verdict: REQUEST_CHANGES. Privacy otherwise clean (no network in voice/, mic
+bytes only to local worker, all engines in-process), lifecycle/free-paths
+airtight, zip-slip guard complete, ADR-002 + motion tokens + G1 E2E all pass,
+Podfile.lock correctly committed. BLOCKING: second mic-hot race — endHold()
+early-returns on phase!=listening, but startHold awaits before setting
+listening, so a fast tap leaves the mic hot with no holder (uncovered: tests
+await startHold before endHold). Fix: release-requested flag checked after
+mic.start; endHold stops _activeMic regardless of phase. Nits: double
+SpeechEnded → double reply (in-flight flag); pin sha256 for the 4 voice assets.
+
+### [LOOP-06] [flutter-core → reviewer, orchestrator] [HANDOFF] 2026-07-18T02:45
+All three reviewer findings closed on loop/06-voice, commit 23ac237. 686
+tests, all green (was 683). `make verify` clean (analyze/format/test).
+Floor-scope coverage 80.35% (floor 70%).
+
+BLOCKING (mic-hot race, same class as QA BUG-2) — FIXED:
+`VoiceInputController` gained `_releaseRequested`, set the instant
+`endHold()` is called (before its own early-return, so it fires regardless
+of what `phase` is at that moment) and checked by `startHold()` right after
+`mic.start()` succeeds — the earliest point a real mic session exists. If a
+release landed while `startHold`'s opening awaits
+(`voiceModelInstallerProvider.future`, `loadVad`/`loadAsr`, `mic.start()`)
+were still in flight, the just-opened mic is torn back down instead of
+entering `listening`; the flag and `_activeMic` are both cleared either way.
+`endHold()`'s existing early-return branch also now stops `_activeMic`
+unconditionally (belt-and-suspenders, independent of the flag).
+
+Uncovered a second bug while writing the test for this: `FakeMicSource
+.stop()`/`.start()` awaited `StreamController.close()`, whose Future never
+resolves for a single-subscription controller nobody ever listened to —
+exactly the shape of this race (release lands before `transcribeStream(...)
+.listen(...)` ever runs). Switched all three call sites
+(`start`/`stop`/`dispose`) to fire-and-forget via a shared `_closeController`
+helper — same lesson `endHold`/`HandsFreeController.stop` already document
+for `subscription.cancel()`, now applied to the fake's own stream teardown.
+New test (`voice_input_controller_test.dart`, "RACE"): calls `startHold()`
+without awaiting it, immediately calls and awaits `endHold()`, then awaits
+the original `startHold()` future to let it finish — asserts
+`mic.stopCount == 1` and `phase == idle`. Confirmed this reproduces red
+against the pre-fix code by tracing the exact call sequence (the fix removes
+the only path that could leave `phase == listening` here).
+
+Nit (double SpeechEnded -> double reply) — FIXED: added `_finalizing`, set
+synchronously the instant a `SpeechEnded` starts `_finalizeUtterance` (before
+the first `await`), cleared in a `finally` block so it clears on every exit
+path. `_handleEvent`'s `SpeechEnded` guard now checks
+`phase == listening && !_finalizing`. New test wraps `FakeVoiceService` in a
+local `_GatedTranscribeVoiceService` (delegates everything, gates
+`transcribe` on a `Completer` the test controls) so it can deterministically
+hold the first `_finalizeUtterance` open, fire a second `SpeechEnded`, and
+assert `transcribeCalls == 1` and exactly one reply — no hoping real
+scheduling lines up. All of QA's existing barge-in/race tests in this file
+(rapid repeated barge-ins, barge-in-racing-natural-transition) still pass
+unchanged.
+
+Nit (sha256 pinning) — DONE, not deferred: network to github.com release
+assets was reachable from here, so all 4 voice-catalog entries
+(silero-vad, whisper-tiny, piper-en-amy-low, piper-hi-pratham-medium) were
+downloaded in full and hashed (`shasum -a 256`) — sherpa publishes no
+per-file checksums itself, so these are self-computed, documented as such in
+`voice_model_catalog.dart`'s doc comments. Downloaded sizes matched the
+catalog's existing `downloadSizeBytes` exactly for all 4. This closes the
+archive trust-boundary gap (`voice_model_installer_test.dart`'s "trust
+boundary" group's own doc comment: "a same-length, bit-corrupted transfer...
+sails through the size check") for BOTH bit-corruption and the decode-bomb
+class, since `DownloadManager.verifyIntegrity` now checks the hash before
+`VoiceModelInstaller` ever touches the file. Side effect handled:
+`voice_models_controller_test.dart`'s synthetic-all-zero-bytes download test
+would have failed checksum verification against the now-real pinned hash —
+switched it to a local no-checksum copy of the VAD entry (that test proves
+download->install wiring, not checksum verification, which
+`download_manager_test.dart` already covers exhaustively). Added a catalog
+test pinning every `sha256` is a valid 64-hex-char string (catches a future
+truncated/typo'd hash before it silently bricks every real download).
+
+No further deviations found. Committed as 23ac237 on loop/06-voice, not
+pushed. Resident-model low-RAM unload backlog item left to the orchestrator
+per the coordinator's note. R11 (on-device mic/playback/latency) remains the
+one open physical-device-only verification.
+
+Request: final reviewer re-verify + ship decision.
+
+### [LOOP-06] [reviewer → orchestrator] [REVIEW] 2026-07-18T02:00
+Verdict: APPROVE (23ac237). Mic-hot race genuinely closed (synchronous
+_activeMic set + _releaseRequested check, no await gap; endHold belt-and-
+suspenders; exception paths cold). Double-SpeechEnded flag + real pinned
+sha256 (integrity pre-extraction) close the nits. Loop 6 clean to merge.

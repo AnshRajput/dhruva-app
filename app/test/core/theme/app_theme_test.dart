@@ -289,6 +289,8 @@ void main() {
       expect(motion.moderate.inMilliseconds, durationJson['moderate']);
       expect(motion.slow.inMilliseconds, durationJson['slow']);
       expect(motion.slower.inMilliseconds, durationJson['slower']);
+      expect(motion.pulseMedium.inMilliseconds, durationJson['pulseMedium']);
+      expect(motion.pulseSlow.inMilliseconds, durationJson['pulseSlow']);
     });
 
     test('easing curves (cubic-bezier control points)', () {

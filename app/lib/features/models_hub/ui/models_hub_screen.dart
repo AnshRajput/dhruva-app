@@ -17,12 +17,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../data/downloads/storage_manager.dart';
+import '../../../voice/voice_model_catalog.dart' show VoiceModelRole;
 import '../state/failure_message.dart';
 import '../state/model_search_controller.dart';
 import '../state/storage_controller.dart';
+import '../state/voice_models_controller.dart';
 import '../widgets/failure_view.dart';
 import '../widgets/model_list_tile.dart';
 import '../widgets/recommended_rail.dart';
+import '../widgets/voice_model_tile.dart';
 
 class ModelsHubScreen extends StatelessWidget {
   const ModelsHubScreen({super.key});
@@ -30,7 +33,7 @@ class ModelsHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Models'),
@@ -45,13 +48,63 @@ class ModelsHubScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Search'),
               Tab(text: 'Installed'),
+              Tab(text: 'Voice'),
             ],
           ),
         ),
-        body: const TabBarView(children: [_SearchTab(), _InstalledTab()]),
+        body: const TabBarView(
+          children: [_SearchTab(), _InstalledTab(), _VoiceTab()],
+        ),
       ),
     );
   }
+}
+
+/// Loop 6, T4/D4: the curated ASR/TTS/VAD catalog
+/// (`voice/voice_model_catalog.dart`), downloadable through the same
+/// `DownloadManager` GGUF models use (`voice_models_controller.dart`) — one
+/// section per role so hold-to-talk's "VAD + ASR required" and TTS's
+/// "pick a voice" needs read clearly at a glance.
+class _VoiceTab extends ConsumerWidget {
+  const _VoiceTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(voiceModelsControllerProvider);
+    final notifier = ref.read(voiceModelsControllerProvider.notifier);
+    return switch (state) {
+      AsyncData(:final value) => ListView(
+        children: [
+          for (final role in VoiceModelRole.values) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text(
+                _roleLabel(role),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
+            for (final s in value.where((s) => s.entry.role == role))
+              VoiceModelTile(
+                state: s,
+                onDownload: () => notifier.download(s.entry),
+                onDelete: () => notifier.delete(s.entry),
+              ),
+          ],
+        ],
+      ),
+      AsyncError(:final error) => ErrorStateView(
+        error: error,
+        onRetry: () => ref.invalidate(voiceModelsControllerProvider),
+      ),
+      _ => const Center(child: CircularProgressIndicator()),
+    };
+  }
+
+  String _roleLabel(VoiceModelRole role) => switch (role) {
+    VoiceModelRole.vad => 'Turn-taking (required)',
+    VoiceModelRole.asr => 'Speech-to-text',
+    VoiceModelRole.tts => 'Text-to-speech voices',
+  };
 }
 
 class _SearchTab extends ConsumerStatefulWidget {

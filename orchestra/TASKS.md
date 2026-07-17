@@ -32,6 +32,14 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Voice models stay resident in worker isolate after voice UI closes (bounded
+  singleton, not a leak) — add low-RAM unload (reviewer nit, Loop 6)
+- Iconography debt (project-wide, designer nits Loops 3-6): Material Icons +
+  CircularProgressIndicator used where design-tokens iconography.set names
+  Phosphor + custom spinner — decide (adopt phosphor_flutter or amend the
+  token) as a single sweep in Loop 11 polish, not per-loop
+- Character.voiceId field: voice picks TTS by text language today; add explicit
+  per-character voice once the field lands (Loop 6 gap)
 - Reviewer N2 (Loop 4): committed 2.4MB AAR → consider Git-LFS or CI-fetch
 - Reviewer N3 (Loop 4): streaming hot-path headroom at 4096 max tokens —
   RepaintBoundary on bubbles, O(n²) _rawBuffer accumulation; profile in the

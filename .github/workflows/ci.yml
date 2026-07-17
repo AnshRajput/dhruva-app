@@ -35,12 +35,23 @@ jobs:
           # Exclusions (see orchestra/DECISIONS.md "COVERAGE FLOOR SCOPE"):
           # - llama_engine_service.dart: native engine glue — its tests need real
           #   dylibs + a model, which CI lacks; unit-tested separately on dev machines
+          # - voice/sherpa_voice_service.dart: same story for the sherpa_onnx voice
+          #   glue — its real coverage comes from the gated round-trip test that only
+          #   runs on the macOS dev machine (native dylib + models); the pure voice
+          #   logic (catalog/installer/fake/audio_conversion) is NOT excluded.
+          # - voice/mic_audio_source.dart, voice/voice_player.dart: record/audioplayers
+          #   platform glue, unrunnable under flutter test.
           # (features/debug_chat's exclusion was deleted with the harness itself
           # in Loop 4 — see orchestra/BLACKBOARD.md.)
           total=$(python3 - << 'PY'
           import re
           recs = open('coverage/lcov.info').read().split('end_of_record')
-          excl = ('lib/engine_bindings/llama_engine_service.dart',)
+          excl = (
+              'lib/engine_bindings/llama_engine_service.dart',
+              'lib/voice/sherpa_voice_service.dart',
+              'lib/voice/mic_audio_source.dart',
+              'lib/voice/voice_player.dart',
+          )
           lf = lh = 0
           for r in recs:
               m = re.search(r'SF:(.+)', r)
