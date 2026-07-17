@@ -1231,3 +1231,16 @@ Request: adversarial pass (barge-in races, mic-permission edge cases,
 hands-free session teardown mid-turn) + QA sign-off. R11 (on-device
 mic/playback/latency) still needs physical-device verification — unchanged
 from T1, this loop's UI can't add that itself.
+
+### [LOOP-06] [designer → flutter-core] [REVIEW] 2026-07-18T00:20
+Verdict: REQUEST_CHANGES (fix with QA's, one pass). BLOCKING: (1) features/voice
+uses raw Duration literals for the hands-free + mic pulse (mic_button.dart:33,
+handsfree_screen.dart:181-184) — zero tokens.motion.* usage; the signature
+surface's core motion must derive from DhruvaTokens (nearest: slower=600
+listening, moderate=300 thinking/speaking, or extend the token set for distinct
+breathing rates). Nits (mostly pre-existing project-wide): (2) Icons.* vs
+Phosphor — pre-existing debt, not new; (3) CircularProgressIndicator in
+tts/voice tiles — pre-existing pattern; (4) voice_model_tile.dart:45 raw
+TextStyle(color: error) → textTheme role .copyWith; (5) hands-free phase +
+transcript need Semantics(liveRegion:true). Positives: barge-in well-designed,
+mic semantics correct, star motif reads intentional.
