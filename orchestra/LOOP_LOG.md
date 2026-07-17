@@ -153,3 +153,23 @@ file I/O under the fake clock — established pattern now: unit-level repro for
 I/O bugs, not settling widget tests. (4) Persona snapshot-at-creation (vs
 live-link) was the right call — reviewer confirmed; document as the pattern
 for Loop 7+ (vision/docs attaching context to a conversation).
+
+## LOOP 6 — Voice (2026-07-18)
+Goal: hold-to-talk STT, per-character TTS, hands-free conversation w/ barge-in.
+Exit gate (all met): voice loop integration test (audio→transcript→chat→TTS) ✅
+· voice models via Model Manager ✅ · hands-free turn-taking + barge-in ✅ ·
+designer SIGN-OFF ✅ · QA PASS ✅ · reviewer APPROVE ✅ · CI green ✅
+Shipped: sherpa_onnx 1.13.4 (STT+TTS+Silero VAD, real round-trip verified),
+VoiceService w/ VAD-as-first-class-primitive, hold-to-talk composer, per-msg
+TTS, hands-free state machine + barge-in, 4-model voice catalog (sha256-pinned)
+via existing DownloadManager + zip-slip-guarded installer. 686 tests, cov 80.4%.
+Retro: (1) BIGGEST LESSON — TWO mic-hot privacy races (dispose-mid-hold found
+by QA, quick-tap-before-start found by reviewer) both slipped the builder AND
+the layer that "fixed" the first one; async resource acquisition (mic/camera/
+any capture) needs a release-requested pattern from the start, and tests that
+DON'T await the acquire to expose the window. Add to arch checklist. (2)
+Extending motion tokens (vs forcing a bad fit) kept the design system honest —
+the right call when a real need doesn't match existing tokens. (3) Reviewer's
+privacy-first lens on a capture feature earned its cost — the second race was
+invisible to functional tests. (4) sherpa macOS codesign self-heal (R11) is a
+dev-env quirk, not a product issue; on-device voice still needs a physical pass.
