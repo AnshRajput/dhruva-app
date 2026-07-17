@@ -56,4 +56,30 @@ void main() {
     expect(find.text('Not recommended'), findsOneWidget);
     expect(find.byIcon(Icons.warning), findsOneWidget);
   });
+
+  testWidgets('mmprojSizeBytes folds into the explanation the same way '
+      'classifyModelTier folds it into the verdict (Loop-7 T2 D4)', (
+    tester,
+  ) async {
+    const chip = ModelVerdictChip(
+      tier: ModelTier.possible,
+      fileSizeBytes: 900 * 1024 * 1024, // alone: 1B class, floor 4GB
+      totalRamBytes: 6 * _gib,
+      mmprojSizeBytes: 400 * 1024 * 1024, // combined crosses to 3-4B, 6GB
+    );
+    await _pump(tester, chip);
+    expect(chip.explanation, 'needs ~6GB RAM, you have 6GB');
+  });
+
+  testWidgets('mmprojSizeBytes defaults to 0 — unchanged plain-model label', (
+    tester,
+  ) async {
+    const chip = ModelVerdictChip(
+      tier: ModelTier.possible,
+      fileSizeBytes: 900 * 1024 * 1024,
+      totalRamBytes: 4 * _gib,
+    );
+    await _pump(tester, chip);
+    expect(chip.explanation, 'needs ~4GB RAM, you have 4GB');
+  });
 }

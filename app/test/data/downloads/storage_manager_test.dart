@@ -208,4 +208,119 @@ void main() {
       );
     });
   });
+
+  group('vision models (Loop-7 T2 D5)', () {
+    Future<int> insertVisionRow({
+      required String path,
+      required String mmprojPath,
+      int sizeBytes = 100,
+      int mmprojSizeBytes = 40,
+    }) {
+      File(path).writeAsBytesSync(List.filled(sizeBytes, 0));
+      File(mmprojPath).writeAsBytesSync(List.filled(mmprojSizeBytes, 0));
+      return db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'r/${path.hashCode}',
+              fileName: path.split('/').last,
+              sizeBytes: sizeBytes,
+              localPath: path,
+              downloadedAt: DateTime.utc(2026, 7, 18),
+              isVision: const Value(true),
+              mmprojPath: Value(mmprojPath),
+            ),
+          );
+    }
+
+    test('totalUsageBytes counts the mmproj projector file too, not just the '
+        'model file', () async {
+      await insertVisionRow(
+        path: '${tempDir.path}/vision.gguf',
+        mmprojPath: '${tempDir.path}/mmproj.gguf',
+        sizeBytes: 100,
+        mmprojSizeBytes: 40,
+      );
+      await insertRow(path: '${tempDir.path}/text-only.gguf', sizeBytes: 50);
+
+      expect(await manager(freeBytes: 1 << 30).totalUsageBytes(), 190);
+    });
+
+    test('totalUsageBytes tolerates a projector path that no longer exists on '
+        'disk (counts 0 for it rather than throwing)', () async {
+      final id = await insertVisionRow(
+        path: '${tempDir.path}/vision.gguf',
+        mmprojPath: '${tempDir.path}/mmproj.gguf',
+        sizeBytes: 100,
+        mmprojSizeBytes: 40,
+      );
+      final row = await manager(freeBytes: 1 << 30).getInstalledModel(id);
+      File(row!.mmprojPath!).deleteSync();
+
+      expect(await manager(freeBytes: 1 << 30).totalUsageBytes(), 100);
+    });
+
+    test('delete removes the model file, the mmproj projector file, and the '
+        'row — a vision model is one row but two files', () async {
+      final modelPath = '${tempDir.path}/vision.gguf';
+      final mmprojPath = '${tempDir.path}/mmproj.gguf';
+      final id = await insertVisionRow(path: modelPath, mmprojPath: mmprojPath);
+
+      await manager(freeBytes: 1 << 30).delete(id);
+
+      expect(File(modelPath).existsSync(), isFalse);
+      expect(File(mmprojPath).existsSync(), isFalse);
+      expect(await db.select(db.installedModels).get(), isEmpty);
+    });
+
+    test('delete on a plain (non-vision) model does not touch mmprojPath at '
+        'all (still null, no crash)', () async {
+      final id = await insertRow(path: '${tempDir.path}/plain.gguf');
+      await manager(freeBytes: 1 << 30).delete(id);
+      expect(await db.select(db.installedModels).get(), isEmpty);
+    });
+
+    group('attachProjector', () {
+      test('patches mmprojPath + isVision onto the matching (repoId, fileName) '
+          'row', () async {
+        File('${tempDir.path}/model.gguf').writeAsBytesSync([1, 2, 3]);
+        final id = await db
+            .into(db.installedModels)
+            .insert(
+              InstalledModelsCompanion.insert(
+                repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+                fileName: 'SmolVLM-500M-Instruct-Q8_0.gguf',
+                sizeBytes: 3,
+                localPath: '${tempDir.path}/model.gguf',
+                downloadedAt: DateTime.utc(2026, 7, 18),
+                isVision: const Value(true),
+              ),
+            );
+
+        await manager(freeBytes: 1 << 30).attachProjector(
+          repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+          fileName: 'SmolVLM-500M-Instruct-Q8_0.gguf',
+          mmprojPath: '${tempDir.path}/mmproj.gguf',
+        );
+
+        final row = await (db.select(
+          db.installedModels,
+        )..where((t) => t.id.equals(id))).getSingle();
+        expect(row.mmprojPath, '${tempDir.path}/mmproj.gguf');
+        expect(row.isVision, isTrue);
+      });
+
+      test('throws StorageNotFoundFailure when no installed model matches '
+          '(repoId, fileName)', () async {
+        await expectLater(
+          () => manager(freeBytes: 1 << 30).attachProjector(
+            repoId: 'nobody/nothing',
+            fileName: 'missing.gguf',
+            mmprojPath: '${tempDir.path}/mmproj.gguf',
+          ),
+          throwsA(isA<StorageNotFoundFailure>()),
+        );
+      });
+    });
+  });
 }

@@ -266,6 +266,113 @@ void main() {
     });
   });
 
+  group('vision pairing fields (Loop-7 T2)', () {
+    test('isVision: true is recorded on the installed_models row when the '
+        'download completes', () async {
+      final r = DownloadRequest(
+        repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+        fileName: 'SmolVLM-500M-Instruct-Q8_0.gguf',
+        url: Uri.parse('https://huggingface.co/x/resolve/main/x.gguf'),
+        expectedSizeBytes: 5,
+        isVision: true,
+      );
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      final file = File('${modelsDir.path}/${r.fileName}')
+        ..writeAsBytesSync([1, 2, 3, 4, 5]);
+      backend.filePaths[r.taskId] = file.path;
+
+      final future = _nextWhere(
+        manager.progress,
+        (p) => p.state == DownloadState.complete,
+      );
+      backend.emit(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+      );
+      await future;
+
+      final row = await db.select(db.installedModels).getSingle();
+      expect(row.isVision, isTrue);
+      // Not set by DownloadManager itself — the coordinator
+      // (`download_actions_controller.dart`) patches this once the
+      // separately-enqueued projector download completes.
+      expect(row.mmprojPath, isNull);
+    });
+
+    test('registerAsInstalledModel: false verifies + keeps the file on disk '
+        'and still emits complete, but writes NO installed_models row — a '
+        "vision model's mmproj projector rides this path so the model stays "
+        'exactly one row, not two', () async {
+      final r = DownloadRequest(
+        repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+        fileName: 'mmproj-SmolVLM-500M-Instruct-Q8_0.gguf',
+        url: Uri.parse('https://huggingface.co/x/resolve/main/mmproj.gguf'),
+        expectedSizeBytes: 5,
+        registerAsInstalledModel: false,
+      );
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      final file = File('${modelsDir.path}/${r.fileName}')
+        ..writeAsBytesSync([1, 2, 3, 4, 5]);
+      backend.filePaths[r.taskId] = file.path;
+
+      final future = _nextWhere(
+        manager.progress,
+        (p) => p.state == DownloadState.complete,
+      );
+      backend.emit(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+      );
+      final progress = await future;
+
+      expect(progress.state, DownloadState.complete);
+      expect(file.existsSync(), isTrue); // verified file kept on disk
+      expect(await db.select(db.installedModels).get(), isEmpty);
+    });
+
+    test('metaData encodes isVision/registerAsInstalledModel, and a restarted '
+        'manager over the same persisted metaData recognizes the task rather '
+        'than silently dropping it (proves the decode side round-trips too — '
+        '_decodeMetaData returns null, and the task is skipped, on anything '
+        'that fails to parse)', () async {
+      const original = DownloadRequest(
+        repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+        fileName: 'mmproj-SmolVLM-500M-Instruct-Q8_0.gguf',
+        url: null,
+        expectedSizeBytes: 5,
+        isVision: true,
+        registerAsInstalledModel: false,
+      );
+      await manager.enqueue(
+        DownloadRequest(
+          repoId: original.repoId,
+          fileName: original.fileName,
+          url: Uri.parse('https://huggingface.co/x/resolve/main/x.gguf'),
+          expectedSizeBytes: original.expectedSizeBytes,
+          isVision: original.isVision,
+          registerAsInstalledModel: original.registerAsInstalledModel,
+        ),
+        freeBytes: 1 << 30,
+      );
+      final metaData = backend.enqueuedRequests[original.taskId]!.metaData;
+
+      expect(metaData, contains('"isVision":true'));
+      expect(metaData, contains('"registerAsInstalledModel":false'));
+
+      // Decode round-trip, exercised via the app-restart rehydration path:
+      // a second manager over the same persisted metaData recognizes the
+      // task as active (would otherwise be silently dropped as unknown).
+      final restarted = DownloadManager(
+        backend: FakeDownloadBackend(persistentState: backend.persistentState),
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(restarted.dispose);
+      await restarted.init();
+      // No crash / silent drop on init is the observable proof the
+      // metaData decoded successfully — `_decodeMetaData` returns null
+      // (and the task is skipped) on anything that fails to parse.
+    });
+  });
+
   group('failure + cancel + cleanup', () {
     test('failed status cleans up the partial file and emits failed', () async {
       final r = req();

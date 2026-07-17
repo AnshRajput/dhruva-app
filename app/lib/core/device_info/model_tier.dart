@@ -39,12 +39,19 @@ const _comfortableMultiplier = 1.5;
 
 /// Classify how well [fileSizeBytes] (the GGUF file size for the quant the
 /// user is looking at) will run given [totalRamBytes] of device RAM.
+///
+/// [mmprojSizeBytes] adds a vision model's mmproj projector footprint to the
+/// verdict (both load into memory together — Loop-7 T1's
+/// `EngineLoadParams.mmprojPath`) — e.g. a 416MB model + 103MB projector is
+/// classified as a ~519MB combined footprint, not 416MB alone. Defaults to 0
+/// for a plain text model.
 ModelTier classifyModelTier({
   required int fileSizeBytes,
   required int totalRamBytes,
   String? quant,
+  int mmprojSizeBytes = 0,
 }) {
-  final floor = ramFloorBytesFor(fileSizeBytes);
+  final floor = ramFloorBytesFor(fileSizeBytes + mmprojSizeBytes);
   if (totalRamBytes < floor) return ModelTier.notRecommended;
   if (totalRamBytes < floor * _comfortableMultiplier) return ModelTier.possible;
   return ModelTier.comfortable;

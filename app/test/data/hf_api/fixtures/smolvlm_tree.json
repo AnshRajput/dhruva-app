@@ -1,0 +1,37 @@
+[
+  {
+    "type": "file",
+    "path": "SmolVLM-500M-Instruct-Q4_K_M.gguf",
+    "size": 262000000
+  },
+  {
+    "type": "file",
+    "path": "SmolVLM-500M-Instruct-Q8_0.gguf",
+    "size": 436207616
+  },
+  {
+    "type": "file",
+    "path": "SmolVLM-500M-Instruct-f16.gguf",
+    "size": 821000000
+  },
+  {
+    "type": "file",
+    "path": "mmproj-SmolVLM-500M-Instruct-Q8_0.gguf",
+    "size": 108003328
+  },
+  {
+    "type": "file",
+    "path": "mmproj-SmolVLM-500M-Instruct-f16.gguf",
+    "size": 203000000
+  },
+  {
+    "type": "file",
+    "path": "README.md",
+    "size": 4096
+  },
+  {
+    "type": "file",
+    "path": "config.json",
+    "size": 512
+  }
+]

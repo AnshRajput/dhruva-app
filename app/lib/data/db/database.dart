@@ -32,6 +32,25 @@ class InstalledModels extends Table {
   DateTimeColumn get downloadedAt => dateTime()();
   DateTimeColumn get lastUsedAt => dateTime().nullable()();
 
+  /// Local path of the mmproj projector paired with this installed vision
+  /// model (Loop-7 `vision_pairing.dart`'s matching rule), or null.
+  ///
+  /// `isVision && mmprojPath == null` is the "needs projector" half-state: the
+  /// model file downloaded and verified fine, but its paired projector
+  /// download hasn't landed yet (still in flight, or failed after the model
+  /// succeeded — see `download_actions_controller.dart`'s
+  /// `enqueueVisionQuant`). The row exists and the model is usable text-only
+  /// in that state; nothing is silently lost, but it isn't vision-ready.
+  /// `isVision && mmprojPath != null` is fully vision-ready — the engine
+  /// loads it with `EngineLoadParams.mmprojPath` set (Loop-7 T1).
+  TextColumn get mmprojPath => text().nullable()();
+
+  /// True when this row IS a vision model (paired with a projector at
+  /// download-enqueue time — see `DownloadRequest.isVision`), independent of
+  /// whether [mmprojPath] has landed yet — see its doc for the two-state
+  /// meaning of the pair.
+  BoolColumn get isVision => boolean().withDefault(const Constant(false))();
+
   // A given file within a repo is installed at most once.
   @override
   List<Set<Column>> get uniqueKeys => [
@@ -180,7 +199,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -209,6 +228,11 @@ class AppDatabase extends _$AppDatabase {
           // `from < 2`) without this column — add it to the real table.
           await m.addColumn(conversations, conversations.characterId);
         }
+      }
+      // v3 -> v4 (Loop 7): vision model + mmproj projector pairing.
+      if (from < 4) {
+        await m.addColumn(installedModels, installedModels.mmprojPath);
+        await m.addColumn(installedModels, installedModels.isVision);
       }
     },
     beforeOpen: (details) async {

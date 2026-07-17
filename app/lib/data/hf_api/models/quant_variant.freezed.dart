@@ -15,7 +15,11 @@ T _$identity<T>(T value) => value;
 mixin _$QuantVariant {
 
 /// e.g. "Q4_K_M", "Q8_0", "F16".
- String get label; HfRepoFile get file;
+ String get label; HfRepoFile get file;/// The best-matched mmproj projector for [file] (see
+/// `vision_pairing.dart`'s `matchMmprojFor`), or null when this repo has
+/// no mmproj files at all (a text-only model). Non-null marks [file] as
+/// vision-capable — see [isVision].
+ HfRepoFile? get mmprojFile;
 /// Create a copy of QuantVariant
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -26,16 +30,16 @@ $QuantVariantCopyWith<QuantVariant> get copyWith => _$QuantVariantCopyWithImpl<Q
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is QuantVariant&&(identical(other.label, label) || other.label == label)&&(identical(other.file, file) || other.file == file));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is QuantVariant&&(identical(other.label, label) || other.label == label)&&(identical(other.file, file) || other.file == file)&&(identical(other.mmprojFile, mmprojFile) || other.mmprojFile == mmprojFile));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,label,file);
+int get hashCode => Object.hash(runtimeType,label,file,mmprojFile);
 
 @override
 String toString() {
-  return 'QuantVariant(label: $label, file: $file)';
+  return 'QuantVariant(label: $label, file: $file, mmprojFile: $mmprojFile)';
 }
 
 
@@ -46,11 +50,11 @@ abstract mixin class $QuantVariantCopyWith<$Res>  {
   factory $QuantVariantCopyWith(QuantVariant value, $Res Function(QuantVariant) _then) = _$QuantVariantCopyWithImpl;
 @useResult
 $Res call({
- String label, HfRepoFile file
+ String label, HfRepoFile file, HfRepoFile? mmprojFile
 });
 
 
-$HfRepoFileCopyWith<$Res> get file;
+$HfRepoFileCopyWith<$Res> get file;$HfRepoFileCopyWith<$Res>? get mmprojFile;
 
 }
 /// @nodoc
@@ -63,11 +67,12 @@ class _$QuantVariantCopyWithImpl<$Res>
 
 /// Create a copy of QuantVariant
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? label = null,Object? file = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? label = null,Object? file = null,Object? mmprojFile = freezed,}) {
   return _then(_self.copyWith(
 label: null == label ? _self.label : label // ignore: cast_nullable_to_non_nullable
 as String,file: null == file ? _self.file : file // ignore: cast_nullable_to_non_nullable
-as HfRepoFile,
+as HfRepoFile,mmprojFile: freezed == mmprojFile ? _self.mmprojFile : mmprojFile // ignore: cast_nullable_to_non_nullable
+as HfRepoFile?,
   ));
 }
 /// Create a copy of QuantVariant
@@ -78,6 +83,18 @@ $HfRepoFileCopyWith<$Res> get file {
   
   return $HfRepoFileCopyWith<$Res>(_self.file, (value) {
     return _then(_self.copyWith(file: value));
+  });
+}/// Create a copy of QuantVariant
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$HfRepoFileCopyWith<$Res>? get mmprojFile {
+    if (_self.mmprojFile == null) {
+    return null;
+  }
+
+  return $HfRepoFileCopyWith<$Res>(_self.mmprojFile!, (value) {
+    return _then(_self.copyWith(mmprojFile: value));
   });
 }
 }
@@ -161,10 +178,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String label,  HfRepoFile file)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String label,  HfRepoFile file,  HfRepoFile? mmprojFile)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _QuantVariant() when $default != null:
-return $default(_that.label,_that.file);case _:
+return $default(_that.label,_that.file,_that.mmprojFile);case _:
   return orElse();
 
 }
@@ -182,10 +199,10 @@ return $default(_that.label,_that.file);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String label,  HfRepoFile file)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String label,  HfRepoFile file,  HfRepoFile? mmprojFile)  $default,) {final _that = this;
 switch (_that) {
 case _QuantVariant():
-return $default(_that.label,_that.file);case _:
+return $default(_that.label,_that.file,_that.mmprojFile);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -202,10 +219,10 @@ return $default(_that.label,_that.file);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String label,  HfRepoFile file)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String label,  HfRepoFile file,  HfRepoFile? mmprojFile)?  $default,) {final _that = this;
 switch (_that) {
 case _QuantVariant() when $default != null:
-return $default(_that.label,_that.file);case _:
+return $default(_that.label,_that.file,_that.mmprojFile);case _:
   return null;
 
 }
@@ -216,13 +233,18 @@ return $default(_that.label,_that.file);case _:
 /// @nodoc
 
 
-class _QuantVariant implements QuantVariant {
-  const _QuantVariant({required this.label, required this.file});
+class _QuantVariant extends QuantVariant {
+  const _QuantVariant({required this.label, required this.file, this.mmprojFile}): super._();
   
 
 /// e.g. "Q4_K_M", "Q8_0", "F16".
 @override final  String label;
 @override final  HfRepoFile file;
+/// The best-matched mmproj projector for [file] (see
+/// `vision_pairing.dart`'s `matchMmprojFor`), or null when this repo has
+/// no mmproj files at all (a text-only model). Non-null marks [file] as
+/// vision-capable — see [isVision].
+@override final  HfRepoFile? mmprojFile;
 
 /// Create a copy of QuantVariant
 /// with the given fields replaced by the non-null parameter values.
@@ -234,16 +256,16 @@ _$QuantVariantCopyWith<_QuantVariant> get copyWith => __$QuantVariantCopyWithImp
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QuantVariant&&(identical(other.label, label) || other.label == label)&&(identical(other.file, file) || other.file == file));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _QuantVariant&&(identical(other.label, label) || other.label == label)&&(identical(other.file, file) || other.file == file)&&(identical(other.mmprojFile, mmprojFile) || other.mmprojFile == mmprojFile));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,label,file);
+int get hashCode => Object.hash(runtimeType,label,file,mmprojFile);
 
 @override
 String toString() {
-  return 'QuantVariant(label: $label, file: $file)';
+  return 'QuantVariant(label: $label, file: $file, mmprojFile: $mmprojFile)';
 }
 
 
@@ -254,11 +276,11 @@ abstract mixin class _$QuantVariantCopyWith<$Res> implements $QuantVariantCopyWi
   factory _$QuantVariantCopyWith(_QuantVariant value, $Res Function(_QuantVariant) _then) = __$QuantVariantCopyWithImpl;
 @override @useResult
 $Res call({
- String label, HfRepoFile file
+ String label, HfRepoFile file, HfRepoFile? mmprojFile
 });
 
 
-@override $HfRepoFileCopyWith<$Res> get file;
+@override $HfRepoFileCopyWith<$Res> get file;@override $HfRepoFileCopyWith<$Res>? get mmprojFile;
 
 }
 /// @nodoc
@@ -271,11 +293,12 @@ class __$QuantVariantCopyWithImpl<$Res>
 
 /// Create a copy of QuantVariant
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? label = null,Object? file = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? label = null,Object? file = null,Object? mmprojFile = freezed,}) {
   return _then(_QuantVariant(
 label: null == label ? _self.label : label // ignore: cast_nullable_to_non_nullable
 as String,file: null == file ? _self.file : file // ignore: cast_nullable_to_non_nullable
-as HfRepoFile,
+as HfRepoFile,mmprojFile: freezed == mmprojFile ? _self.mmprojFile : mmprojFile // ignore: cast_nullable_to_non_nullable
+as HfRepoFile?,
   ));
 }
 
@@ -287,6 +310,18 @@ $HfRepoFileCopyWith<$Res> get file {
   
   return $HfRepoFileCopyWith<$Res>(_self.file, (value) {
     return _then(_self.copyWith(file: value));
+  });
+}/// Create a copy of QuantVariant
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$HfRepoFileCopyWith<$Res>? get mmprojFile {
+    if (_self.mmprojFile == null) {
+    return null;
+  }
+
+  return $HfRepoFileCopyWith<$Res>(_self.mmprojFile!, (value) {
+    return _then(_self.copyWith(mmprojFile: value));
   });
 }
 }
