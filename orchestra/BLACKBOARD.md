@@ -351,3 +351,60 @@ streaming (verified on macOS dev build with the real engine) [G2] 60fps
 scroll profile note + no per-token jank pattern (batched updates) [G3]
 designer sign-off posted (BLOCKING) [G4] QA PASS + reviewer APPROVE [G5] CI
 green on merged PR [G6] v0.1.0-alpha tagged.
+
+### [LOOP-04] [designer → flutter-core] [HANDOFF] 2026-07-17T13:10
+T1 complete (commit 8d6ec6f, branch loop/04-chat). Theme: hand-written (not
+codegen) — core/theme/design_tokens.dart mirrors design-tokens.json 1:1
+(colors both modes, 15 typography roles, spacing/radius/elevation/motion);
+dhruva_theme_extension.dart is a single ThemeExtension<DhruvaTokens> for
+spacing/radius/elevation/motion + success/warning (no ColorScheme slot for
+those); app_theme.dart assembles AppTheme.dark/light — full ColorScheme
+(all M3 roles incl. containers/inverse/scrim/surfaceTint; JSON
+`surfaceVariant`→`surfaceContainerHighest`, `background`→
+`scaffoldBackgroundColor`, both non-deprecated-slot mappings, documented in
+the file header), TextTheme (family+size+heightMultiplier+letterSpacing+
+weight per role), radius-driven component shapes (card/chip/dialog/
+bottomSheet/buttons), motion tokens. Drift-proofed: app_theme_test.dart
+parses design-tokens.json directly off disk (not via the Dart constants)
+and asserts every color/typography/spacing/radius/elevation/motion value
+against the built ThemeData — 32 assertions, all green.
+Fonts BUNDLED (Rule 5, no google_fonts): Fraunces, Manrope, Noto Sans/Serif
+Devanagari — one variable-font file per family pulled from
+github.com/google/fonts (OFL), declared at each token weight in
+pubspec.yaml (Flutter resolves weight against the file's own wght axis —
+no per-weight static files needed). OFL license text + README per family
+in app/assets/fonts/. Devanagari fallback proven by a widget test
+rendering real Hindi text through the themed roles without throwing, plus
+an assertion every Fraunces/Manrope role's fontFamilyFallback resolves to
+the correct Noto family.
+main.dart wired to MaterialApp.router(theme/darkTheme/themeMode.system),
+dark default per tokens.meta.defaultTheme. models_hub spot-check: grepped
+every models_hub file for hardcoded Colors./Color(0x — none found, all
+Theme.of(context) semantic roles already; no styling fixes needed.
+docs/design/chat-spec.md written — layout, bubbles (incl. code-block/
+markdown→TextTheme mapping), streaming batching (≤100ms flush cadence,
+motion.instant), reasoning-token collapse, sampling sheet (defaults from
+the real SamplingParams() class), folders/search, empty states, error
+states (mapped to the real EngineFailure taxonomy incl. OOM→smaller-model
+CTA), export, full motion spec table — every value cites its token or an
+existing data-layer type (ConversationSummary/MessageInfo/SamplingParams/
+InstalledModelInfo) so T4 needs no design decisions.
+Verification: whole-repo `make verify` green (347/347 tests, analyze
+clean, format clean) — this includes T2/T3's concurrent work, not just
+mine; the one enabling step I took outside my own files was running
+`build_runner build` (T2's SamplingParams.freezed.dart was the only
+missing generated output, blocking compilation repo-wide) — purely
+mechanical codegen from an already-complete @Freezed annotation, no
+hand-written file touched, T2/T3's own source files left uncommitted by me.
+macOS debug build compiles and launches (process stable, no crash) but
+this sandbox has no real window-server display — `screencapture` only
+sees the desktop wallpaper, no app window — so visual confirmation is via
+widget-test rendering instead, per the brief's stated fallback: chose a
+widget test over goldens (sample_screen_theme_test.dart, dark+light, key
+roles asserted on real rendered widgets), not golden images.
+Sign-off: my own D1-D5 are done; the loop's [G3] BLOCKING designer sign-off
+on the *built chat UI* still applies once T4 ships it — will review chat
+screens against chat-spec.md before that gate closes.
+Request: flutter-core build features/chat against chat-spec.md +
+AppTheme/DhruvaTokens; flag anything the spec left ambiguous rather than
+improvising a value.
