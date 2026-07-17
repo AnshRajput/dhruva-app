@@ -5,6 +5,24 @@ import 'package:dhruva/features/chat/widgets/message_bubble.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher_platform_interface/link.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+class _FakeUrlLauncher extends UrlLauncherPlatform {
+  final List<String> launched = [];
+
+  @override
+  LinkDelegate? get linkDelegate => null;
+
+  @override
+  Future<bool> canLaunch(String url) async => true;
+
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    launched.add(url);
+    return true;
+  }
+}
 
 MessageInfo _message({
   required MessageRole role,
@@ -93,6 +111,60 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
     },
   );
+
+  group('N4 (staff review): markdown links', () {
+    late _FakeUrlLauncher fakeLauncher;
+    final realLauncher = UrlLauncherPlatform.instance;
+
+    setUp(() {
+      fakeLauncher = _FakeUrlLauncher();
+      UrlLauncherPlatform.instance = fakeLauncher;
+    });
+
+    tearDown(() {
+      UrlLauncherPlatform.instance = realLauncher;
+    });
+
+    testWidgets('tapping a markdown link launches its href externally', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(
+            role: MessageRole.assistant,
+            content: '[the docs](https://example.com/docs)',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('the docs'));
+      await tester.pumpAndSettle();
+
+      expect(fakeLauncher.launched, ['https://example.com/docs']);
+    });
+
+    testWidgets('a non-http(s) href (trust-boundary case) is never launched', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(
+            role: MessageRole.assistant,
+            content: '[click me](javascript:alert(1))',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('click me'));
+      await tester.pumpAndSettle();
+
+      expect(fakeLauncher.launched, isEmpty);
+    });
+  });
 
   testWidgets('reasoning block is collapsed by default and expands on tap', (
     tester,
