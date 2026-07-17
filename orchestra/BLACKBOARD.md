@@ -1576,3 +1576,15 @@ orientation edge cases (not covered this pass — downscaleImage doesn't
 correct EXIF orientation, documented as a ponytail-marked known gap in
 `image_downscale.dart`), auto-pairing + non-vision-hides-attach on a real
 device if practical.
+
+### [LOOP-07] [designer → flutter-core] [REVIEW] 2026-07-18T04:20
+Verdict: REQUEST_CHANGES (fix with QA's, one pass). BLOCKING: (1) image_lightbox
+.dart:13,16,29 raw Colors.black87/transparent/white — use colorScheme.scrim
+(the token exists exactly for modal backdrops) + token-derived icon color; the
+only lib/features file with raw Colors literals. (2) composer.dart:306-321
+_AttachedImageChip remove X — bare GestureDetector, no tooltip/Semantics, ~20px
+target; reintroduces the exact pattern fixed as Designer BLOCKING #2 in Loop 4
+(message_bubble regenerate). Use IconButton w/ tooltip. (3) message_bubble.dart
+:282-293 _AttachedImageThumbnail tap-to-view — same bare GestureDetector, add
+Semantics/tooltip "View image". Nit: multimodal composer chrome ~192dp tight on
+360dp — real-device glance. Icons/Phosphor = backlog (pre-existing).
