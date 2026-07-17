@@ -8,9 +8,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 Future<void> showImageLightbox(BuildContext context, Uint8List imageBytes) {
+  // Designer BLOCKING: no raw Colors literals — scrim is the exact token for a
+  // modal backdrop; the close icon reads from the color scheme so it stays
+  // legible against the scrim in both themes.
+  final colorScheme = Theme.of(context).colorScheme;
   return showDialog<void>(
     context: context,
-    barrierColor: Colors.black87,
+    barrierColor: colorScheme.scrim,
     builder: (context) => Dialog(
       insetPadding: EdgeInsets.zero,
       backgroundColor: Colors.transparent,
@@ -26,7 +30,7 @@ Future<void> showImageLightbox(BuildContext context, Uint8List imageBytes) {
             right: 8,
             child: IconButton(
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close, color: Colors.white),
+              icon: Icon(Icons.close, color: colorScheme.onSurface),
               tooltip: 'Close',
             ),
           ),

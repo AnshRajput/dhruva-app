@@ -514,7 +514,10 @@ final class ChatRepository {
 
   // ---- Export -----------------------------------------------------------
 
-  Future<ChatExportData> _exportData(int conversationId) async {
+  Future<ChatExportData> _exportData(
+    int conversationId, {
+    Set<int> imageMessageIds = const {},
+  }) async {
     final convo = await getConversation(conversationId);
     if (convo == null) {
       throw StorageNotFoundFailure('no conversation with id $conversationId');
@@ -526,15 +529,30 @@ final class ChatRepository {
       modelLabel: modelLabel,
       createdAt: convo.createdAt,
       messages: messages,
+      imageMessageIds: imageMessageIds,
     );
   }
 
-  Future<String> exportConversationMarkdown(int conversationId) async {
-    return formatConversationMarkdown(await _exportData(conversationId));
+  /// [imageMessageIds]: message ids that had an image attached this session
+  /// (image bytes aren't persisted — see [ChatExportData.imageMessageIds]);
+  /// the caller passes the live chat state's attached-image keys so the export
+  /// records a `[image attached]` marker instead of dropping it silently.
+  Future<String> exportConversationMarkdown(
+    int conversationId, {
+    Set<int> imageMessageIds = const {},
+  }) async {
+    return formatConversationMarkdown(
+      await _exportData(conversationId, imageMessageIds: imageMessageIds),
+    );
   }
 
-  Future<String> exportConversationJson(int conversationId) async {
-    return formatConversationJson(await _exportData(conversationId));
+  Future<String> exportConversationJson(
+    int conversationId, {
+    Set<int> imageMessageIds = const {},
+  }) async {
+    return formatConversationJson(
+      await _exportData(conversationId, imageMessageIds: imageMessageIds),
+    );
   }
 
   Future<String?> _modelLabel(int? modelId) async {

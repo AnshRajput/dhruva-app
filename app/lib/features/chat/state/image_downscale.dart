@@ -17,22 +17,38 @@ import 'dart:ui' as ui;
 /// orchestra/BLACKBOARD.md LOOP-07 PLAN: "vision models want ~512-1024px").
 const kVisionMaxDimension = 1024;
 
+/// Thrown by [downscaleImage] for an animated/GIF input. Skia's codec ignores
+/// `targetWidth`/`targetHeight` for GIF, so the downscale ceiling silently
+/// does nothing and a multi-MB full-res GIF would reach mtmd (QA MED, Loop 7).
+/// A still-image vision model has no use for an animated frame set anyway, so
+/// we reject rather than cap — the composer surfaces a clear message.
+class UnsupportedImageFormat implements Exception {
+  final String message;
+  const UnsupportedImageFormat(this.message);
+  @override
+  String toString() => 'UnsupportedImageFormat: $message';
+}
+
 /// Downscales [bytes] (any format `dart:ui` can decode — mtmd auto-detects
 /// PNG/JPEG/etc regardless) so neither dimension exceeds [maxDimension],
 /// preserving aspect ratio. Returns [bytes] unchanged when already within
 /// bounds — no need to burn a decode+re-encode round trip on a screenshot
 /// that's already small. Always re-encodes as PNG (lossless) when resizing.
 ///
-/// ponytail: EXIF orientation is not corrected here — `dart:ui`'s decoder
-/// doesn't read the EXIF tag, so a rotated gallery import could render
-/// sideways. Camera captures on iOS/Android are typically already upright
-/// (rotation baked in by the OS camera pipeline). Upgrade path if QA repros
-/// a sideways image: bake orientation with `package:image` before this
-/// function runs.
+/// Throws [UnsupportedImageFormat] for a GIF (see that type's doc), and lets
+/// `dart:ui`'s own decode errors (corrupt/truncated bytes) propagate to the
+/// caller — the composer catches both and shows a "couldn't attach" message.
+///
+/// EXIF orientation: `dart:ui`'s image codec DOES apply the EXIF orientation
+/// tag on decode (Skia bakes it in), so a rotated gallery import comes through
+/// upright — no separate rotation pass is needed here.
 Future<Uint8List> downscaleImage(
   Uint8List bytes, {
   int maxDimension = kVisionMaxDimension,
 }) async {
+  if (_isGif(bytes)) {
+    throw const UnsupportedImageFormat('animated GIFs are not supported');
+  }
   final descriptor = await ui.ImageDescriptor.encoded(
     await ui.ImmutableBuffer.fromUint8List(bytes),
   );
@@ -55,3 +71,11 @@ Future<Uint8List> downscaleImage(
   frame.image.dispose();
   return data!.buffer.asUint8List();
 }
+
+/// GIF magic bytes: "GIF8" (covers both GIF87a and GIF89a).
+bool _isGif(Uint8List bytes) =>
+    bytes.length >= 4 &&
+    bytes[0] == 0x47 &&
+    bytes[1] == 0x49 &&
+    bytes[2] == 0x46 &&
+    bytes[3] == 0x38;

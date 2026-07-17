@@ -135,66 +135,44 @@ void main() {
     },
   );
 
-  test('an animated (multi-frame) GIF does not crash, and DOES flatten to a '
-      'single still frame — but QA BUG (medium): the size ceiling is NOT '
-      'honored for GIF input. ui.instantiateImageCodec(bytes, targetWidth: '
-      '..., targetHeight: ...) silently ignores the target dimensions for '
-      'GIF-format bytes on this Flutter/Skia version (confirmed at both a '
-      'tiny 40x40 fixture here and a realistic 3000x3000 one below) — an '
-      'oversized animated GIF sails through downscaleImage at full '
-      'resolution, defeating the whole point of the downscale step (memory/ '
-      'OOM safety before mtmd). PNG/JPEG input (the huge-image and '
-      'aspect-ratio tests above) resize correctly; this is GIF-codec-path '
-      'specific.', () async {
+  test('QA MED FIXED: an animated GIF is now REJECTED, not passed through at '
+      'full resolution. Skia ignores targetWidth/targetHeight for GIF bytes '
+      '(the ceiling silently did nothing), and a still-image vision model has '
+      'no use for an animated frame set, so downscaleImage throws '
+      'UnsupportedImageFormat rather than handing a multi-MB full-res GIF to '
+      'mtmd. The composer catches it and shows a clear message.', () async {
     final gif = File('test/assets/animated.gif').readAsBytesSync();
     final codec = await ui.instantiateImageCodec(gif);
     expect(codec.frameCount, greaterThan(1), reason: 'fixture is not animated');
     codec.dispose();
 
-    final before = await _dimensionsOf(gif); // 40x40
-    final result = await downscaleImage(gif, maxDimension: 20);
-    final after = await _dimensionsOf(result);
-    // Documents the bug: this SHOULD be <=20 (the ceiling) but isn't.
-    expect(
-      after.width,
-      before.width,
-      reason:
-          'if this fails, the GIF-resize bug has been fixed upstream — '
-          'flip this assertion to lessThanOrEqualTo(20) and close the BUG',
+    await expectLater(
+      downscaleImage(gif, maxDimension: 20),
+      throwsA(isA<UnsupportedImageFormat>()),
     );
   });
 
   test(
-    'QA BUG repro at realistic scale: a 3000x3000 animated GIF (a plausible '
-    'saved-meme/screen-recording size) is NOT downscaled at all — input and '
-    'output dimensions are identical, well past kVisionMaxDimension',
+    'QA MED FIXED at realistic scale: a 3000x3000 animated GIF is rejected '
+    'before any decode (magic-byte check) — no full-res GIF ever reaches mtmd',
     () async {
       final gif = File('test/assets/animated_large.gif').readAsBytesSync();
       final before = await _dimensionsOf(gif);
       expect(before.width, 3000);
-      final result = await downscaleImage(gif);
-      final after = await _dimensionsOf(result);
-      expect(
-        after.width,
-        3000,
-        reason:
-            'if this fails (i.e. the image WAS downscaled), the GIF-resize '
-            'bug is fixed — update this test to assert '
-            'lessThanOrEqualTo(kVisionMaxDimension) instead',
+      await expectLater(
+        downscaleImage(gif),
+        throwsA(isA<UnsupportedImageFormat>()),
       );
     },
-    timeout: const Timeout(Duration(minutes: 2)),
   );
 
   test('an EXIF-rotated JPEG (orientation tag 6, pixel buffer stored landscape '
       'but meant to display portrait) decodes ALREADY ROTATED — dart:ui/Skia '
       'applies the EXIF transform at decode time on this engine version, so '
       'downscaleImage sees the correctly-oriented image and needs no '
-      'orientation math of its own. This CONTRADICTS the "ponytail: EXIF '
-      'orientation is not corrected here" comment in image_downscale.dart, '
-      'which claims dart:ui\'s decoder does not read the EXIF tag — filed as '
-      'a QA BUG (stale/incorrect comment, not a behavior bug: the pipeline is '
-      'actually fine).', () async {
+      'orientation math of its own. The image_downscale.dart doc now states '
+      'this correctly (QA LOW: the stale "decoder does not read EXIF" comment '
+      'was fixed).', () async {
     final jpeg = File('test/assets/exif_rotated.jpg').readAsBytesSync();
     // Raw pixel buffer is 120w x 80h landscape; EXIF orientation 6 asks
     // for a 90 CW rotation to display correctly -> 80w x 120h portrait.

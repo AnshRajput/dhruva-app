@@ -280,6 +280,9 @@ void main() {
 
         expect(find.byType(Image), findsOneWidget);
         expect(find.byType(Dialog), findsNothing);
+        // Designer BLOCKING: the tap-to-view thumbnail carries a "View image"
+        // tooltip + button semantics (was a bare, unlabeled GestureDetector).
+        expect(find.byTooltip('View image'), findsOneWidget);
 
         // Invoked directly rather than via `tester.tap` — the bubble's
         // `FractionallySizedBox`/`Align` scaffolding (built for a bounded

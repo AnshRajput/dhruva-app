@@ -110,7 +110,22 @@ class _ComposerState extends ConsumerState<Composer> {
           ),
         ),
       );
+    } on UnsupportedImageFormat catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Animated GIFs are not supported — attach a photo.'),
+        ),
+      );
     } on PlatformException catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't attach that image.")),
+      );
+    } catch (_) {
+      // QA HIGH: a corrupt/truncated image makes `downscaleImage`'s dart:ui
+      // decode throw a bare Exception — surface the same "couldn't attach"
+      // message instead of letting it crash the pick flow.
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Couldn't attach that image.")),
@@ -303,12 +318,20 @@ class _AttachedImageChip extends StatelessWidget {
                 fit: BoxFit.cover,
               ),
             ),
+            // Designer BLOCKING: was a bare GestureDetector (~20px, no
+            // tooltip/Semantics). IconButton gives a tooltip + semantic label
+            // + a ≥44px tap target for free, without inflating the 14px badge
+            // (same fix as Loop 4's message_bubble action icons).
             Positioned(
-              top: -8,
-              right: -8,
-              child: GestureDetector(
-                onTap: onRemove,
-                child: CircleAvatar(
+              top: -16,
+              right: -16,
+              child: IconButton(
+                onPressed: onRemove,
+                tooltip: 'Remove image',
+                iconSize: 14,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                icon: CircleAvatar(
                   radius: 10,
                   backgroundColor: theme.colorScheme.surfaceContainerHighest,
                   child: Icon(

@@ -515,9 +515,19 @@ class _ThreadScaffold extends ConsumerWidget {
     final conversationId = state.conversationId;
     if (conversationId == null) return;
     final repo = ref.read(chatRepositoryProvider);
+    // Loop 7: images are session-only, so hand the export the ids of messages
+    // that had an image attached this session — it emits a `[image attached]`
+    // marker rather than dropping the context (QA LOW).
+    final imageMessageIds = state.attachedImages.keys.toSet();
     final content = markdown
-        ? await repo.exportConversationMarkdown(conversationId)
-        : await repo.exportConversationJson(conversationId);
+        ? await repo.exportConversationMarkdown(
+            conversationId,
+            imageMessageIds: imageMessageIds,
+          )
+        : await repo.exportConversationJson(
+            conversationId,
+            imageMessageIds: imageMessageIds,
+          );
     await SharePlus.instance.share(
       ShareParams(
         text: content,

@@ -18,11 +18,19 @@ final class ChatExportData {
   final DateTime createdAt;
   final List<MessageInfo> messages;
 
+  /// Message ids that had an image attached (Loop 7 vision). Image bytes are
+  /// session-only (not persisted — see `ChatThreadState.attachedImages`), so
+  /// the export can't embed the picture, but it records a `[image attached]`
+  /// marker so the context isn't dropped silently (QA LOW). Empty for a
+  /// conversation exported in a later session where the map is gone.
+  final Set<int> imageMessageIds;
+
   const ChatExportData({
     required this.title,
     this.modelLabel,
     required this.createdAt,
     required this.messages,
+    this.imageMessageIds = const {},
   });
 }
 
@@ -48,6 +56,11 @@ String formatConversationMarkdown(ChatExportData data) {
     buffer
       ..writeln()
       ..writeln('## ${_roleLabel(message.role)}');
+    if (data.imageMessageIds.contains(message.id)) {
+      buffer
+        ..writeln()
+        ..writeln('[image attached]');
+    }
     final reasoning = message.reasoningContent;
     if (reasoning != null && reasoning.isNotEmpty) {
       buffer
@@ -79,6 +92,7 @@ String formatConversationJson(ChatExportData data) {
         {
           'role': m.role.name,
           'content': m.content,
+          if (data.imageMessageIds.contains(m.id)) 'imageAttached': true,
           if (m.reasoningContent != null)
             'reasoningContent': m.reasoningContent,
           'status': m.status.name,

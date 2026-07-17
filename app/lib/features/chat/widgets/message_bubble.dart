@@ -279,14 +279,24 @@ class _AttachedImageThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-    return GestureDetector(
-      key: const Key('attached-image-thumbnail'),
-      onTap: () => showImageLightbox(context, imageBytes),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(tokens.radius.sm),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 200, maxWidth: 240),
-          child: Image.memory(imageBytes, fit: BoxFit.cover),
+    // Designer BLOCKING: the bare GestureDetector announced nothing to a
+    // screen reader. The tap target is already the full thumbnail (≥200px),
+    // so the gap was purely semantic — a button role + label + tooltip.
+    return Tooltip(
+      message: 'View image',
+      child: Semantics(
+        button: true,
+        label: 'View image',
+        child: GestureDetector(
+          key: const Key('attached-image-thumbnail'),
+          onTap: () => showImageLightbox(context, imageBytes),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 240),
+              child: Image.memory(imageBytes, fit: BoxFit.cover),
+            ),
+          ),
         ),
       ),
     );

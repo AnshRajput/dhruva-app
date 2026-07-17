@@ -319,6 +319,9 @@ void main() {
 
         expect(imageAttacher.lastSource, ImageAttachSource.gallery);
         expect(find.byType(Image), findsWidgets);
+        // Designer BLOCKING: the remove affordance is a tooltipped IconButton
+        // (≥44px), not a bare GestureDetector.
+        expect(find.byTooltip('Remove image'), findsOneWidget);
         // Send is enabled with an image attached even though no text was
         // typed — "just a photo" is a valid send.
         final sendButton = tester.widget<IconButton>(
@@ -418,27 +421,62 @@ void main() {
       },
     );
 
-    // QA BUG (high, filed not fixed — see QA report): corrupt/non-image
-    // bytes picked from the gallery are NOT caught by `_pickImage`.
-    // `composer.dart`'s try/catch only handles `ImageAttachPermissionDenied`
-    // and `PlatformException` (composer.dart:100-118); `downscaleImage`
-    // throws a plain, untyped `Exception('Invalid image data')` for
-    // corrupt/0-byte/non-image bytes (proven in image_downscale_test.dart's
-    // "hostile input" group), so it propagates out of the fire-and-forget
-    // `onTap: () => _pickImage(source)` (composer.dart:131) as an unhandled
-    // async error instead of the "Couldn't attach that image" SnackBar the
-    // sibling `PlatformException` branch already shows for a picker-level
-    // failure. Confirmed live: driving this exact path through a widget
-    // test makes `flutter_test`'s own binding hard-fail with "Exception:
-    // Invalid image data" the moment the real async decode call unwinds —
-    // there is no way to observe a "handled" outcome because there isn't
-    // one. Not turned into a permanently-red test here (it fights
-    // flutter_test's zone handling for detached-Future errors and risks
-    // wedging the runner); the unit-level proof + this citation is the
-    // repro. Fix shape: wrap `downscaleImage` in composer.dart's existing
-    // try/catch with a third `on Exception catch (_)` (or narrow it to
-    // whatever typed failure `downscaleImage` starts throwing) reusing the
-    // same "Couldn't attach that image" SnackBar.
+    // QA HIGH FIXED: corrupt/non-image bytes picked from the gallery used to
+    // escape `_pickImage`'s try/catch (it only handled
+    // `ImageAttachPermissionDenied`/`PlatformException`) and crash the pick
+    // flow as an unhandled async error. `downscaleImage` throws a plain
+    // `Exception` for undecodable bytes; `_pickImage` now has a catch-all that
+    // surfaces the same "Couldn't attach that image." SnackBar as the
+    // picker-level failure branch. No crash, a clear message, no thumbnail.
+    testWidgets('a corrupt (undecodable) picked image shows a clear message, '
+        'not a crash', (tester) async {
+      imageAttacher.nextImage = Uint8List.fromList(
+        List.generate(64, (i) => i % 256),
+      );
+      await pumpComposer(
+        tester,
+        isGenerating: false,
+        isMultimodal: true,
+        onSend: (_, _) {},
+      );
+
+      await tester.tap(attachIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Photo Library'));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't attach that image."), findsOneWidget);
+      // No thumbnail chip was attached, send stays disabled.
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    // QA MED FIXED: an animated GIF gets a clear, GIF-specific message (its
+    // downscale ceiling is a no-op on Skia, so it's rejected rather than sent
+    // full-res to mtmd — see image_downscale.dart).
+    testWidgets('an animated GIF shows the GIF-specific message', (
+      tester,
+    ) async {
+      imageAttacher.nextImage = File(
+        'test/assets/animated.gif',
+      ).readAsBytesSync();
+      await pumpComposer(
+        tester,
+        isGenerating: false,
+        isMultimodal: true,
+        onSend: (_, _) {},
+      );
+
+      await tester.tap(attachIcon);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Photo Library'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Animated GIFs are not supported — attach a photo.'),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
 
     testWidgets('cancelling the picker (returns null) leaves the composer '
         'untouched', (tester) async {
