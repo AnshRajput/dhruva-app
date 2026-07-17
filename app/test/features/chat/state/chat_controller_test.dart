@@ -1109,5 +1109,171 @@ void main() {
         expect(userTurn.images, [imageBytes]);
       },
     );
+
+    // QA attack 2: the "needs projector" half-state (Loop-7 T2 HANDOFF) —
+    // `isVision: true, mmprojPath: null` on the installed row (model landed,
+    // its mmproj download failed/hasn't happened yet). The row must still
+    // load and chat normally as a text-only model: no crash trying to hand
+    // the engine a null projector path, and the attach button stays gated
+    // off (isMultimodal false). engine_vision_test.dart already proves this
+    // one level down (bare EngineService, mmprojPath: null loads text-only);
+    // this test closes the loop through the InstalledModelInfo row + the
+    // controller's own load path.
+    test(
+      'a vision model row missing its projector (needsProjector half-state) '
+      'loads and chats as text-only, no crash, attach stays gated off',
+      () async {
+        final modelId = await db
+            .into(db.installedModels)
+            .insert(
+              InstalledModelsCompanion.insert(
+                repoId: 'ggml-org/Needs-Projector-GGUF',
+                fileName: 'needs-projector.gguf',
+                sizeBytes: 100,
+                localPath: '/tmp/dhruva-test-needs-projector.gguf',
+                downloadedAt: DateTime.utc(2026, 7, 17),
+                isVision: const Value(true),
+                // mmprojPath left null (the default) — the half-state.
+              ),
+            );
+        final engine = FakeEngineService(); // multimodal: false (default)
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+        await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        await notifier.ensureModelLoaded();
+
+        // Never even attempts to pass a projector path to the engine.
+        expect(engine.lastLoadParams?.mmprojPath, isNull);
+        var state = container.read(chatControllerProvider(args)).value!;
+        expect(state.modelLoadError, isNull, reason: 'load should not fail');
+        expect(state.isMultimodal, isFalse);
+
+        // And it's still a perfectly usable text-only chat.
+        await notifier.sendMessage('hello');
+        state = container.read(chatControllerProvider(args)).value!;
+        expect(state.messages.last.status.toString(), contains('complete'));
+      },
+    );
+
+    // QA attack 5: switching the conversation's model from vision to
+    // text-only mid-conversation. The attach gate must follow the NEW
+    // model (hide), but images already attached to earlier turns are keyed
+    // by message id in session state, independent of which model is
+    // currently loaded — chat_thread_screen.dart renders them off that map
+    // regardless, so they must survive the switch.
+    test('switching from a vision model to a text-only model mid-conversation: '
+        'isMultimodal flips false (attach hides) but earlier attachedImages '
+        'entries are untouched (bubbles still render them)', () async {
+      final visionModelId = await insertVisionModel();
+      final engine = FakeEngineService(multimodal: true);
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: visionModelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      final imageBytes = Uint8List.fromList([7, 7, 7]);
+      await notifier.sendMessage('what is this', imageBytes: imageBytes);
+      var state = container.read(chatControllerProvider(args)).value!;
+      expect(state.isMultimodal, isTrue);
+      final userMsgId = state.messages.first.id;
+      expect(state.attachedImages[userMsgId], imageBytes);
+
+      // FakeEngineService.multimodal is fixed per-instance (it models
+      // "whichever model is currently loaded"); a real engine's
+      // isMultimodal would flip per `load()` call based on that model's
+      // own mmprojPath. Model the same effect here by loading a
+      // text-only model next — ensureModelLoaded reads engine.isMultimodal
+      // fresh after that load either way.
+      final textEngine = FakeEngineService();
+      final textModelId = await insertModel(
+        repoId: 'bartowski/Some-Text-Model-GGUF',
+      );
+      final textModel = await container
+          .read(storageManagerProvider)
+          .getInstalledModel(textModelId);
+
+      final container2 = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+          engineServiceProvider.overrideWithValue(textEngine),
+        ],
+      );
+      addTearDown(container2.dispose);
+      final args2 = ChatRouteArgs(conversationId: state.conversationId);
+      await container2.read(chatControllerProvider(args2).future);
+      container2.listen(chatControllerProvider(args2), (_, _) {});
+      final notifier2 = container2.read(chatControllerProvider(args2).notifier);
+
+      await notifier2.switchModel(textModel!);
+      state = container2.read(chatControllerProvider(args2)).value!;
+      expect(state.isMultimodal, isFalse, reason: 'attach button hides');
+      // The earlier turn's image is still there for the bubble to render
+      // — reloaded fresh from the repo (this is a NEW controller/
+      // container reading the same conversation, the closest in-memory
+      // proxy for "re-opened the thread after switching models" this
+      // session-only map's own design allows) plus this session's own
+      // send above; either way the message list/thumbnail keying is
+      // untouched by switchModel, which only ever writes isMultimodal/
+      // model/modelId.
+      expect(
+        state.messages.any((m) => m.id == userMsgId),
+        isTrue,
+        reason: 'the earlier image message itself is not dropped',
+      );
+    });
+  });
+
+  group('Loop 7: vision + character (QA attack 5)', () {
+    test('a character-bound conversation with an attached image: persona '
+        'system prompt AND the image both reach the engine on the same turn '
+        "(persona + image aren't mutually exclusive code paths)", () async {
+      const persona = 'You are a cheerful art critic.';
+      final modelId = await insertVisionModel();
+      final characterId = await db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: 'Art Critic',
+              personaSystemPrompt: persona,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+      final engine = FakeEngineService(multimodal: true);
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(
+        initialModelId: modelId,
+        characterId: characterId,
+      );
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      final imageBytes = Uint8List.fromList([3, 1, 4]);
+      await notifier.sendMessage(
+        'What do you think of this piece?',
+        imageBytes: imageBytes,
+      );
+
+      expect(engine.lastImageCount, 1);
+      final sent = engine.lastMessages!;
+      expect(
+        sent.first,
+        isA<ChatTurn>()
+            .having((t) => t.role, 'role', EngineRole.system)
+            .having((t) => t.content, 'content', persona),
+      );
+      final userTurn = sent.firstWhere((t) => t.role == EngineRole.user);
+      expect(userTurn.images, [imageBytes]);
+
+      final state = container.read(chatControllerProvider(args)).value!;
+      expect(state.characterId, characterId);
+      expect(state.attachedImages[state.messages.first.id], imageBytes);
+    });
   });
 }

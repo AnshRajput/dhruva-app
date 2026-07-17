@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dhruva/data/chat/chat_export.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
@@ -205,6 +207,79 @@ void main() {
       final json = formatConversationJson(data);
       expect(json, contains('"status": "error"'));
       expect(json, contains('"errorKind": "EngineDecodeFailure"'));
+    });
+  });
+
+  // QA (Loop-7 TEST, attack 5 "vision + existing features" — export):
+  // `ChatExportData`/`MessageInfo` carry no image field at all — Loop 7's
+  // attached-image bytes live only in `ChatThreadState.attachedImages`
+  // (session-only, chat_controller.dart's own doc), and
+  // `chat_thread_screen.dart`'s `_export` calls `ChatRepository.
+  // exportConversationMarkdown/Json(conversationId)` directly from the
+  // repo, never through the controller — so an exported conversation
+  // structurally CANNOT know a message had an image attached. Confirmed
+  // here: exporting a user message whose text WAS the vision "extract
+  // text" preset produces clean output with zero trace an image was ever
+  // involved. Not a crash, not corrupted data — but a silent, permanent
+  // loss of context in the exported artifact (worst case: an
+  // "Extract text" exchange exports as a question with no visible
+  // question and an answer with no image to explain what it's answering
+  // about). Filed as a QA BUG, low/medium severity — export is a real
+  // chat-spec.md §9 feature, and nothing tells the user their export is
+  // incomplete.
+  group('QA BUG: image attachments are silently absent from export', () {
+    test('markdown export of an image-attached exchange has no mention of '
+        'an image', () {
+      final data = ChatExportData(
+        title: 'Photo Q&A',
+        createdAt: createdAt,
+        messages: [
+          message(
+            id: 1,
+            role: MessageRole.user,
+            content: 'What is the main color of this image?',
+          ),
+          message(id: 2, role: MessageRole.assistant, content: 'Red.'),
+        ],
+      );
+      final md = formatConversationMarkdown(data);
+      expect(md, contains('What is the main color of this image?'));
+      expect(md, contains('Red.'));
+      // Documents the gap: no [image]/attachment marker of any kind.
+      expect(md.toLowerCase(), isNot(contains('attach')));
+      expect(md.toLowerCase(), isNot(contains('[image')));
+    });
+
+    test('JSON export has no image/attachment field on the message at all', () {
+      final data = ChatExportData(
+        title: 'Photo Q&A',
+        createdAt: createdAt,
+        messages: [
+          // This is the vision "extract text" preset's actual wording
+          // (vision_presets.dart's extractTextPrompt), inlined rather than
+          // imported to keep this data/-layer test's imports pointed only
+          // at data/ (ADR-002's features -> data -> core direction). The
+          // check below inspects JSON *keys*, not content, so the word
+          // "image" appearing in the message text itself doesn't matter.
+          message(
+            id: 1,
+            role: MessageRole.user,
+            content: 'Extract all text from this image, output only the text',
+          ),
+        ],
+      );
+      final decoded =
+          jsonDecode(formatConversationJson(data)) as Map<String, dynamic>;
+      final msgKeys = (decoded['messages'] as List)
+          .cast<Map<String, dynamic>>()
+          .single
+          .keys;
+      expect(
+        msgKeys,
+        isNot(anyElement(contains('image'))),
+        reason: 'no field carries the fact this turn had an image attached',
+      );
+      expect(msgKeys, isNot(anyElement(contains('attach'))));
     });
   });
 }

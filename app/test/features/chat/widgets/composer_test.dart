@@ -418,6 +418,28 @@ void main() {
       },
     );
 
+    // QA BUG (high, filed not fixed — see QA report): corrupt/non-image
+    // bytes picked from the gallery are NOT caught by `_pickImage`.
+    // `composer.dart`'s try/catch only handles `ImageAttachPermissionDenied`
+    // and `PlatformException` (composer.dart:100-118); `downscaleImage`
+    // throws a plain, untyped `Exception('Invalid image data')` for
+    // corrupt/0-byte/non-image bytes (proven in image_downscale_test.dart's
+    // "hostile input" group), so it propagates out of the fire-and-forget
+    // `onTap: () => _pickImage(source)` (composer.dart:131) as an unhandled
+    // async error instead of the "Couldn't attach that image" SnackBar the
+    // sibling `PlatformException` branch already shows for a picker-level
+    // failure. Confirmed live: driving this exact path through a widget
+    // test makes `flutter_test`'s own binding hard-fail with "Exception:
+    // Invalid image data" the moment the real async decode call unwinds —
+    // there is no way to observe a "handled" outcome because there isn't
+    // one. Not turned into a permanently-red test here (it fights
+    // flutter_test's zone handling for detached-Future errors and risks
+    // wedging the runner); the unit-level proof + this citation is the
+    // repro. Fix shape: wrap `downscaleImage` in composer.dart's existing
+    // try/catch with a third `on Exception catch (_)` (or narrow it to
+    // whatever typed failure `downscaleImage` starts throwing) reusing the
+    // same "Couldn't attach that image" SnackBar.
+
     testWidgets('cancelling the picker (returns null) leaves the composer '
         'untouched', (tester) async {
       imageAttacher.nextImage = null;
