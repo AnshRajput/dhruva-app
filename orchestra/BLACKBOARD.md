@@ -733,3 +733,47 @@ notes (no RepaintBoundary on bubbles, O(n²) _rawBuffer at 4096 max tokens —
 watch); N4 markdown links not tappable. Everything else verified clean:
 privacy grep, FFI free paths + timeout no-double-settle, real migration +
 restart tests, atomic clearAllHistory, manifest/minSdk sane, ADR-002 intact.
+
+### [LOOP-04] [flutter-core → reviewer] [HANDOFF] 2026-07-17T12:07
+B1 + N1 + N4 closed on loop/04-chat, commits 7cff9a5 (B1+N1) and 9f1d32c
+(N4). N2/N3 left on backlog per your ruling — not touched.
+B1: `chatControllerProvider` is now `AsyncNotifierProvider.autoDispose.
+family`. `ref.keepAlive()` is acquired at the very TOP of
+`_runAssistantTurn` — before `ensureModelLoaded()`'s own `await`, not
+after `isGenerating` flips true — because that model-load await is real
+async time an unlistened autoDispose provider can be reclaimed during
+(caught this the hard way: the real-engine restart-simulation test threw
+"Cannot use the Ref... after it has been disposed" from inside
+`ensureModelLoaded` until the acquire point moved earlier). Released in
+`_resetStreamState` (every termination path funnels through it) plus
+both early-return branches in `_runAssistantTurn` (model-load error / no
+model selected — no stream ever starts, nothing to hold alive for).
+Fallout: every existing `chat_controller_test.dart` case that reads
+state after a bare `container.read(...).future)` needed a
+`container.listen(...)` added — standing in for the real screen's
+`ref.watch`, which is what actually kept these providers alive before
+autoDispose existed; without a listener, a widget-less container test
+has nothing playing that role. Same one-line fix in
+`sampling_settings_sheet_test.dart`, which hit the identical gap when
+the sheet's "Done" button called back into a by-then-disposed notifier.
+Two new tests prove the actual B1 contract: idle+no-listener disposes
+and rebuilds fresh; generating+listener-dropped does NOT dispose
+(self-held keepAlive), and completion releases it back to reclaimable.
+N1: `_flush` now tracks the exact last-pushed content/reasoning STRINGS
+(not lengths) and checks a real `startsWith` extension before appending
+a delta; on a non-extension (BUG-3's tag-stripping shrinking `content`
+mid-stream) it calls the new `ChatRepository.setStreamingContent` (full
+overwrite) instead. Verified the new controller-level test — the QA
+nested-think sequence streamed one character at a time — actually
+catches the regression: temporarily forced the old append-only path and
+watched it produce visibly corrupted persisted content ("<thil</thi"
+instead of " tailafter") plus a substring RangeError, then restored the
+fix and confirmed green, 3/3 stable reruns.
+N4: `onTapLink` wired to `url_launcher`, external + user-initiated, no
+confirmation dialog (matches the ruling). Only http(s) hrefs launch — a
+model's markdown output is a trust boundary, so `javascript:`/`file:`/
+`intent:` hrefs are silently dropped rather than opened.
+Tests: net +12 across the two commits. Full suite 463/463 green, `make
+verify` clean, coverage 80.7% (floor 70%). Not pushed.
+Request: this was flagged as the last blocker before v0.1.0-alpha — over
+to you for the re-verify.
