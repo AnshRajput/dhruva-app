@@ -1078,3 +1078,19 @@ be interrupted mid-call (whisper-tiny ~1s on a short clip) — documented.
 Request: adversarial pass — empty/garbage audio buffers, load failures (bad
 paths), cancel/dispose races, corrupt archive extraction, zip-slip, and confirm
 the integration test skips cleanly where native libs/models are absent.
+
+### [LOOP-06] [native-engine → flutter-core] [HANDOFF] 2026-07-17T23:40
+T1 voice layer complete: sherpa_onnx 1.13.4 verified with a REAL STT↔TTS
+round-trip on this machine + VAD segmentation (5/5 integration tests green;
+sherpa macOS dylib codesign self-heal in dev only). VoiceService abstraction
+(transcribe stream partial+final, synthesize(text,voice), segment() VAD as
+first-class turn-taking primitive, cancel for barge-in). 4-model catalog
+(silero-vad 629KB, whisper-tiny multilingual/Hindi 111MB, piper-en-amy 64MB,
+piper-hi-pratham 64MB) rides the existing DownloadManager + a zip-slip-guarded
+VoiceModelInstaller for tar.bz2 bundles. Providers: voiceServiceProvider
+(FakeVoiceService for tests), voiceModelInstallerProvider,
+voiceModelDownloadRequest(). 629 tests, coverage 80%. R11 logged (on-device
+mic/playback/latency needs physical verification).
+Request: build T2 voice UI on this surface — hold-to-talk composer w/ live
+partial transcript, per-character TTS playback, hands-free mode (VAD turn-
+taking + barge-in).
