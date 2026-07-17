@@ -79,11 +79,15 @@ void main() {
       expect(find.textContaining('bold'), findsOneWidget);
       expect(find.text('dart'), findsOneWidget); // language label
       expect(find.byIcon(Icons.copy), findsOneWidget);
+      // DESIGNER BLOCKING #2: real tooltip/semantic label, not a bare
+      // unlabeled InkWell.
+      expect(find.byTooltip('Copy code'), findsOneWidget);
 
       await tester.tap(find.byIcon(Icons.copy));
       await tester.pump();
       await tester.pump();
       expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.byTooltip('Copied'), findsOneWidget);
       // Let the copy-icon's revert timer (motion.moderate, 300ms) run out so
       // no pending timer trips flutter_test's end-of-test invariant check.
       await tester.pump(const Duration(milliseconds: 350));
@@ -158,6 +162,11 @@ void main() {
         ),
       ),
     );
+
+    // DESIGNER BLOCKING #2: both icons carry a real tooltip/semantic label
+    // now, not a bare unlabeled InkWell.
+    expect(find.byTooltip('Regenerate response'), findsOneWidget);
+    expect(find.byTooltip('Edit message'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.refresh));
     expect(regenerated, isTrue);

@@ -81,6 +81,42 @@ void main() {
 
     expect(find.text('Pick a model'), findsOneWidget);
     expect(find.text('No model installed yet'), findsOneWidget);
+    // Designer BLOCKING #1 / chat-spec.md §7.1: no composer visible on
+    // this state — a disabled composer under an empty state is worse than
+    // omitting it.
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('DESIGNER BLOCKING #1: an existing conversation whose model was '
+      'uninstalled (Conversations.modelId FKs setNull on delete) hides the '
+      'composer too, not just a brand-new draft — the message history stays '
+      'visible, the AppBar chip still offers "Pick a model"', (tester) async {
+    final modelId = await insertModel();
+    final repo = ChatRepository(db: db);
+    final conversationId = await repo.createConversation(modelId: modelId);
+    await repo.appendMessage(
+      conversationId: conversationId,
+      role: MessageRole.user,
+      content: 'hello from before the model was deleted',
+    );
+    await (db.delete(
+      db.installedModels,
+    )..where((t) => t.id.equals(modelId))).go();
+
+    await tester.pumpWidget(
+      buildApp(
+        FakeEngineService(),
+        ChatRouteArgs(conversationId: conversationId),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pick a model'), findsOneWidget);
+    expect(
+      find.text('hello from before the model was deleted'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets(

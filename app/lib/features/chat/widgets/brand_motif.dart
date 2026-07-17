@@ -14,6 +14,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 
 /// One star glyph, [size] logical pixels square.
@@ -119,9 +120,14 @@ class TypingIndicator extends StatefulWidget {
 
 class _TypingIndicatorState extends State<TypingIndicator>
     with SingleTickerProviderStateMixin {
+  // Bootstrap value only — no `BuildContext`/theme available at field-
+  // initializer time. `TokenMotionDuration.moderate` (design-tokens.json's
+  // own constant, not a re-typed literal) matches what didChangeDependencies
+  // immediately overwrites this with below, so the real theme extension is
+  // still the source of truth once the widget is mounted.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 300),
+    duration: TokenMotionDuration.moderate,
   )..repeat();
 
   @override

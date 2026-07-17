@@ -460,6 +460,22 @@ Every duration/easing pair below is a direct `DhruvaTokens.motion.*` lookup
 | "↓ New message" pill appear/disappear (§3.1) | `motion.fast` (150ms) | `motion.standard` |
 | Token batch flush cadence (§3.2, not an animation but a budget) | ≤`motion.instant` (100ms) per flush | n/a |
 
+**Documented deviation (designer nit 6, Loop-4 QA/design fix pass):** the
+sheet entrance/exit row's *duration* is sourced from the tokens
+(`showModalBottomSheet`'s `sheetAnimationStyle: AnimationStyle(duration:
+reverseDuration:)`), but the *curve* column (`motion.decelerate`/
+`motion.accelerate`) is NOT applied — verified against the Flutter SDK
+source (`material/bottom_sheet.dart`): `AnimationStyle.curve`/
+`.reverseCurve` are read by other widgets (`ExpansionTile`,
+`PopupMenuButton`, …) but never consumed by `_ModalBottomSheetRoute`'s
+transition builder, so there is no public hook to override the modal
+bottom sheet's curve without reimplementing the route. The sheet still
+uses Flutter's own internal transition curve, not a bounce/elastic one —
+this is a "can't reach it," not a "didn't bother" gap. Forcing it would
+mean vendoring `_ModalBottomSheetRoute`, a bigger maintenance surface than
+this one curve column is worth; revisit if Flutter ever plumbs
+`AnimationStyle.curve` through for modal bottom sheets.
+
 No `Curves.bounceOut`/`elasticOut`/spring-physics anywhere in this feature —
 matches `design-tokens.json` `motion.easing.banned` and is a permanent
 regression guard in `app_theme_test.dart`'s "no bounce/elastic/spring

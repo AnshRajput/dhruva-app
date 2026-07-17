@@ -184,9 +184,17 @@ class _MetadataRow extends StatelessWidget {
         if (tokPerSec != null) Text(' · $tokPerSec tok/s', style: style),
         if (onRegenerate != null) ...[
           SizedBox(width: tokens.spacing.xs),
-          InkWell(
-            onTap: onRegenerate,
-            child: Icon(Icons.refresh, size: 16, color: color),
+          // Designer BLOCKING #2: a bare InkWell+Icon here was a ~16px hit
+          // area with no tooltip/semantic label. IconButton gives both for
+          // free (native widget, ladder rung 4) plus an explicit >=44px
+          // tappable box without inflating the icon's visual size.
+          IconButton(
+            onPressed: onRegenerate,
+            tooltip: 'Regenerate response',
+            icon: Icon(Icons.refresh, size: 16, color: color),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ],
@@ -203,9 +211,13 @@ class _EditAffordance extends StatelessWidget {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
     return Opacity(
       opacity: 0.7,
-      child: InkWell(
-        onTap: onEdit,
-        child: Icon(Icons.edit_outlined, size: 16, color: color),
+      child: IconButton(
+        onPressed: onEdit,
+        tooltip: 'Edit message',
+        icon: Icon(Icons.edit_outlined, size: 16, color: color),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -373,13 +385,17 @@ class _CodeBlockState extends State<_CodeBlock> {
                 )
               else
                 const SizedBox.shrink(),
-              InkWell(
-                onTap: _copy,
-                child: Icon(
+              IconButton(
+                onPressed: _copy,
+                tooltip: _copied ? 'Copied' : 'Copy code',
+                icon: Icon(
                   _copied ? Icons.check : Icons.copy,
                   size: 16,
                   color: _copied ? tokens.success : onSurfaceVariant,
                 ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                visualDensity: VisualDensity.compact,
               ),
             ],
           ),

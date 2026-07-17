@@ -227,32 +227,56 @@ class _ThreadScaffold extends ConsumerWidget {
                           );
                         },
                       ),
-                      if (!pinnedToBottom)
-                        Positioned(
-                          bottom: tokens.spacing.md,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: FilledButton.icon(
-                              onPressed: onScrollToBottom,
-                              icon: const Icon(Icons.arrow_downward, size: 16),
-                              label: const Text('New message'),
+                      // Nit 5: chat-spec.md §10 — pill appear/disappear is
+                      // `motion.fast`/`motion.standard`, not a bare
+                      // mount/unmount toggle. The Positioned itself stays
+                      // mounted (Stack needs it for layout); AnimatedOpacity
+                      // does the actual fade, IgnorePointer keeps the
+                      // invisible button from eating taps while hidden.
+                      Positioned(
+                        bottom: tokens.spacing.md,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: IgnorePointer(
+                            ignoring: pinnedToBottom,
+                            child: AnimatedOpacity(
+                              opacity: pinnedToBottom ? 0 : 1,
+                              duration: tokens.motion.fast,
+                              curve: tokens.motion.standard,
+                              child: FilledButton.icon(
+                                onPressed: onScrollToBottom,
+                                icon: const Icon(
+                                  Icons.arrow_downward,
+                                  size: 16,
+                                ),
+                                label: const Text('New message'),
+                              ),
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
           ),
           if (state.modelLoading) const LinearProgressIndicator(),
-          Composer(
-            isGenerating: state.isGenerating,
-            onSend: (text) {
-              onScrollToBottom();
-              controller.sendMessage(text);
-            },
-            onCancel: controller.cancel,
-            onOpenSettings: () => showSamplingSettingsSheet(context, args),
-          ),
+          // Designer BLOCKING #1: chat-spec.md §7.1 — "no composer visible
+          // on this state" whenever there's no model to send to (fresh
+          // draft with none picked yet, OR an existing conversation whose
+          // model was uninstalled — `Conversations.modelId` FKs `setNull`
+          // on delete, so this is reachable outside the brand-new-draft
+          // case too). The AppBar's `ModelChip` still reads "Pick a model"
+          // and opens the picker either way, so the user isn't stranded.
+          if (state.model != null)
+            Composer(
+              isGenerating: state.isGenerating,
+              onSend: (text) {
+                onScrollToBottom();
+                controller.sendMessage(text);
+              },
+              onCancel: controller.cancel,
+              onOpenSettings: () => showSamplingSettingsSheet(context, args),
+            ),
         ],
       ),
     );

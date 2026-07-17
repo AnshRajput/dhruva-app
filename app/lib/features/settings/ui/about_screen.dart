@@ -52,6 +52,20 @@ class AboutScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ),
+            // Designer BLOCKING #3: the name's own meaning, in its own
+            // script — design-tokens.json meta.story: "Dhruva (ध्रुव) is
+            // the pole star". `titleLarge` is still a Fraunces-driven role
+            // (app_theme.dart), so this is the bundled Noto Serif
+            // Devanagari fallback's first live consumer in the app.
+            Center(
+              child: Text(
+                'ध्रुव',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
             SizedBox(height: tokens.spacing.xs),
             Center(
               child: Text(

@@ -59,6 +59,8 @@ void main() {
     await pump(tester);
 
     expect(find.text('Dhruva AI'), findsOneWidget);
+    // DESIGNER BLOCKING #3: the name's own meaning, in its own script.
+    expect(find.text('ध्रुव'), findsOneWidget);
     expect(find.text('Version 1.0.0 (build 1)'), findsOneWidget);
     expect(
       find.textContaining('Your AI. Your phone. Nobody else’s business.'),

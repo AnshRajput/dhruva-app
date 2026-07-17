@@ -22,9 +22,18 @@ Future<InstalledModelInfo?> showModelPickerSheet(
   int? selectedModelId,
   bool smallerModelsOnly = false,
 }) {
+  final tokens = Theme.of(context).extension<DhruvaTokens>()!;
   return showModalBottomSheet<InstalledModelInfo>(
     context: context,
     isScrollControlled: true,
+    // Nit 6, chat-spec.md §10 — see sampling_settings_sheet.dart's
+    // identical note: duration is sourced from the tokens, the
+    // entrance/exit curve is a documented deviation (no public
+    // `showModalBottomSheet` hook reads it).
+    sheetAnimationStyle: AnimationStyle(
+      duration: tokens.motion.moderate,
+      reverseDuration: tokens.motion.fast,
+    ),
     builder: (context) => _ModelPickerSheet(
       selectedModelId: selectedModelId,
       smallerModelsOnly: smallerModelsOnly,
