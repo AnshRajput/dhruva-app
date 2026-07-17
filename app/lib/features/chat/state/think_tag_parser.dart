@@ -10,6 +10,16 @@
 /// `<think>` after a closed block is vanishingly rare in practice and would
 /// otherwise re-open reasoning mid-answer, which no model in this
 /// convention does.
+///
+/// ponytail: QA BUG-3 — a second/nested `<think>...</think>` pair (past the
+/// first recognized one) is NOT parsed into `reasoning`; its text lands in
+/// `content` like any other prose. What IS fixed: the literal tag markers
+/// themselves are always stripped out of `content` before it's returned, so
+/// a user never sees raw `<think>`/`</think>` text in the answer — only the
+/// (unlabeled) text that was between them. Full multi-block reasoning
+/// capture is a real upgrade (parse every pair, not just the first) —
+/// do it if a model in this app's catalog is actually observed emitting
+/// multiple reasoning passes in one turn; today none does.
 library;
 
 const thinkOpenTag = '<think>';
@@ -49,7 +59,14 @@ ThinkSplit splitThinkContent(String raw) {
   final after = raw.substring(closeIdx + thinkCloseTag.length);
   return ThinkSplit(
     reasoning: reasoning,
-    content: before + after,
+    // `before` never contains a tag (openIdx is the FIRST occurrence in
+    // `raw`), but `after` can hold a second/nested pair's literal markers
+    // — strip them so they never render as raw tag text (QA BUG-3); the
+    // text between them still surfaces as plain content, see the library
+    // doc's ponytail note on the multi-block ceiling.
+    content: (before + after)
+        .replaceAll(thinkOpenTag, '')
+        .replaceAll(thinkCloseTag, ''),
     reasoningOpen: false,
   );
 }

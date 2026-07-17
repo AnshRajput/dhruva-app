@@ -78,19 +78,18 @@ void main() {
   );
 
   testWidgets(
-    'BUG repro: a malformed (non-numeric, not "new") /chat/:id deep link '
-    'throws uncaught inside the route builder (int.parse) instead of '
-    'failing gracefully',
+    'FIXED (QA BUG-4): a malformed (non-numeric, not "new") /chat/:id deep '
+    'link is graceful — `int.tryParse` folds it into the same '
+    'draft-conversation path "new" takes, same empty-state fallback the '
+    'nonexistent-numeric-id case above gets, instead of an uncaught '
+    'FormatException red screen',
     (tester) async {
       await pumpApp(tester);
       appRouter.go('/chat/not-a-number');
       await tester.pumpAndSettle();
 
-      // app_router.dart's GoRoute builder does `int.parse(idParam)`
-      // unguarded for anything that isn't literally "new" — a malformed id
-      // (e.g. from an external share intent or a stale/hand-typed link)
-      // throws a FormatException synchronously during route build.
-      expect(tester.takeException(), isA<FormatException>());
+      expect(tester.takeException(), isNull);
+      expect(find.text('No model installed yet'), findsOneWidget);
     },
   );
 

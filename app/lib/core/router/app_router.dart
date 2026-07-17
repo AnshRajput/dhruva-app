@@ -57,13 +57,22 @@ final appRouter = GoRouter(
       path: '/chat/:id',
       builder: (context, state) {
         final idParam = state.pathParameters['id']!;
-        if (idParam == 'new') {
+        // QA BUG-4: a malformed, non-numeric id (stale/hand-typed link,
+        // external share intent) used to hit `int.parse` unguarded and
+        // throw a FormatException straight out of the route builder — an
+        // uncaught, uncatchable-by-the-app red screen. `tryParse` folds
+        // that case into the same draft-conversation path `idParam ==
+        // 'new'` already takes, which is exactly the graceful fallback the
+        // nonexistent-numeric-id case gets too (no model set -> the
+        // thread screen's own "No model installed yet" empty state).
+        final conversationId = idParam == 'new' ? null : int.tryParse(idParam);
+        if (conversationId == null) {
           return ChatThreadScreen(
             args: ChatRouteArgs(initialModelId: state.extra as int?),
           );
         }
         return ChatThreadScreen(
-          args: ChatRouteArgs(conversationId: int.parse(idParam)),
+          args: ChatRouteArgs(conversationId: conversationId),
         );
       },
     ),

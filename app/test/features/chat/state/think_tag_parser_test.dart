@@ -49,44 +49,47 @@ void main() {
       expect(split.reasoningOpen, isFalse);
     });
 
-    test(
-      'BUG repro: nested <think> tags — only the FIRST opener/closer pair is '
-      'recognized (documented in this file\'s library doc), so the inner '
-      'opener/closer are swallowed into reasoning/content as LITERAL text '
-      'instead of being stripped, and would render as stray tag text in the '
-      'chat bubble',
-      () {
-        final split = splitThinkContent(
-          '<think>outer <think>inner</think> tail</think>after',
-        );
-        // The first </think> found closes the block — it's the one right
-        // after "inner", not the real outer closer.
-        expect(split.reasoning, 'outer <think>inner');
-        // Everything past that point, including the leftover literal
-        // "</think>" from the (never separately recognized) outer closer,
-        // ends up in content — visible to the user as raw tag text.
-        expect(split.content, ' tail</think>after');
-        expect(split.content, contains('</think>'));
-      },
-    );
+    test('FIXED (QA BUG-3): nested <think> tags — only the FIRST opener/closer '
+        'pair is recognized into `reasoning` (documented ceiling, unchanged), '
+        'but the leftover literal tag markers past that point are now '
+        'stripped out of `content` instead of leaking as raw tag text', () {
+      final split = splitThinkContent(
+        '<think>outer <think>inner</think> tail</think>after',
+      );
+      // The first </think> found closes the block — it's the one right
+      // after "inner", not the real outer closer. Reasoning capture is
+      // unchanged (that's the documented multi-block ceiling, not this
+      // bug).
+      expect(split.reasoning, 'outer <think>inner');
+      // The leftover literal "</think>" from the never-separately-
+      // recognized outer closer is stripped — the surrounding text is
+      // still visible (uncaptured reasoning text, not this bug's scope),
+      // just never the raw tag itself.
+      expect(split.content, ' tailafter');
+      expect(split.content, isNot(contains('<think>')));
+      expect(split.content, isNot(contains('</think>')));
+    });
 
-    test('BUG repro: two sequential (non-nested) think blocks — only the first '
-        'is extracted; the second block\'s <think>/</think> tags leak into '
-        'content as literal text', () {
+    test('FIXED (QA BUG-3): two sequential (non-nested) think blocks — only '
+        'the first is parsed into `reasoning` (documented ceiling, '
+        'unchanged), but the second block\'s literal <think>/</think> tags '
+        'are stripped out of `content` instead of leaking as raw tag text', () {
       final split = splitThinkContent(
         '<think>first</think>middle<think>second</think>end',
       );
       expect(split.reasoning, 'first');
       expect(
         split.content,
-        'middle<think>second</think>end',
+        'middlesecondend',
         reason:
             'the second <think>...</think> pair is never recognized as a '
-            'reasoning block — it is left verbatim in the visible content, '
-            'exactly the "second literal <think>" case the library doc '
-            'calls "vanishingly rare" but a real reasoning model doing a '
-            'second reasoning pass mid-answer would trigger it',
+            'reasoning block (documented ceiling — full multi-block '
+            'capture is a real upgrade, not required for this fix), but '
+            'its tag markers no longer render as literal text; "second" '
+            'itself still surfaces as plain, unlabeled content',
       );
+      expect(split.content, isNot(contains('<think>')));
+      expect(split.content, isNot(contains('</think>')));
     });
 
     test(

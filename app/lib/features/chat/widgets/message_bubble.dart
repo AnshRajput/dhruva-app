@@ -87,7 +87,28 @@ class MessageBubble extends StatelessWidget {
                       isOpen: isStreaming && reasoningOpen,
                       durationMs: reasoningDurationMs,
                     ),
-                  _MarkdownBody(text: message.content, onColor: onBackground),
+                  // QA BUG-1: a finalized (not `isStreaming`), contentless,
+                  // reasoningless assistant message used to render an empty
+                  // `_MarkdownBody` — the bubble shell + metadata row still
+                  // showed around nothing, an honest-looking "ghost bubble".
+                  // The mid-stream case (isStreaming, awaiting first token)
+                  // is unaffected — chat_thread_screen.dart's own
+                  // `_buildMessageItem` still short-circuits to
+                  // `SizedBox.shrink()` for that one, before this widget is
+                  // even built.
+                  if (!isUser &&
+                      !isStreaming &&
+                      message.content.isEmpty &&
+                      (message.reasoningContent ?? '').isEmpty)
+                    Text(
+                      'No response — try regenerating.',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: onBackground,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else
+                    _MarkdownBody(text: message.content, onColor: onBackground),
                 ],
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
@@ -168,33 +169,32 @@ void main() {
     },
   );
 
-  testWidgets('BUG repro: a 0-token assistant response leaves a visible empty '
-      '"ghost bubble" once the stream finishes — the empty-content guard in '
-      '_buildMessageItem only fires while message.id == streamingMessageId, '
-      'and streamingMessageId is cleared on EngineCompletion', (tester) async {
-    final modelId = await insertModel();
-    final engine = FakeEngineService(scriptedTokens: const []);
-    await tester.pumpWidget(
-      buildApp(engine, ChatRouteArgs(initialModelId: modelId)),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'FIXED (QA BUG-1): a 0-token assistant response renders an honest '
+    '"No response — try regenerating." placeholder once the stream '
+    'finishes, instead of an empty "ghost bubble" — the metadata row (and '
+    'its regenerate affordance) still renders alongside it',
+    (tester) async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService(scriptedTokens: const []);
+      await tester.pumpWidget(
+        buildApp(engine, ChatRouteArgs(initialModelId: modelId)),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'hi');
-    await tester.pump();
-    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      await tester.enterText(find.byType(TextField), 'hi');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
-    // Generation is over (back to the send icon)...
-    expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-    // ...but an empty assistant bubble container is still in the tree: no
-    // markdown body text (SizedBox.shrink for empty content) yet the
-    // colored bubble Container + its metadata row (relative time) still
-    // render, because the SizedBox.shrink early-return in
-    // _buildMessageItem only applies to the ACTIVELY streaming message,
-    // not a finalized one with empty content.
-    // The metadata row (relative-time label) only renders under a
-    // non-user MessageBubble — its presence proves the empty assistant
-    // bubble is still mounted and visible, not suppressed.
-    expect(find.text('now'), findsOneWidget);
-  });
+      // Generation is over (back to the send icon)...
+      expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+      // ...and the finalized empty assistant turn is honest about it
+      // instead of showing a blank bubble.
+      expect(find.text('No response — try regenerating.'), findsOneWidget);
+      // The metadata row (relative-time label) still renders, same as any
+      // other assistant turn.
+      expect(find.text('now'), findsOneWidget);
+    },
+  );
 }

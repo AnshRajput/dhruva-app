@@ -295,10 +295,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   /// Switches the conversation's model (chat-spec.md §6.1 — allowed
   /// mid-conversation, `modelId` is per-conversation not locked at
-  /// creation) and immediately loads it.
+  /// creation) and immediately loads it. Blocked as a no-op while a
+  /// generation is in flight — same guard as [regenerate]/[editMessage]
+  /// (QA BUG-2): the in-flight reply is streaming from the engine's
+  /// currently-loaded model, so flipping `modelId`/the chip mid-stream
+  /// would lie about which model actually produced the answer, and
+  /// `ensureModelLoaded` already refuses to touch the engine while
+  /// generating anyway — this just stops the state/chip from getting
+  /// ahead of that.
   Future<void> switchModel(InstalledModelInfo model) async {
     final current = state.value;
-    if (current == null) return;
+    if (current == null || current.isGenerating) return;
     if (current.conversationId != null) {
       await _repo.setModel(current.conversationId!, model.id);
     }

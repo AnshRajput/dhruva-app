@@ -427,10 +427,10 @@ void main() {
     },
   );
 
-  test('BUG repro: switching models mid-stream updates the conversation\'s '
-      'modelId and UI-visible model immediately, with no isGenerating guard '
-      '(unlike regenerate/editMessage) — the in-flight reply keeps streaming '
-      'under the OLD engine-loaded model regardless', () async {
+  test('FIXED (QA BUG-2): switchModel is a no-op while a generation is already '
+      'in flight, same as regenerate/editMessage — the chip/state stays on '
+      'the OLD model and the engine singleton is untouched, instead of the '
+      'chip flipping to a model the engine never actually loaded', () async {
     final modelA = await insertModel(repoId: 'org/model-a-GGUF');
     final modelB = await insertModel(repoId: 'org/model-b-GGUF');
     final engine = FakeEngineService(
@@ -454,18 +454,22 @@ void main() {
         .getInstalledModel(modelB);
     await notifier.switchModel(modelBInfo!);
 
-    // The chip/state flips to model B immediately...
+    // Blocked, not applied: switchModel's isGenerating guard returns
+    // early before touching state or the repository, so both the
+    // conversation's persisted modelId and the UI-visible chip stay on
+    // model A throughout the in-flight stream.
     final mid = container.read(chatControllerProvider(args)).value!;
-    expect(mid.modelId, modelB);
-    // ...but ensureModelLoaded silently bailed (current.isGenerating was
-    // true), so the engine singleton never actually loaded/unloaded
-    // anything — it's still on model A underneath a UI that now claims
-    // model B is active.
+    expect(mid.modelId, modelA);
     expect(container.read(loadedModelIdProvider), modelA);
 
     await sendFuture;
     final finalState = container.read(chatControllerProvider(args)).value!;
     expect(finalState.messages.last.status, MessageStatus.complete);
+    // Persisted modelId in the repository also never moved.
+    final persisted = await container
+        .read(chatRepositoryProvider)
+        .getConversation(finalState.conversationId!);
+    expect(persisted!.modelId, modelA);
   });
 
   test('unloading the engine mid-stream finalizes the message as cancelled, '
