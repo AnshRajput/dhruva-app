@@ -904,6 +904,66 @@ independently, gallery/form/detail edge cases (duplicate-name built-ins,
 deleting a character mid-conversation, switching a character's default
 model while one of its conversations is open).
 
+### [LOOP-05] [flutter-core → qa-tester/designer] [HANDOFF] 2026-07-17T22:05
+Consolidated fix pass closing QA's PASS-with-bugs review and designer's
+sign-off feedback in one commit on loop/05-characters. 988 example-dialogue
+fix already covered by the orchestrator's direct commit — its
+characterization test (character_seed_test.dart) still needed flipping
+since it now failed against the fixed content, done below.
+
+QA HIGH — `SamplingParams.fromJson`'s `as num?` casts threw a raw
+`TypeError` on malformed imported sampling data. Fixed at the one place
+every caller routes through: a new `_numField` helper (`data/chat/models/
+sampling_params.dart`) throws a typed `ValidationFailure` on a
+present-but-wrong-typed field instead of letting the cast throw — all four
+callers (chat/character repositories reading persisted rows, character_seed
+and character_card reading untrusted JSON) get the fix for free.
+`character_card_test.dart`'s pinned repro flipped from
+`throwsA(isA<TypeError>())` to `throwsA(isA<ValidationFailure>())`.
+
+QA MED — `characters_gallery_screen.dart`'s `_import` only caught `on
+ValidationFailure`; a non-UTF-8 picked file crashed uncaught via
+`FileSystemException` from `readAsString()`. Added an `on FileSystemException`
+clause alongside, same SnackBar treatment. QA's own note that a widget-level
+repro hangs under `pumpAndSettle()` (the known real-`dart:io`-file-I/O
+harness limitation already flagged for `CharacterAvatar`) held here too —
+`characters_gallery_import_test.dart` keeps its unit-level repro of the
+underlying `FileSystemException` (still true, unchanged) and gained a second
+test mirroring `_import`'s exact try/catch shape, proving the exception is
+now caught rather than propagating.
+
+QA LOW/INFO — PNG reader's missing chunk-CRC verification documented with a
+`ponytail:` comment at the exact skip point (`png_text_chunk.dart`), naming
+the accept-on-decodable rationale and the `crc32()` upgrade path already
+sitting in the same file. Not implemented: doing so would also need to flip
+QA's own "corrupted-CRC chara chunk is still read successfully" test, which
+QA explicitly scoped as INFO/non-blocking, not something to change.
+
+Designer BLOCKING #1 — chat AppBar's `_CharacterAppBarTitle` rendered
+`avatarEmoji ?? '⭐'` as bare `Text`, ignoring `avatarPath`. Added
+`_MiniCharacterAvatar` (chat_thread_screen.dart) — a small, documented
+duplicate of `features/characters/widgets/character_avatar.dart`'s
+`CharacterAvatar` (same fallback order: image, then emoji, then star) at
+chip scale, not a cross-feature import (ADR-002; same precedent as
+`core/theme/brand_star.dart`'s `DhruvaStar` duplication).
+Designer BLOCKING #2 — `import_preview_dialog.dart`'s raw literals
+(`SizedBox` 8/12, `fontSize: 24`) replaced with `DhruvaTokens` — the
+`fontSize: 24` emoji `Text` is now a `CharacterAvatar(size: 24)` instead,
+reusing the component rather than re-deriving its fallback logic.
+Designer BLOCKING #3 — gallery empty state's `Icons.theater_comedy_outlined`
+swapped for `DhruvaStar` (`core/theme/brand_star.dart`), matching chat's own
+empty states per `iconography.motif`.
+Nits — both "Built-in" badges' raw `vertical: 2` became
+`tokens.spacing.xs / 2` (token-derived, same rendered size, no spacing
+token is small enough on its own); `CharacterAvatar` gained a
+`Semantics(label: 'Character avatar', image: true)` wrapper (also applied
+to the new chat-side mini avatar).
+
+Full suite 588/588 green, `flutter analyze --fatal-infos` and `dart format
+--set-exit-if-changed` both clean, coverage 79.8% (floor 70%). Not pushed.
+Request: re-run the gate — both QA's bug list and the designer's blockers
+should now read fixed.
+
 ### [LOOP-05] [designer → flutter-core] [REVIEW] 2026-07-17T21:00
 Verdict: REQUEST_CHANGES (fix alongside QA's findings — one pass). Positive:
 token discipline otherwise clean, gallery/form/detail hierarchy considered.

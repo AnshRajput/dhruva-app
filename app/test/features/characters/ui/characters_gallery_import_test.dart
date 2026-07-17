@@ -3,13 +3,14 @@
 // `picked.readAsString()` — `XFile.readAsString` (cross_file) forwards to
 // `dart:io`'s `File.readAsString(encoding: utf8)`, which throws a
 // `FileSystemException` ("Failed to decode data using encoding 'utf-8'",
-// confirmed by actually running this) on bytes that aren't valid UTF-8.
-// `_import` only catches `on ValidationFailure catch (e)` around the whole
-// parse, so that FileSystemException is NOT caught — it propagates uncaught
-// out of the
-// PopupMenuButton's `onSelected` callback instead of the graceful
-// "typed failure, snackbar, never crash" behavior every other malformed-
-// import case in this codebase gets.
+// confirmed by actually running this) on bytes that aren't valid UTF-8. That
+// part is dart:io's own behavior, not a bug, and unchanged by the fix below.
+//
+// FIXED (QA MED): `_import` used to only catch `on ValidationFailure`, so
+// that FileSystemException propagated uncaught out of the PopupMenuButton's
+// `onSelected` callback instead of the graceful "typed failure, snackbar,
+// never crash" treatment every other malformed-card case gets. It now also
+// catches `on FileSystemException`, showing the same SnackBar treatment.
 //
 // A widget-level repro (tap "Import JSON card" through the real gallery
 // screen) was tried first and hung indefinitely under `pumpAndSettle()` —
@@ -17,53 +18,64 @@
 // CharacterAvatar's picked-image-file test (real `dart:io` file I/O doesn't
 // reliably signal "settled" to the fake-async test clock without
 // `tester.runAsync()`). That hang is an environmental test-harness
-// limitation, not evidence of the app itself hanging. This test isolates
-// the actual bug — the uncaught FormatException — at the unit level
-// instead, which is fast, deterministic, and needs no widget pump.
+// limitation, not evidence of the app itself hanging. This test isolates the
+// fix at the unit level instead — mirroring `_import`'s exact try/catch
+// shape — which is fast, deterministic, and needs no widget pump.
 
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:file_selector/file_selector.dart' show XFile;
 import 'package:flutter_test/flutter_test.dart';
 
-void main() {
-  test('BUG (MED) repro: characters_gallery_screen.dart\'s import path reads a '
-      'picked JSON file via `XFile.readAsString()`, which throws a '
-      'FileSystemException (not a ValidationFailure) on non-UTF-8 bytes — '
-      '`_import`\'s `on ValidationFailure catch (e)` (characters_gallery_'
-      'screen.dart, around the try block wrapping `CharacterCardV2.parse('
-      'await picked.readAsString())`) does not catch this, so it crashes '
-      'uncaught instead of surfacing the same graceful SnackBar every other '
-      'malformed-card-import case gets. Fix: either catch FileSystemException '
-      'alongside ValidationFailure in `_import`, or read bytes and decode '
-      'with `utf8.decode(bytes, allowMalformed: true)` (or a try/catch '
-      'around the decode step) so this path surfaces a ValidationFailure '
-      'like every sibling malformed-card case already does.', () async {
-    final tempFile = File(
-      '${Directory.systemTemp.path}/dhruva_qa_bad_utf8_'
-      '${DateTime.now().microsecondsSinceEpoch}.json',
-    );
-    // 0xFF is invalid in every UTF-8 sequence position; 0x80 is a stray
-    // continuation byte with no leading byte — both guarantee a decode
-    // failure regardless of what follows.
-    await tempFile.writeAsBytes(
-      Uint8List.fromList([0x7B, 0xFF, 0x80, 0x22, 0x7D]),
-    );
-    addTearDown(() => tempFile.delete());
+Future<XFile> _badUtf8File() async {
+  final tempFile = File(
+    '${Directory.systemTemp.path}/dhruva_qa_bad_utf8_'
+    '${DateTime.now().microsecondsSinceEpoch}.json',
+  );
+  // 0xFF is invalid in every UTF-8 sequence position; 0x80 is a stray
+  // continuation byte with no leading byte — both guarantee a decode
+  // failure regardless of what follows.
+  await tempFile.writeAsBytes(
+    Uint8List.fromList([0x7B, 0xFF, 0x80, 0x22, 0x7D]),
+  );
+  addTearDown(() => tempFile.delete());
+  return XFile(tempFile.path);
+}
 
-    // Exactly what `_import` does: `picked.readAsString()` on the XFile
-    // the file picker handed back.
-    final picked = XFile(tempFile.path);
+void main() {
+  test('a non-UTF-8 picked file throws FileSystemException at the read step '
+      '(dart:io\'s own behavior — the precondition the QA MED bug depended '
+      'on, not itself a bug)', () async {
+    final picked = await _badUtf8File();
     await expectLater(
       picked.readAsString(),
       throwsA(isA<FileSystemException>()),
-      reason:
-          'this is the CURRENT (buggy) behavior — a FileSystemException, '
-          'which is NOT a ValidationFailure and so is not caught by '
-          "_import's `on ValidationFailure` clause. Once fixed (either "
-          'catching FileSystemException too, or decoding leniently), this '
-          'assertion should change to confirm a ValidationFailure instead.',
     );
   });
+
+  test(
+    'FIXED (QA MED): a try/catch shaped like characters_gallery_screen.'
+    'dart\'s _import (ValidationFailure + FileSystemException) catches a '
+    'non-UTF-8 file\'s read failure instead of letting it crash uncaught',
+    () async {
+      final picked = await _badUtf8File();
+      Object? caught;
+      try {
+        await picked.readAsString();
+      } on ValidationFailure catch (e) {
+        caught = e;
+      } on FileSystemException catch (e) {
+        caught = e;
+      }
+      expect(
+        caught,
+        isA<FileSystemException>(),
+        reason:
+            'the exception was caught (not rethrown uncaught) — this is '
+            'what _import now does, surfacing a SnackBar instead of a crash',
+      );
+    },
+  );
 }

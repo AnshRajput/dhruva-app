@@ -55,6 +55,15 @@ List<_PngChunk> _parseChunks(Uint8List bytes) {
       throw const FormatException('truncated PNG chunk data/CRC');
     }
     chunks.add(_PngChunk(type, bytes.sublist(dataStart, dataEnd)));
+    // ponytail: reader never verifies the CRC-32 it skips here — a
+    // bit-corrupted chunk that still decodes as valid base64/JSON (e.g. a
+    // damaged "chara" chunk) is silently accepted rather than rejected (QA
+    // Loop-5 INFO/LOW). Deliberate: real-world PNG viewers don't reject
+    // bad-CRC ancillary chunks either, and this reader already throws
+    // FormatException/ValidationFailure on anything that fails to actually
+    // decode — add a `crc32(...)` recheck here (the function already exists
+    // below) if a corrupt-but-decodable chara chunk ever turns out to
+    // matter in practice.
     offset = dataEnd + 4; // skip the trailing CRC; write side recomputes it.
     if (type == 'IEND') break;
   }

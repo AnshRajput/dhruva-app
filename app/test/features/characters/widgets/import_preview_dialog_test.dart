@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/characters/character_card.dart';
 import 'package:dhruva/features/characters/widgets/import_preview_dialog.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ const _mockedFields = ImportedCharacterFields(
 void main() {
   Widget buildApp(VoidCallback onOpen) {
     return MaterialApp(
+      theme: AppTheme.dark,
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(

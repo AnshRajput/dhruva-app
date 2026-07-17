@@ -102,7 +102,7 @@ class _DetailBody extends ConsumerWidget {
                     child: Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: tokens.spacing.sm,
-                        vertical: 2,
+                        vertical: tokens.spacing.xs / 2,
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.secondaryContainer,

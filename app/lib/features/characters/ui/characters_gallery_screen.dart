@@ -3,12 +3,15 @@
 /// save import entry point for community character cards.
 library;
 
+import 'dart:io' show FileSystemException;
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/failures/app_failure.dart';
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/characters/character_card.dart';
 import '../../../data/characters/character_repository.dart';
@@ -80,6 +83,16 @@ class CharactersGalleryScreen extends ConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
+    } on FileSystemException catch (e) {
+      // QA MED: `readAsString()`/`readAsBytes()` on a picked file can throw
+      // this directly (e.g. non-UTF-8 bytes on the JSON path) — a real I/O
+      // failure, not a card-content problem, but the user still deserves
+      // the same "typed failure, snackbar, never crash" treatment every
+      // malformed-card case above already gets, not an uncaught crash.
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not read that file: ${e.message}')),
+      );
     }
   }
 }
@@ -100,11 +113,12 @@ class _GalleryBody extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.theater_comedy_outlined,
-                size: 72,
-                color: theme.colorScheme.primary,
-              ),
+              // Designer BLOCKING #3 (Loop 5 fix pass): a generic Material
+              // icon here broke iconography.motif's "the brand's recurring
+              // star, not a generic icon" rule that chat's own empty states
+              // already follow — swapped for the shared `DhruvaStar` (core/
+              // theme/brand_star.dart's cross-feature-safe copy).
+              DhruvaStar(size: 72, color: theme.colorScheme.primary),
               SizedBox(height: tokens.spacing.lg),
               Text(
                 'No characters yet',

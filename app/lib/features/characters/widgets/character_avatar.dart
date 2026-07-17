@@ -28,20 +28,29 @@ class CharacterAvatar extends StatelessWidget {
     // characters, not a scrolling list of thousands); revisit with a
     // FutureBuilder/cache if that ever stops being true.
     final hasImage = path != null && File(path).existsSync();
-    return ClipOval(
-      child: Container(
-        width: size,
-        height: size,
-        color: theme.colorScheme.secondaryContainer,
-        alignment: Alignment.center,
-        child: hasImage
-            ? Image.file(
-                File(path),
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-              )
-            : Text(avatarEmoji ?? '⭐', style: TextStyle(fontSize: size * 0.5)),
+    // Designer nit (Loop 5 fix pass): no Semantics label — a screen reader
+    // announced nothing for this avatar.
+    return Semantics(
+      label: 'Character avatar',
+      image: true,
+      child: ClipOval(
+        child: Container(
+          width: size,
+          height: size,
+          color: theme.colorScheme.secondaryContainer,
+          alignment: Alignment.center,
+          child: hasImage
+              ? Image.file(
+                  File(path),
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                )
+              : Text(
+                  avatarEmoji ?? '⭐',
+                  style: TextStyle(fontSize: size * 0.5),
+                ),
+        ),
       ),
     );
   }

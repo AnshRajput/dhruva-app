@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async' show unawaited;
+import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -492,9 +493,10 @@ class _CharacterAppBarTitle extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              character?.avatarEmoji ?? '⭐',
-              style: const TextStyle(fontSize: 16),
+            _MiniCharacterAvatar(
+              avatarEmoji: character?.avatarEmoji,
+              avatarPath: character?.avatarPath,
+              size: 16,
             ),
             SizedBox(width: tokens.spacing.xs),
             Text(
@@ -504,6 +506,58 @@ class _CharacterAppBarTitle extends ConsumerWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Designer BLOCKING #1 (Loop 5 fix pass): the AppBar chip used to render
+/// `avatarEmoji ?? '⭐'` as bare `Text`, ignoring `avatarPath` entirely — an
+/// image-avatar character showed a generic star instead of their real
+/// picture. This mirrors `features/characters/widgets/character_avatar.dart`
+/// `CharacterAvatar` exactly (same fallback order: picked image, then emoji,
+/// then star) at chip scale — a deliberate small duplicate, not a
+/// cross-feature import (ADR-002 bans `features/chat` importing
+/// `features/characters`; same precedent as `core/theme/brand_star.dart`'s
+/// documented duplication of `DhruvaStar`).
+class _MiniCharacterAvatar extends StatelessWidget {
+  final String? avatarEmoji;
+  final String? avatarPath;
+  final double size;
+
+  const _MiniCharacterAvatar({
+    this.avatarEmoji,
+    this.avatarPath,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final path = avatarPath;
+    final hasImage = path != null && File(path).existsSync();
+    return Semantics(
+      label: 'Character avatar',
+      image: true,
+      child: ClipOval(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: hasImage
+              ? Image.file(
+                  File(path),
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                )
+              : Text(
+                  avatarEmoji ?? '⭐',
+                  style: TextStyle(
+                    fontSize: size * 0.85,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
         ),
       ),
     );

@@ -217,17 +217,12 @@ void main() {
       expect(fields.samplingParams?.temperature, 0.42);
     });
 
-    test('BUG (HIGH): a card whose extensions.dhruva.samplingParams has a '
-        'wrong-typed field (e.g. temperature as a String) crashes with a raw '
-        'TypeError instead of a typed ValidationFailure — attack list #1 '
-        'requires "typed failure or graceful skip, never crash" for hostile '
-        'import content, and this is reachable straight from an imported '
-        'community card (SamplingParams.fromJson does `json["temperature"] as '
-        'num?`, which throws TypeError on a non-num value; nothing between '
-        'here and characters_gallery_screen._import\'s `on ValidationFailure` '
-        'catch narrows that). Root cause is in SamplingParams.fromJson '
-        '(data/chat/models/sampling_params.dart), shared by every '
-        'samplingParams JSON consumer, not just card import.', () {
+    test('FIXED (QA HIGH): a card whose extensions.dhruva.samplingParams has a '
+        'wrong-typed field (e.g. temperature as a String) throws a typed '
+        'ValidationFailure, not a raw TypeError — SamplingParams.fromJson\'s '
+        '_numField guard (data/chat/models/sampling_params.dart) rejects a '
+        'present-but-non-num value instead of letting an `as num?` cast throw '
+        'uncaught, straight from an imported community card.', () {
       final card = CharacterCardV2(
         name: 'X',
         systemPrompt: 'p',
@@ -237,10 +232,10 @@ void main() {
           },
         },
       );
-      // Documents CURRENT behavior (the bug): this is a raw TypeError, not
-      // a ValidationFailure. Once fixed, this assertion should become
-      // `throwsA(isA<ValidationFailure>())` and the test renamed.
-      expect(() => cardToCharacterFields(card), throwsA(isA<TypeError>()));
+      expect(
+        () => cardToCharacterFields(card),
+        throwsA(isA<ValidationFailure>()),
+      );
     });
   });
 

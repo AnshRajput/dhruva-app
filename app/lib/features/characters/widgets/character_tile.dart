@@ -47,7 +47,7 @@ class CharacterTile extends StatelessWidget {
                   Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: tokens.spacing.xs,
-                      vertical: 2,
+                      vertical: tokens.spacing.xs / 2,
                     ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.secondaryContainer,

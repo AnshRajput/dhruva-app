@@ -4,6 +4,19 @@ import '../../../core/failures/app_failure.dart';
 
 part 'sampling_params.freezed.dart';
 
+/// Reads [key] out of [json] as a `num`, or null if absent — throws
+/// [ValidationFailure] if it's present but not a number (see
+/// [SamplingParams.fromJson]'s doc: this is the trust-boundary guard, shared
+/// by every caller so the fix lives in exactly one place).
+num? _numField(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value == null) return null;
+  if (value is num) return value;
+  throw ValidationFailure(
+    'SamplingParams.$key must be a number, got ${value.runtimeType} ($value)',
+  );
+}
+
 /// llama.cpp sampling knobs for one conversation, persisted as JSON in
 /// `Conversations.samplingParamsJson` (see `chat_repository.dart`). Defaults
 /// mirror common llama.cpp server/CLI defaults, not this codebase's
@@ -30,13 +43,18 @@ abstract class SamplingParams with _$SamplingParams {
 
   const SamplingParams._();
 
+  /// [json] is a trust boundary — it can come straight from an imported
+  /// community character card, not just this app's own persisted rows — so
+  /// a present-but-wrong-typed field (e.g. `"temperature": "hot"`) throws a
+  /// typed [ValidationFailure] via [_numField] instead of a raw `TypeError`
+  /// escaping from an `as num?` cast (QA HIGH, Loop 5).
   factory SamplingParams.fromJson(Map<String, dynamic> json) => SamplingParams(
-    temperature: (json['temperature'] as num?)?.toDouble() ?? 0.8,
-    topP: (json['topP'] as num?)?.toDouble() ?? 0.95,
-    topK: (json['topK'] as num?)?.toInt() ?? 40,
-    contextLength: (json['contextLength'] as num?)?.toInt() ?? 4096,
-    maxTokens: (json['maxTokens'] as num?)?.toInt() ?? 512,
-    seed: (json['seed'] as num?)?.toInt(),
+    temperature: _numField(json, 'temperature')?.toDouble() ?? 0.8,
+    topP: _numField(json, 'topP')?.toDouble() ?? 0.95,
+    topK: _numField(json, 'topK')?.toInt() ?? 40,
+    contextLength: _numField(json, 'contextLength')?.toInt() ?? 4096,
+    maxTokens: _numField(json, 'maxTokens')?.toInt() ?? 512,
+    seed: _numField(json, 'seed')?.toInt(),
   );
 
   Map<String, dynamic> toJson() => {
