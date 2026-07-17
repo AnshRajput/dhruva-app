@@ -22,6 +22,16 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   /// native side); the config values it applies are asserted in
   /// `download_notifications_test.dart`.
   Future<void> configureNotifications() async {
+    // Run model downloads in an Android foreground service so they SURVIVE the
+    // app being backgrounded, navigated away from, or the notification tray
+    // being opened. Without this, Android's battery optimizer kills the
+    // WorkManager task the moment the app leaves the foreground — the exact
+    // "download cancels when I do anything" bug. We only ever download large
+    // model files, so `always` is correct (the running notification below is
+    // what the foreground service displays).
+    await _downloader.configure(
+      globalConfig: [(bg.Config.runInForeground, bg.Config.always)],
+    );
     final c = dhruvaDownloadNotificationConfig;
     _downloader.configureNotification(
       running: c.running,
