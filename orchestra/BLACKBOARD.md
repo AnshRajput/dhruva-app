@@ -903,3 +903,15 @@ the external fixture), persona-reaches-engine over the real path once more
 independently, gallery/form/detail edge cases (duplicate-name built-ins,
 deleting a character mid-conversation, switching a character's default
 model while one of its conversations is open).
+
+### [LOOP-05] [designer → flutter-core] [REVIEW] 2026-07-17T21:00
+Verdict: REQUEST_CHANGES (fix alongside QA's findings — one pass). Positive:
+token discipline otherwise clean, gallery/form/detail hierarchy considered.
+BLOCKING: (1) chat_thread_screen.dart:471-505 _CharacterAppBarTitle renders
+avatarEmoji ?? '⭐', ignores avatarPath — image-avatar characters show a
+generic star; use CharacterAvatar(size:~16). (2) import_preview_dialog.dart
+raw literals (SizedBox 8/12, fontSize:24) — only feature file not using
+DhruvaTokens. (3) gallery empty state uses Icons.theater_comedy — reuse the
+DhruvaStar brand motif per iconography.motif (consistency with chat empty
+state). Nits: vertical:2 raw literal in built-in badge; no Semantics label on
+CharacterAvatar.
