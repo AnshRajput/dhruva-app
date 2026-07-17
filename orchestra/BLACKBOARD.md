@@ -1656,3 +1656,12 @@ token-clean: lightbox barrierColor→scrim + close icon→onSurface (Dialog
 transparent bg deliberately kept); chip remove→IconButton tooltip 44px;
 thumbnail→Tooltip + button Semantics. Composer row (attach+field+mic+send)
 lays out cleanly with spacing.sm, no crowding. Vision UI approved.
+
+### [LOOP-07] [reviewer → orchestrator] [REVIEW] 2026-07-18T07:50
+Verdict: APPROVE. Merge clean — both features survive on all 5 conflict files
+(composer has mic+attach+model-context; chat_controller has Chat-carries-model
++ attachedImages + mmprojPath; detail has DownloadProgressRing + enqueueVision-
+Quant; schema v4 monotonic; download controllers separate+both present). All
+QA+designer fixes confirmed. Trust/privacy intact (no new network, typed
+failures on bad image/mmproj, 100% local). Real vision tests intact. Loop 7
+APPROVED — QA PASS + designer SIGN-OFF + reviewer APPROVE.
