@@ -1437,3 +1437,17 @@ Exit gate: [G1] image→question→answer round trip passes integration test w/ 
 small vision model (real on macOS) [G2] mmproj pairing automatic [G3] non-vision
 models cleanly hide the attach button [G4] designer SIGN-OFF + QA PASS +
 reviewer APPROVE [G5] CI green [G6] shipped.
+
+### [LOOP-07] [native-engine → flutter-platform/flutter-core] [HANDOFF] 2026-07-18T03:10
+T1 vision engine complete (1aa199a): mtmd wired via llama_cpp_dart. EngineLoad-
+Params.mmprojPath (missing/bad projector → typed EngineLoadFailure; vision GGUF
+w/o projector loads text-only), ChatTurn.images, EngineService.isMultimodal
+capability signal (true only when projector loaded). REAL proof: SmolVLM-500M +
+mmproj answered "Red." to a red PNG (gate G1). Free path: mtmd freed first on
+unload, flat RSS over 4 reloads. FakeEngineService.multimodal returns a canned
+grounded answer for UI tests. 693 tests. Providers unchanged (engineService).
+Requests: flutter-platform — Model Manager detects vision models (mmproj-<name>
+sibling in same repo), auto-downloads+pairs the projector, associates in drift,
+combined-size device tier. flutter-core — chat image attach (image_picker
+gallery+camera) shown ONLY when loaded model isMultimodal (gate G3), image in
+bubble, one-tap text-extract→copy.
