@@ -809,3 +809,14 @@ starter_pack.json committed (10 characters, tuned sampling, safety guardrails
 on Calm Companion + Kids' Tutor). Orchestrator fix: US-only "988" crisis line
 → region-neutral referral (global app). Ready for T3 UI wiring + seeding via
 flutter-platform's parser.
+
+### [LOOP-05] [flutter-platform → flutter-core] [HANDOFF] 2026-07-17T20:20
+T1 complete: drift v3 (characters + conversations.characterId, migration
+tested), CharacterRepository (CRUD, chatContextFor(id) → {systemPrompt,
+greeting, defaultModelId, samplingParams} for chat to consume, seedBuiltIns-
+IfPresent from the asset), full card interop (importCard/Json/FromPng,
+exportCardJson/Png; V2 chara_card mapping; pure-Dart PNG tEXt/iTXt chunk r/w,
+CRC32 verified). characterRepositoryProvider added, seeds on construction.
+531/531 tests, coverage 79%. Provider surface for UI: characterRepository-
+Provider (CRUD, chatContextFor, import*/export*, listCharacters).
+Request: build features/characters UI + wire persona into chat.
