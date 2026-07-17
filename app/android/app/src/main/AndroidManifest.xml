@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Dhruva's ONLY network use: Hugging Face model browsing + downloads
          (user-initiated). Zero telemetry — see orchestra/PROTOCOL rule 5. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -13,6 +14,14 @@
          download-progress notification. Requested at runtime on first
          download setup (BackgroundDownloaderBackend.configureNotifications). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Model downloads run in an Android foreground service (Config.runInForeground
+         = always) so they survive the app being backgrounded. On API 34+ starting
+         background_downloader's dataSync service (UIDTJobService, declared with
+         android:foregroundServiceType="dataSync" in the plugin manifest) throws a
+         SecurityException — crashing the app — unless BOTH of these are granted.
+         Their absence was the 0.2.2 "app crashes when a download starts" regression. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
         android:label="Dhruva AI"
         android:name="${applicationName}"
@@ -39,6 +48,20 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- background_downloader runs its download via a WorkManager worker that
+             promotes itself to a foreground service (Config.runInForeground). On
+             API 34+, WorkManager's SystemForegroundService starts foreground with
+             type dataSync (0x1), but androidx.work's own manifest declares that
+             service with NO foregroundServiceType (0x0) — so Android throws
+             "foregroundServiceType 0x1 is not a subset of 0x0" and crashes the app
+             the moment a download starts. Merging the dataSync type onto that
+             service is the other half of the fix (the two uses-permission lines
+             above are necessary but not sufficient). Verified on-device (API 36):
+             without this, tapping Download crashes; with it, downloads run. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

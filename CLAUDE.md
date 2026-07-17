@@ -13,6 +13,17 @@ Engineering. Display name: "Dhruva AI".
 - Real over fake: nothing is "done" until `flutter analyze` is clean, tests
   pass, and QA signs off on the blackboard. Unverifiable-on-this-machine
   behavior goes to orchestra/RISKS.md as "needs on-device verification".
+- **Real value, not a playground.** This is a product a human relies on, not a
+  demo. The whole point is that it solves a real problem / use case and delivers
+  value — that value must be made explicit both ON THE WEBSITE and INSIDE THE
+  APP, not just implied. Every core path (download → install → chat, voice,
+  vision, imagine) must work end-to-end on a real device, not just in unit
+  tests. A feature that only passes tests but crashes or dead-ends on-device is
+  NOT done. The final product must be superb, end-to-end complete, and usable.
+- **Test on-device before EVERY deploy.** No build reaches Firebase until the
+  changed path is verified working by the orchestrator in the emulator/device.
+  Shipping an untested build that crashes (see orchestra/VIDEO_FIXES.md, the
+  0.2.2 foreground-service crash) is the failure mode this rule exists to stop.
 - Every agent reads orchestra/BLACKBOARD.md, orchestra/DECISIONS.md, and this
   file before working, and posts a typed report to the blackboard after
   (format: orchestra/PROTOCOL.md).
