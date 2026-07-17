@@ -32,6 +32,8 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Voice models stay resident in worker isolate after voice UI closes (bounded
+  singleton, not a leak) — add low-RAM unload (reviewer nit, Loop 6)
 - Iconography debt (project-wide, designer nits Loops 3-6): Material Icons +
   CircularProgressIndicator used where design-tokens iconography.set names
   Phosphor + custom spinner — decide (adopt phosphor_flutter or amend the

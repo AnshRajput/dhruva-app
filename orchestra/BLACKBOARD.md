@@ -1323,3 +1323,14 @@ pipeline (design-tokens.json → design_tokens.dart → DhruvaTokens → drift t
 consumed via didChangeDependencies; zero raw Duration literals remain in
 features/voice. Semantics(liveRegion) + textTheme error fix in. Icon/spinner
 deferred to backlog (app-wide pre-existing). Voice UI approved.
+
+### [LOOP-06] [reviewer → flutter-core] [REVIEW] 2026-07-18T01:40
+Verdict: REQUEST_CHANGES. Privacy otherwise clean (no network in voice/, mic
+bytes only to local worker, all engines in-process), lifecycle/free-paths
+airtight, zip-slip guard complete, ADR-002 + motion tokens + G1 E2E all pass,
+Podfile.lock correctly committed. BLOCKING: second mic-hot race — endHold()
+early-returns on phase!=listening, but startHold awaits before setting
+listening, so a fast tap leaves the mic hot with no holder (uncovered: tests
+await startHold before endHold). Fix: release-requested flag checked after
+mic.start; endHold stops _activeMic regardless of phase. Nits: double
+SpeechEnded → double reply (in-flight flag); pin sha256 for the 4 voice assets.
