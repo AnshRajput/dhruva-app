@@ -200,4 +200,38 @@ void main() {
       );
     },
   );
+
+  test(
+    'RACE (reviewer, Loop 6, privacy — same class as BUG-2): a release '
+    'that lands before `startHold` finishes its opening awaits '
+    '(`voiceModelInstallerProvider.future`, `loadVad`/`loadAsr`, '
+    '`mic.start()` — all run before `phase` is ever set to `listening`) '
+    'must not leave the mic capturing with nobody holding the button. '
+    'Every other test in this file awaits `startHold()` before calling '
+    '`endHold()`, which hid this: a fast tap-tap has `endHold()` run while '
+    '`phase` is still `idle`, early-return as a no-op, and then '
+    '`startHold()` opens the mic and enters `listening` regardless.',
+    () async {
+      installAllVoiceModels(tmp);
+      final notifier = container.read(voiceInputControllerProvider.notifier);
+
+      // Not awaited — simulates the fast tap-tap: release fires while
+      // startHold's opening awaits are still in flight.
+      final startFuture = notifier.startHold();
+      final finalText = await notifier.endHold();
+      await startFuture; // let startHold's suspended awaits resume/finish.
+
+      expect(finalText, isEmpty);
+      expect(
+        mic.stopCount,
+        1,
+        reason: 'the mic startHold opened must be torn back down',
+      );
+      expect(
+        container.read(voiceInputControllerProvider).phase,
+        VoiceInputPhase.idle,
+        reason: 'must not be left listening with nobody holding the button',
+      );
+    },
+  );
 }

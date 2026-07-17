@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/features/voice/state/handsfree_controller.dart';
@@ -8,10 +9,67 @@ import 'package:dhruva/voice/fake_mic_source.dart';
 import 'package:dhruva/voice/fake_voice_service.dart';
 import 'package:dhruva/voice/voice_model_catalog.dart';
 import 'package:dhruva/voice/voice_model_installer.dart';
+import 'package:dhruva/voice/voice_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../voice_test_helpers.dart';
+
+/// Wraps a [FakeVoiceService], gating [transcribe] on a [Completer] the test
+/// controls — lets a test hold `_finalizeUtterance` mid-flight (after it's
+/// called `transcribe`, before that call resolves) to deterministically
+/// drive the "two `SpeechEnded` events before the first transcribe
+/// resolves" race, instead of hoping real scheduling lines up.
+final class _GatedTranscribeVoiceService implements VoiceService {
+  final FakeVoiceService _delegate;
+  final Completer<void> gate = Completer<void>();
+  int transcribeCalls = 0;
+
+  _GatedTranscribeVoiceService(this._delegate);
+
+  @override
+  Future<Transcript> transcribe(
+    Float32List samples, {
+    int sampleRate = 16000,
+  }) async {
+    transcribeCalls++;
+    await gate.future;
+    return _delegate.transcribe(samples, sampleRate: sampleRate);
+  }
+
+  @override
+  bool get isAsrReady => _delegate.isAsrReady;
+  @override
+  bool get isTtsReady => _delegate.isTtsReady;
+  @override
+  bool get isVadReady => _delegate.isVadReady;
+  @override
+  Future<void> loadAsr(AsrModelConfig config) => _delegate.loadAsr(config);
+  @override
+  Future<void> loadTts(TtsModelConfig config) => _delegate.loadTts(config);
+  @override
+  Future<void> loadVad(VadConfig config) => _delegate.loadVad(config);
+  @override
+  Stream<Transcript> transcribeStream(
+    Stream<Float32List> audio, {
+    int sampleRate = 16000,
+  }) => _delegate.transcribeStream(audio, sampleRate: sampleRate);
+  @override
+  Future<SynthesizedAudio> synthesize(
+    String text, {
+    int voiceId = 0,
+    double speed = 1.0,
+  }) => _delegate.synthesize(text, voiceId: voiceId, speed: speed);
+  @override
+  Stream<VadEvent> segment(
+    Stream<Float32List> audio, {
+    int sampleRate = 16000,
+  }) => _delegate.segment(audio, sampleRate: sampleRate);
+  @override
+  Future<void> cancel() => _delegate.cancel();
+  @override
+  Future<void> dispose() => _delegate.dispose();
+}
 
 void main() {
   late Directory tmp;
@@ -502,6 +560,74 @@ void main() {
     expect(
       container.read(handsFreeControllerProvider).phase,
       HandsFreePhase.idle,
+    );
+  });
+
+  test('RACE (reviewer nit, Loop 6): two SpeechEnded events while Listening, '
+      'both before the first transcribe resolves, must only start ONE '
+      '_finalizeUtterance — a second SpeechEnded landing in that window used '
+      'to also see `phase == listening` (nothing had moved it to `thinking` '
+      'yet) and start a second, producing two replies for one turn.', () async {
+    final gatedVoice = _GatedTranscribeVoiceService(
+      FakeVoiceService(scriptedTranscript: 'first utterance'),
+    );
+    final gatedMic = FakeMicSource();
+    final gatedSink = FakeAudioSink();
+    final gatedContainer = ProviderContainer(
+      overrides: [
+        voiceModelInstallerProvider.overrideWith(
+          (ref) async => VoiceModelInstaller(modelsDirectory: tmp),
+        ),
+        voiceServiceProvider.overrideWithValue(gatedVoice),
+        micSourceProvider.overrideWithValue(gatedMic),
+        audioSinkProvider.overrideWithValue(gatedSink),
+      ],
+    );
+    addTearDown(gatedContainer.dispose);
+    gatedContainer.listen(handsFreeControllerProvider, (_, _) {});
+
+    final replies = <String>[];
+    await gatedContainer
+        .read(handsFreeControllerProvider.notifier)
+        .start(
+          onUserUtterance: (text) async {
+            replies.add(text);
+            return 'ok';
+          },
+        );
+
+    // First utterance closes -> `_finalizeUtterance` #1 starts, calls
+    // `transcribe`, and blocks on the gate — `phase` is still `listening`
+    // (it only moves to `thinking` once transcribe resolves).
+    gatedMic.pushSpeech();
+    gatedMic.pushSilence();
+    await pump();
+    expect(gatedVoice.transcribeCalls, 1);
+    expect(
+      gatedContainer.read(handsFreeControllerProvider).phase,
+      HandsFreePhase.listening,
+      reason: 'still gated — first transcribe has not resolved yet',
+    );
+
+    // Second utterance closes while the first is still gated — must be
+    // dropped, not started as a second `_finalizeUtterance`.
+    gatedMic.pushSpeech();
+    gatedMic.pushSilence();
+    await pump();
+    expect(
+      gatedVoice.transcribeCalls,
+      1,
+      reason: 'a second transcribe call means the race is back',
+    );
+
+    // Release the first — the turn completes normally.
+    gatedVoice.gate.complete();
+    await pump();
+
+    expect(replies, ['first utterance']);
+    expect(
+      gatedContainer.read(handsFreeControllerProvider).lastUserText,
+      'first utterance',
     );
   });
 }

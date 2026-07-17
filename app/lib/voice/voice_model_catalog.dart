@@ -8,7 +8,14 @@
 ///
 /// All URLs/sizes verified with real HTTP HEAD requests on 2026-07-17 against
 /// the k2-fsa/sherpa-onnx GitHub release assets. Sizes are the archive/file
-/// content-length in bytes.
+/// content-length in bytes. `sha256` for all 4 entries was self-computed on
+/// 2026-07-18 (reviewer nit, Loop 6) by downloading each asset in full and
+/// hashing it (`shasum -a 256`) — sherpa's release assets don't publish
+/// per-file checksums themselves, so there's no upstream value to just
+/// copy. Closes the bit-corruption gap `voice_model_installer_test.dart`'s
+/// "trust boundary" group flagged (a same-length, bit-flipped transfer used
+/// to sail through `DownloadManager`'s size-only check) — integrity is now
+/// checked before extraction ever runs, same as GGUF models.
 library;
 
 /// What a voice model does. One catalog entry has exactly one role.
@@ -31,9 +38,12 @@ final class VoiceCatalogEntry {
   /// content-length of [url] in bytes (verified).
   final int downloadSizeBytes;
 
-  /// sha256 of the downloaded file, when known. sherpa's release assets don't
-  /// publish per-file checksums, so this is null today — the `DownloadManager`
-  /// still verifies size (see `verifyIntegrity`).
+  /// sha256 of the downloaded file, self-computed (see the file doc comment
+  /// — sherpa publishes no per-file checksums of its own). Verified by
+  /// `DownloadManager` alongside size (see `verifyIntegrity`) before
+  /// `VoiceModelInstaller` ever touches the file, so a bit-corrupted (but
+  /// same-length) transfer is caught here rather than reaching the
+  /// bzip2/tar decode.
   final String? sha256;
 
   /// SPDX-ish license label + a URL to the authoritative terms.
@@ -91,6 +101,7 @@ final voiceModelCatalog = <VoiceCatalogEntry>[
     languages: ['any'],
     url: _asr('silero_vad.onnx'),
     downloadSizeBytes: 643854, // ~629 KB, verified
+    sha256: '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6',
     license: 'MIT',
     licenseUrl: _uri('https://github.com/snakers4/silero-vad'),
     isArchive: false,
@@ -108,6 +119,7 @@ final voiceModelCatalog = <VoiceCatalogEntry>[
     languages: ['multilingual'],
     url: _asr('sherpa-onnx-whisper-tiny.tar.bz2'),
     downloadSizeBytes: 116204861, // ~111 MB, verified
+    sha256: 'c46116994e539aa165266d96b325252728429c12535eb9d8b6a2b10f129e66b1',
     license: 'MIT (OpenAI Whisper)',
     licenseUrl: _uri('https://github.com/openai/whisper/blob/main/LICENSE'),
     isArchive: true,
@@ -127,6 +139,7 @@ final voiceModelCatalog = <VoiceCatalogEntry>[
     languages: ['en'],
     url: _tts('vits-piper-en_US-amy-low.tar.bz2'),
     downloadSizeBytes: 67095344, // ~64 MB, verified
+    sha256: 'c70f5284a09a7fd4ed203b39b2ff51cac1432b422b852eb647b481dade3cf639',
     license: 'Piper (MIT) / voice: Mycroft mimic3-voices — see MODEL_CARD',
     licenseUrl: _uri('https://github.com/MycroftAI/mimic3-voices'),
     isArchive: true,
@@ -144,6 +157,7 @@ final voiceModelCatalog = <VoiceCatalogEntry>[
     languages: ['hi'],
     url: _tts('vits-piper-hi_IN-pratham-medium.tar.bz2'),
     downloadSizeBytes: 67238438, // ~64 MB, verified
+    sha256: '2084d321e1d2752f2b64ed3012ba27751df01a80da46f52920098cdcb7e35648',
     license: 'Piper (MIT) / voice: see MODEL_CARD',
     licenseUrl: _uri('https://github.com/rhasspy/piper'),
     isArchive: true,

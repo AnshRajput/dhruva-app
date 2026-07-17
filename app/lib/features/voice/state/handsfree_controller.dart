@@ -96,6 +96,15 @@ class HandsFreeController extends Notifier<HandsFreeState> {
   /// access is.
   MicSource? _activeMic;
 
+  /// Reviewer-filed race: [_finalizeUtterance] doesn't move `phase` off
+  /// `listening` until AFTER its first `await` (`voice.transcribe`)
+  /// resolves — a second [SpeechEnded] arriving while that's still in
+  /// flight would see `phase == listening` too and start a SECOND
+  /// `_finalizeUtterance`, producing two replies for what should be one
+  /// turn. Set the instant one starts, cleared when it's done (whichever
+  /// way it exits), and checked alongside the phase in [_handleEvent].
+  bool _finalizing = false;
+
   @override
   HandsFreeState build() {
     ref.onDispose(() {
@@ -197,47 +206,54 @@ class HandsFreeController extends Notifier<HandsFreeState> {
           state = state.copyWith(phase: HandsFreePhase.listening);
         }
       case SpeechEnded(:final samples):
-        if (state.phase == HandsFreePhase.listening) {
+        if (state.phase == HandsFreePhase.listening && !_finalizing) {
+          _finalizing = true;
           unawaited(_finalizeUtterance(samples));
         }
     }
   }
 
   Future<void> _finalizeUtterance(Float32List samples) async {
-    final voice = ref.read(voiceServiceProvider);
-    final Transcript transcript;
     try {
-      transcript = await voice.transcribe(samples);
-    } on VoiceFailure catch (e) {
-      state = state.copyWith(errorMessage: e.message);
-      return;
-    }
-    final text = transcript.text.trim();
-    if (text.isEmpty) return; // noise/silence VAD mis-segmented; stay listening
+      final voice = ref.read(voiceServiceProvider);
+      final Transcript transcript;
+      try {
+        transcript = await voice.transcribe(samples);
+      } on VoiceFailure catch (e) {
+        state = state.copyWith(errorMessage: e.message);
+        return;
+      }
+      final text = transcript.text.trim();
+      if (text.isEmpty) {
+        return; // noise/silence VAD mis-segmented; stay listening
+      }
 
-    state = state.copyWith(
-      phase: HandsFreePhase.thinking,
-      lastUserText: text,
-      clearError: true,
-    );
-    final callback = _onUserUtterance;
-    final reply = callback == null ? null : await callback(text);
-    // A barge-in (or `stop()`) may have already moved the phase on while we
-    // were awaiting the engine — don't stomp back to speaking/listening over
-    // whatever the user's interruption already decided.
-    if (state.phase != HandsFreePhase.thinking) return;
-    if (reply == null || reply.trim().isEmpty) {
       state = state.copyWith(
-        phase: HandsFreePhase.listening,
-        errorMessage: 'The model could not generate a reply.',
+        phase: HandsFreePhase.thinking,
+        lastUserText: text,
+        clearError: true,
       );
-      return;
+      final callback = _onUserUtterance;
+      final reply = callback == null ? null : await callback(text);
+      // A barge-in (or `stop()`) may have already moved the phase on while
+      // we were awaiting the engine — don't stomp back to speaking/
+      // listening over whatever the user's interruption already decided.
+      if (state.phase != HandsFreePhase.thinking) return;
+      if (reply == null || reply.trim().isEmpty) {
+        state = state.copyWith(
+          phase: HandsFreePhase.listening,
+          errorMessage: 'The model could not generate a reply.',
+        );
+        return;
+      }
+      state = state.copyWith(
+        phase: HandsFreePhase.speaking,
+        lastAssistantText: reply,
+      );
+      await _speak(reply);
+    } finally {
+      _finalizing = false;
     }
-    state = state.copyWith(
-      phase: HandsFreePhase.speaking,
-      lastAssistantText: reply,
-    );
-    await _speak(reply);
   }
 
   Future<void> _speak(String text) async {

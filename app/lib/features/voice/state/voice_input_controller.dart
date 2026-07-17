@@ -73,6 +73,19 @@ class VoiceInputController extends Notifier<VoiceInputState> {
   /// it.
   MicSource? _activeMic;
 
+  /// Reviewer-filed race (same class as QA BUG-2): [startHold] awaits
+  /// `voiceModelInstallerProvider.future`, `loadVad`/`loadAsr`, and
+  /// `mic.start()` — all before it ever sets `phase = listening`. On a fast
+  /// tap, [endHold] can run and early-return (`state.phase !=
+  /// VoiceInputPhase.listening`) WHILE those awaits are still in flight —
+  /// then `startHold` finishes, opens the mic, and enters `listening` with
+  /// no one left holding the button: the mic captures indefinitely until a
+  /// second, unrelated tap. Set the instant [endHold] is called, checked by
+  /// [startHold] right after `mic.start()` (the earliest point a real mic
+  /// session exists) so a release-during-startup tears the just-opened mic
+  /// back down instead of entering `listening`.
+  bool _releaseRequested = false;
+
   @override
   VoiceInputState build() {
     ref.onDispose(() {
@@ -85,6 +98,7 @@ class VoiceInputController extends Notifier<VoiceInputState> {
   /// Called on press-down. No-op if already listening.
   Future<void> startHold() async {
     if (state.phase == VoiceInputPhase.listening) return;
+    _releaseRequested = false;
 
     final installer = await ref.read(voiceModelInstallerProvider.future);
     final asrEntry = voiceModelCatalog.firstWhere(
@@ -119,6 +133,16 @@ class VoiceInputController extends Notifier<VoiceInputState> {
     }
     _activeMic = mic;
 
+    // The race: `endHold` already ran (and no-opped) while the awaits above
+    // were in flight — don't enter `listening` with nobody holding the
+    // button, tear the mic we just opened back down instead.
+    if (_releaseRequested) {
+      _activeMic = null;
+      _releaseRequested = false;
+      await mic.stop();
+      return;
+    }
+
     state = VoiceInputState(phase: VoiceInputPhase.listening, liveText: '');
     final done = Completer<void>();
     _streamDone = done;
@@ -148,7 +172,17 @@ class VoiceInputController extends Notifier<VoiceInputState> {
   /// forever), and returns the finalized text for the caller to drop into
   /// the composer's `TextEditingController`. Resets to idle either way.
   Future<String> endHold() async {
-    if (state.phase != VoiceInputPhase.listening) return '';
+    _releaseRequested = true;
+    if (state.phase != VoiceInputPhase.listening) {
+      // Belt-and-suspenders: `startHold` may have already opened a real mic
+      // session (captured into `_activeMic`) without having reached
+      // `listening` yet — stop it regardless of phase rather than trusting
+      // `_releaseRequested` alone to be checked in time.
+      final mic = _activeMic;
+      _activeMic = null;
+      await mic?.stop();
+      return '';
+    }
     final mic = ref.read(micSourceProvider);
     await mic.stop();
     _activeMic = null;

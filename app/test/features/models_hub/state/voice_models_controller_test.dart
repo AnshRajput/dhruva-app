@@ -63,7 +63,15 @@ void main() {
     () async {
       await container.read(voiceModelsControllerProvider.future);
       final notifier = container.read(voiceModelsControllerProvider.notifier);
-      final entry = vadCatalogEntry;
+      // Loop 6 reviewer nit: `vadCatalogEntry.sha256` is now pinned to the
+      // REAL asset's hash (closes the bit-corruption gap), so a synthetic
+      // all-zero fake download would fail checksum verification — this
+      // test's job is proving the download->install WIRING, not
+      // re-proving checksum verification (exhaustively covered in
+      // `download_manager_test.dart`), so it downloads via a same-id/same-
+      // files copy with no checksum pinned, same as the original test
+      // intent before sha256 existed.
+      final entry = _noChecksum(vadCatalogEntry);
 
       await notifier.download(entry);
       expect(_statusFor(container, entry.id), VoiceModelStatus.downloading);
@@ -144,3 +152,20 @@ VoiceModelStatus _statusFor(ProviderContainer container, String entryId) {
   final state = container.read(voiceModelsControllerProvider).value!;
   return state.firstWhere((s) => s.entry.id == entryId).status;
 }
+
+/// Same id/files/url as [entry] but with `sha256: null` — see the
+/// "downloading the VAD entry" test's comment for why.
+VoiceCatalogEntry _noChecksum(VoiceCatalogEntry entry) => VoiceCatalogEntry(
+  id: entry.id,
+  role: entry.role,
+  displayName: entry.displayName,
+  description: entry.description,
+  languages: entry.languages,
+  url: entry.url,
+  downloadSizeBytes: entry.downloadSizeBytes,
+  license: entry.license,
+  licenseUrl: entry.licenseUrl,
+  isArchive: entry.isArchive,
+  files: entry.files,
+  minRamMb: entry.minRamMb,
+);

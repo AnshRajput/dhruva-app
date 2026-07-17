@@ -30,7 +30,7 @@ final class FakeMicSource implements MicSource {
     if (!permissionGranted) {
       throw const VoiceValidationFailure('microphone permission denied');
     }
-    await _controller?.close();
+    _closeController();
     startCount++;
     // Closed in stop()/dispose(), or above on the next start().
     // ignore: close_sinks
@@ -54,13 +54,25 @@ final class FakeMicSource implements MicSource {
   @override
   Future<void> stop() async {
     stopCount++;
-    await _controller?.close();
-    _controller = null;
+    _closeController();
   }
 
   @override
   Future<void> dispose() async {
-    await _controller?.close();
+    _closeController();
+  }
+
+  /// `StreamController.close()`'s returned Future only completes once its
+  /// `done` event has been delivered to a listener — for a single-
+  /// subscription controller that never got one (e.g. a hold torn down
+  /// before `transcribeStream(audio).listen(...)` ever ran, the exact race
+  /// `voice_input_controller_test.dart`'s "RACE" test drives), that Future
+  /// never resolves. Real `MicAudioSource.stop()` has no such quirk (the
+  /// `record` package's stop doesn't wait on Dart-stream listener
+  /// bookkeeping), so this fake shouldn't either — fire the close, don't
+  /// await it.
+  void _closeController() {
+    unawaited(_controller?.close());
     _controller = null;
   }
 }

@@ -48,6 +48,17 @@ void main() {
       }
     });
 
+    test('every entry has a self-computed sha256 pinned (Loop 6 reviewer nit '
+        '— closes the bit-corruption/decode-bomb gap; catches a truncated '
+        'hex string or copy-paste slip, since a wrong hash would silently '
+        'brick every future real download)', () {
+      final hex64 = RegExp(r'^[0-9a-f]{64}$');
+      for (final e in voiceModelCatalog) {
+        expect(e.sha256, isNotNull, reason: e.id);
+        expect(hex64.hasMatch(e.sha256!), isTrue, reason: e.id);
+      }
+    });
+
     test('only ASR/TTS bundles are archives; VAD is a single file', () {
       for (final e in voiceModelCatalog) {
         if (e.role == VoiceModelRole.vad) {
