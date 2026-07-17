@@ -1260,3 +1260,59 @@ BUG-2 (HIGH, privacy): disposing VoiceInputController mid-hold (back-nav while
 mic pressed, .autoDispose) never stops the mic — onDispose only cancels the
 downstream sub, upstream record capture keeps running. HandsFreeController does
 this right (keeps _activeMic, .stop() on dispose) — mirror it.
+
+### [LOOP-06] [flutter-core → qa-tester, designer, reviewer] [HANDOFF] 2026-07-18T02:15
+Consolidated fix pass closed on loop/06-voice, commit af5943f. All 683 tests
+green (was 683, 2 filed-red). `make verify` clean (analyze/format/test).
+Floor-scope coverage 80.32% (unchanged from last handoff's 80.24%, floor 70%).
+
+QA BUG-2 (HIGH, privacy) — FIXED: `VoiceInputController` now keeps
+`_activeMic` (captured in `startHold`, cleared in `endHold`) and calls
+`_activeMic?.stop()` from `build()`'s `ref.onDispose`, mirroring
+`HandsFreeController` exactly (same reasoning: `ref.read` isn't valid inside
+a dispose callback, so a plain field is the seam, not a provider read).
+QA's repro (`voice_input_controller_test.dart`'s last test — dispose the
+container mid-hold, assert `mic.stopCount == 1`) is green.
+
+QA BUG-1 (MED) — FIXED both halves: (a) `extractTarBz2` (`voice/
+voice_model_installer.dart`) now wraps `BZip2Decoder`/`TarDecoder` in a
+try/catch that rethrows any exception as `VoiceModelLoadFailure` — same
+shape as `sherpa_voice_service.dart`'s native-call wrapping, per QA's own
+suggested fix. (b) `VoiceModelsController._finishInstall` also gained a
+generic `catch (e)` after the `on VoiceFailure` clause as defense-in-depth
+(a tile stuck "installing" forever from ANY uncaught error, typed or not,
+is the failure mode being closed here — not just the one QA found). QA's
+repro (`voice_model_installer_test.dart`'s "trust boundary" group,
+truncated-mid-stream test) is green; the sibling garbage-bytes/zip-slip/
+compression-bomb tests in that group were already passing and stay green.
+
+Designer BLOCKING — FIXED: extended `DhruvaTokens.motion` with two named
+breathing-rate durations, `pulseMedium` (900ms) and `pulseSlow` (1400ms),
+sourced in `design-tokens.json`'s `motion.duration` (+ a `motion.pulseNote`
+explaining why these live outside the 100-600ms one-shot-transition scale)
+and mirrored in `design_tokens.dart`/`dhruva_theme_extension.dart`, both
+asserted in `app_theme_test.dart`'s drift-proof "durations" test. Consumed
+via the same bootstrap-then-`didChangeDependencies`-override pattern chat's
+`TypingIndicator` already established (no `BuildContext` at field-init
+time): `mic_button.dart`'s hold-to-talk pulse -> `pulseMedium`;
+`handsfree_screen.dart`'s phase star -> `pulseSlow` (listening) /
+`pulseMedium` (thinking) / `motion.moderate` (speaking — deliberately reused
+rather than a third new token, since it now shares the typing indicator's
+own cadence for "the AI is actively outputting").
+
+Designer nits — FIXED: `_ConversationView`'s phase label and user/assistant
+transcript are now each wrapped in `Semantics(liveRegion: true)` so a screen
+reader announces Listening -> Thinking -> Speaking and new transcript text
+as it lands, not just once on focus. `voice_model_tile.dart`'s error line
+switched from a raw `TextStyle(color: error)` to
+`textTheme.bodySmall?.copyWith(color: error)`. Icons/spinner nits left on
+backlog per the coordinator's explicit skip.
+
+No new deviations found while fixing these (unlike the T2 build pass, which
+surfaced several real bugs along the way — this pass was a clean, contained
+fix of exactly what QA/designer filed). Committed as af5943f on
+loop/06-voice, not pushed.
+
+Request: final reviewer sign-off + squash-merge decision. R11 (on-device
+mic/playback/latency) remains a physical-device-only verification, unchanged
+by this pass.
