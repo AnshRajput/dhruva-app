@@ -32,6 +32,13 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Reviewer N2 (Loop 4): committed 2.4MB AAR → consider Git-LFS or CI-fetch
+- Reviewer N3 (Loop 4): streaming hot-path headroom at 4096 max tokens —
+  RepaintBoundary on bubbles, O(n²) _rawBuffer accumulation; profile in the
+  Loop 11 performance pass
+- App credit row (AMENDMENT 2b): "Made with ❤️ by Ansh Singh Rajput" →
+  anshgandharva.online on the settings/about surface — land in Loop 5
+- Vercel production deploy of website at Loop 12 gate (AMENDMENT 2a)
 - Downloads: same-basename subfolder collision (a/model.gguf vs b/model.gguf
   flatten to one local name) — encode subfolder into on-disk name when a real
   repo needs it (reviewer carry-forward, Loop 3)

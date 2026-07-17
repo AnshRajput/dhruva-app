@@ -81,6 +81,7 @@ final class FakeEngineService implements EngineService {
     _run = run;
 
     Future<void> pump() async {
+      final sw = Stopwatch()..start();
       try {
         if (generateFailure != null) {
           controller.addError(generateFailure!);
@@ -102,7 +103,13 @@ final class FakeEngineService implements EngineService {
               : (emitted >= scriptedTokens.length
                     ? EngineStopReason.endOfSequence
                     : EngineStopReason.maxTokens);
-          controller.add(EngineCompletion(reason: reason, tokenCount: emitted));
+          controller.add(
+            EngineCompletion(
+              reason: reason,
+              tokenCount: emitted,
+              elapsedMs: sw.elapsedMilliseconds,
+            ),
+          );
         }
       } finally {
         if (!controller.isClosed) await controller.close();

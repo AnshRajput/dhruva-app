@@ -1,5 +1,6 @@
-/// Models hub home (T5 §1-2, §5): search + installed as tabs, downloads and
-/// the engine debug harness reachable from the app bar.
+/// Models hub home (T5 §1-2, §5): search + installed as tabs, downloads
+/// reachable from the app bar. One of the two bottom-nav destinations as of
+/// Loop 4 (see `core/router/app_shell.dart`) — `/chat` is app home now.
 library;
 
 import 'dart:io';
@@ -9,7 +10,7 @@ import 'dart:io';
 // logic — the picked `XFile`'s path is handed straight to
 // `StorageController.importLocal`, which is the only place that touches
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
-// concern, out of scope"). Mirrors the debug_chat carve-out in providers.dart.
+// concern, out of scope").
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +22,7 @@ import '../state/model_search_controller.dart';
 import '../state/storage_controller.dart';
 import '../widgets/failure_view.dart';
 import '../widgets/model_list_tile.dart';
+import '../widgets/recommended_rail.dart';
 
 class ModelsHubScreen extends StatelessWidget {
   const ModelsHubScreen({super.key});
@@ -37,11 +39,6 @@ class ModelsHubScreen extends StatelessWidget {
               icon: const Icon(Icons.download_outlined),
               tooltip: 'Downloads',
               onPressed: () => context.push('/models/downloads'),
-            ),
-            IconButton(
-              icon: const Icon(Icons.bug_report_outlined),
-              tooltip: 'Engine debug',
-              onPressed: () => context.push('/debug-chat'),
             ),
           ],
           bottom: const TabBar(
@@ -139,44 +136,67 @@ class _ResultsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Amendment 4c: the recommended rail only makes sense above an
+    // *unfiltered* view — once the user has typed a query, they've told us
+    // what they want, so it stays out of the way of real search results.
+    final showRail = state.query.isEmpty;
+
     if (state.items.isEmpty) {
-      return const EmptyStateView(
-        message: 'No models found. Try a different search.',
+      return Column(
+        children: [
+          if (showRail) const RecommendedRail(),
+          Expanded(
+            child: EmptyStateView(
+              message: showRail
+                  ? 'Try one of the recommended picks above, or search '
+                        'Hugging Face for something specific.'
+                  : 'No models found. Try a different search.',
+            ),
+          ),
+        ],
       );
     }
-    return RefreshIndicator(
-      onRefresh: () =>
-          ref.read(modelSearchControllerProvider.notifier).refresh(),
-      child: ListView.separated(
-        controller: scrollCtrl,
-        itemCount: state.items.length + (state.hasMore ? 1 : 0),
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          if (i >= state.items.length) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: state.loadMoreError != null
-                    ? TextButton(
-                        onPressed: () => ref
-                            .read(modelSearchControllerProvider.notifier)
-                            .loadMore(),
-                        child: Text(
-                          '${describeError(state.loadMoreError!)} · Tap to retry',
-                        ),
-                      )
-                    : const CircularProgressIndicator(),
-              ),
-            );
-          }
-          final model = state.items[i];
-          return ModelListTile(
-            model: model,
-            onTap: () =>
-                context.push('/models/repo/${Uri.encodeComponent(model.id)}'),
-          );
-        },
-      ),
+    return Column(
+      children: [
+        if (showRail) const RecommendedRail(),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () =>
+                ref.read(modelSearchControllerProvider.notifier).refresh(),
+            child: ListView.separated(
+              controller: scrollCtrl,
+              itemCount: state.items.length + (state.hasMore ? 1 : 0),
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                if (i >= state.items.length) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: state.loadMoreError != null
+                          ? TextButton(
+                              onPressed: () => ref
+                                  .read(modelSearchControllerProvider.notifier)
+                                  .loadMore(),
+                              child: Text(
+                                '${describeError(state.loadMoreError!)} · Tap to retry',
+                              ),
+                            )
+                          : const CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                final model = state.items[i];
+                return ModelListTile(
+                  model: model,
+                  onTap: () => context.push(
+                    '/models/repo/${Uri.encodeComponent(model.id)}',
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

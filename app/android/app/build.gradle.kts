@@ -22,9 +22,10 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "tech.appuinside.dhruva"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Device floor is minSdk 26 (DECISIONS.md "DEVICE FLOOR"); also the
+        // floor the llama-cpp-dart AAR declares. flutter.minSdkVersion is 24 by
+        // default, so pin 26 explicitly here.
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -41,4 +42,13 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // llama.cpp native libs (libllama.so + libggml* + libmtmd.so, arm64-v8a,
+    // CPU+mtmd). Prebuilt AAR from netdur/llama_cpp_dart release v0.9.0-dev.9,
+    // native-identical to our pinned commit c6e3778 (the 2 commits between are
+    // pure-Dart). Provenance + re-fetch: scripts/fetch-android-aar.sh.
+    // Closes R10 — without this the APK ships with no inference .so.
+    implementation(files("libs/llama-cpp-dart.aar"))
 }

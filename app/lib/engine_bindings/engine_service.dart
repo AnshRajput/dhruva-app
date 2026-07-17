@@ -56,7 +56,21 @@ final class EngineCompletion extends EngineEvent {
 
   /// Number of tokens generated in this run.
   final int tokenCount;
-  const EngineCompletion({required this.reason, required this.tokenCount});
+
+  /// Wall-clock milliseconds spanning command dispatch → this terminal event,
+  /// measured on the calling isolate (prompt prefill included). Authoritative
+  /// final stat for a tok/s readout: `tokenCount / (elapsedMs / 1000)`.
+  ///
+  /// For a *live* meter during streaming, the consumer times [EngineToken]
+  /// arrivals on its own isolate (the worker→main hop is ~constant, so
+  /// inter-arrival deltas track generation rate) — no per-token timestamp is
+  /// shipped because arrival time is already available where the meter lives.
+  final int elapsedMs;
+  const EngineCompletion({
+    required this.reason,
+    required this.tokenCount,
+    this.elapsedMs = 0,
+  });
 }
 
 /// Model + context load configuration. A thin, engine-neutral subset of the
@@ -91,7 +105,20 @@ final class EngineGenerateParams {
   final int topK;
   final double topP;
 
-  /// Deterministic argmax sampling; overrides temperature/top-k/top-p.
+  /// RNG seed for stochastic sampling. `0xFFFFFFFF` (the default) means the
+  /// runtime picks a random seed per call; a fixed value makes a
+  /// temperature>0 run reproducible. Ignored when [greedy] is set.
+  ///
+  /// Support matrix (what reaches the native sampler at pinned commit
+  /// c6e3778): temperature, topK, topP, seed, greedy — all wired here. The
+  /// package's `SamplerParams` also carries minP, typicalP, repeat/frequency/
+  /// presence penalties, Mirostat, dynamic-temp, XTC, DRY, adaptive-P,
+  /// grammar and logit-bias; those are deliberately NOT surfaced yet (chat's
+  /// sampling sheet doesn't set them). Add fields here + plumb in
+  /// `llama_engine_service` when a loop needs them — purely additive.
+  final int seed;
+
+  /// Deterministic argmax sampling; overrides temperature/top-k/top-p/seed.
   final bool greedy;
 
   const EngineGenerateParams({
@@ -99,6 +126,7 @@ final class EngineGenerateParams {
     this.temperature = 0.7,
     this.topK = 40,
     this.topP = 0.95,
+    this.seed = 0xFFFFFFFF,
     this.greedy = false,
   });
 }

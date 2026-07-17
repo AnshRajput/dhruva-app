@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
           cache: true
       - run: flutter pub get
       - run: dart format --set-exit-if-changed lib test
@@ -35,12 +35,12 @@ jobs:
           # Exclusions (see orchestra/DECISIONS.md "COVERAGE FLOOR SCOPE"):
           # - llama_engine_service.dart: native engine glue — its tests need real
           #   dylibs + a model, which CI lacks; unit-tested separately on dev machines
-          # - features/debug_chat: temporary dev harness, replaced in Loop 4 —
-          #   delete this exclusion with it
+          # (features/debug_chat's exclusion was deleted with the harness itself
+          # in Loop 4 — see orchestra/BLACKBOARD.md.)
           total=$(python3 - << 'PY'
           import re
           recs = open('coverage/lcov.info').read().split('end_of_record')
-          excl = ('lib/engine_bindings/llama_engine_service.dart', 'lib/features/debug_chat/')
+          excl = ('lib/engine_bindings/llama_engine_service.dart',)
           lf = lh = 0
           for r in recs:
               m = re.search(r'SF:(.+)', r)
@@ -66,7 +66,7 @@ jobs:
           java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
           cache: true
       - run: flutter pub get
       - run: flutter build apk --release
@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
           cache: true
       - run: flutter pub get
       - run: flutter build ios --no-codesign

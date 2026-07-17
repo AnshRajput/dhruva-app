@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/models_hub/ui/models_hub_screen.dart';
 import 'package:flutter/material.dart';
@@ -28,7 +29,7 @@ Future<void> _pump(WidgetTester tester, HfApiClient client) async {
         hfApiClientProvider.overrideWithValue(client),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
       ],
-      child: const MaterialApp(home: ModelsHubScreen()),
+      child: MaterialApp(theme: AppTheme.dark, home: const ModelsHubScreen()),
     ),
   );
   await tester.pumpAndSettle();
@@ -68,4 +69,27 @@ void main() {
     );
     expect(find.text('Retry'), findsOneWidget);
   });
+
+  testWidgets(
+    // QA (Loop-4 attack list #6): Amendment 4c's rail is only meant above an
+    // *unfiltered* view.
+    'the recommended rail is visible with an empty query and disappears '
+    'once the user submits a search query',
+    (tester) async {
+      final client = HfApiClient(
+        client: MockClient(
+          (request) async => http.Response(_fixture('search_gguf.json'), 200),
+        ),
+      );
+      await _pump(tester, client);
+
+      expect(find.text('Recommended for your device'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'llama');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Recommended for your device'), findsNothing);
+    },
+  );
 }

@@ -24,6 +24,9 @@ void main() {
       expect(tokens.map((t) => t.text).join(), 'Hello!');
       expect(done.reason, EngineStopReason.endOfSequence);
       expect(done.tokenCount, 3);
+      // Completion carries generation stats for a tok/s readout (Loop 4 D2):
+      // tokenCount + wall-clock elapsedMs spanning the run.
+      expect(done.elapsedMs, greaterThan(0));
       // Completion is the last event.
       expect(events.last, isA<EngineCompletion>());
     });

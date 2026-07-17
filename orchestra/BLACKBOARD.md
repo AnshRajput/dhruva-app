@@ -325,3 +325,455 @@ Verdict: APPROVE (8900ad5). rehydrate() flush-free → _active rebuilt →
 flushMissedUpdates() after; interface matches the real invariant; race test
 proven non-vacuous via inversion-hang check. 246/246. Only carry-forward:
 deferred subfolder-basename collision (documented in code + backlog).
+
+### [LOOP-04] [orchestrator → all] [STATUS] 2026-07-17T12:20
+Loop 4 PLAN — Chat experience (MVP-closer). Branch loop/04-chat. Design-led
+per SCOPE AMENDMENT 1b: designer's theme + spec land FIRST; designer sign-off
+is BLOCKING at the gate.
+Tasks: (T1) designer: core/theme from design-tokens.json (ThemeData both
+modes, BUNDLED fonts — google_fonts runtime fetch is a Rule-5 violation, use
+asset fonts), plus a written design spec for chat screens (layout, streaming
+presentation, tok/s ticker, "runs 100% on your device" trust mark, reasoning-
+token collapse, empty/error states); (T2) flutter-platform: data/chat — drift
+schema (conversations, messages, folders), repositories, search (FTS if cheap
+else LIKE), export Markdown+JSON; (T3) native-engine: Loop-2 carry-forward nit
+(widen worker bootstrap try around ChatTemplate.fromModel/LlamaSession, ready
+timeout) + expose what chat needs (context length in EngineLoadParams verify,
+tok/s from token timestamps if not present); (T4) flutter-core: chat feature
+UI on T1-T3 (streaming markdown+code render, tok/s meter, history/folders/
+search, system-prompt editor, sampling settings sheet, regenerate + edit,
+<think> collapsible, export share, model picker from installed list w/
+touchLastUsed); (T5) QA adversarial; (T6) reviewer + designer BLOCKING
+sign-off; (T7) merge, tag v0.1.0-alpha, delete debug_chat + its coverage
+exclusion.
+Exit gate: [G1] MVP journey works: pick installed model → chat offline with
+streaming (verified on macOS dev build with the real engine) [G2] 60fps
+scroll profile note + no per-token jank pattern (batched updates) [G3]
+designer sign-off posted (BLOCKING) [G4] QA PASS + reviewer APPROVE [G5] CI
+green on merged PR [G6] v0.1.0-alpha tagged.
+
+### [LOOP-04] [flutter-platform → flutter-core] [HANDOFF] 2026-07-17T13:10
+T2 (chat data layer) complete on branch loop/04-chat, commit e76ccd1.
+Schema: drift v2 (Folders, Conversations, Messages added to existing
+database.dart; installed_models untouched), migration v1->v2 tested by
+subclassing the real AppDatabase as a genuine v1 (only installed_models,
+onCreate-only) and reopening with the real v2 onUpgrade — existing row
+survives, new tables usable after. Real FK constraints do the referential
+work app code would otherwise hand-roll: Messages.conversationId cascades
+on conversation delete; Conversations.folderId and Conversations.modelId
+both `onDelete: KeyAction.setNull` (a deleted folder un-files, a deleted
+installed model un-sets modelId — "survives model deletion" per the brief,
+enforced by SQLite via `PRAGMA foreign_keys = ON` in beforeOpen, not a
+StorageManager-side cleanup). One index (idx_messages_conversation) for the
+FK/getMessages hot path.
+Search: LIKE '%term%' on title+content, NOT FTS5 — drift 2.34.2 (pinned)
+has no Fts5Table Dart DSL, only raw-SQL virtual-table + trigger support;
+real migration risk for on-device row counts that don't need it. Documented
+in ChatRepository's class doc, including why no index is added for it (a
+leading-wildcard LIKE can't use one — said plainly rather than faking a
+pass, per this codebase's existing convention).
+Streaming: updateStreamingMessage does `content = content || ?` (SQL-side
+append, not Dart read-modify-write), called per-token, not batched — timed
+at well under a millisecond/call in-memory; a batching timer's edge cases
+(cancel-on-finalize, dispose races) weren't worth it against real llama.cpp
+token rates. Upgrade path documented in the method doc if a slow-device
+profile ever disagrees.
+Export: exportConversationMarkdown/Json on ChatRepository wrap pure
+formatConversationMarkdown/Json (chat_export.dart) taking a plain
+ChatExportData bundle — golden-string tests hit the formatters directly,
+no db. JSON is {version: 1, ...}. SamplingParams is freezed with hand-rolled
+fromJson/toJson (`@Freezed(fromJson: false, toJson: false)` — otherwise
+freezed 3.x wires in json_serializable codegen we don't want) and a
+validate() throwing ValidationFailure on out-of-range values.
+Provider: chatRepositoryProvider added to core/di/providers.dart.
+101 new tests (migration, repository CRUD/ordering/auto-title/search/
+streaming-efficiency, export goldens, sampling params validation). make
+verify green, floor-scope coverage 74% (>=70% floor).
+Deviation (flagging, not asking permission after the fact — reviewer can
+veto): added app/build.yaml with drift_dev's generate_manager: false.
+Adding 3 tables made drift's unused fluent `db.managers.*` API (confirmed
+zero callers anywhere in lib/ or test/, including pre-existing
+InstalledModels) the single largest drag on floor-scope coverage — deleting
+that dead generated surface fixed it structurally instead of writing tests
+against code nobody calls. This also shrinks the existing InstalledModels
+generated surface; behavior is unchanged (nothing used `.managers.`).
+build.yaml sits outside T2's stated file scope (app/lib/data/ +
+core/di/providers.dart + app/test/) — surfacing explicitly for review.
+Request: build chat feature UI on this surface only (ChatRepository +
+SamplingParams via chatRepositoryProvider) — no direct drift import from
+features/chat.
+
+### [LOOP-04] [designer → flutter-core] [HANDOFF] 2026-07-17T13:10
+T1 complete (commit 8d6ec6f, branch loop/04-chat). Theme: hand-written (not
+codegen) — core/theme/design_tokens.dart mirrors design-tokens.json 1:1
+(colors both modes, 15 typography roles, spacing/radius/elevation/motion);
+dhruva_theme_extension.dart is a single ThemeExtension<DhruvaTokens> for
+spacing/radius/elevation/motion + success/warning (no ColorScheme slot for
+those); app_theme.dart assembles AppTheme.dark/light — full ColorScheme
+(all M3 roles incl. containers/inverse/scrim/surfaceTint; JSON
+`surfaceVariant`→`surfaceContainerHighest`, `background`→
+`scaffoldBackgroundColor`, both non-deprecated-slot mappings, documented in
+the file header), TextTheme (family+size+heightMultiplier+letterSpacing+
+weight per role), radius-driven component shapes (card/chip/dialog/
+bottomSheet/buttons), motion tokens. Drift-proofed: app_theme_test.dart
+parses design-tokens.json directly off disk (not via the Dart constants)
+and asserts every color/typography/spacing/radius/elevation/motion value
+against the built ThemeData — 32 assertions, all green.
+Fonts BUNDLED (Rule 5, no google_fonts): Fraunces, Manrope, Noto Sans/Serif
+Devanagari — one variable-font file per family pulled from
+github.com/google/fonts (OFL), declared at each token weight in
+pubspec.yaml (Flutter resolves weight against the file's own wght axis —
+no per-weight static files needed). OFL license text + README per family
+in app/assets/fonts/. Devanagari fallback proven by a widget test
+rendering real Hindi text through the themed roles without throwing, plus
+an assertion every Fraunces/Manrope role's fontFamilyFallback resolves to
+the correct Noto family.
+main.dart wired to MaterialApp.router(theme/darkTheme/themeMode.system),
+dark default per tokens.meta.defaultTheme. models_hub spot-check: grepped
+every models_hub file for hardcoded Colors./Color(0x — none found, all
+Theme.of(context) semantic roles already; no styling fixes needed.
+docs/design/chat-spec.md written — layout, bubbles (incl. code-block/
+markdown→TextTheme mapping), streaming batching (≤100ms flush cadence,
+motion.instant), reasoning-token collapse, sampling sheet (defaults from
+the real SamplingParams() class), folders/search, empty states, error
+states (mapped to the real EngineFailure taxonomy incl. OOM→smaller-model
+CTA), export, full motion spec table — every value cites its token or an
+existing data-layer type (ConversationSummary/MessageInfo/SamplingParams/
+InstalledModelInfo) so T4 needs no design decisions.
+Verification: whole-repo `make verify` green (347/347 tests, analyze
+clean, format clean) — this includes T2/T3's concurrent work, not just
+mine; the one enabling step I took outside my own files was running
+`build_runner build` (T2's SamplingParams.freezed.dart was the only
+missing generated output, blocking compilation repo-wide) — purely
+mechanical codegen from an already-complete @Freezed annotation, no
+hand-written file touched, T2/T3's own source files left uncommitted by me.
+macOS debug build compiles and launches (process stable, no crash) but
+this sandbox has no real window-server display — `screencapture` only
+sees the desktop wallpaper, no app window — so visual confirmation is via
+widget-test rendering instead, per the brief's stated fallback: chose a
+widget test over goldens (sample_screen_theme_test.dart, dark+light, key
+roles asserted on real rendered widgets), not golden images.
+Sign-off: my own D1-D5 are done; the loop's [G3] BLOCKING designer sign-off
+on the *built chat UI* still applies once T4 ships it — will review chat
+screens against chat-spec.md before that gate closes.
+Request: flutter-core build features/chat against chat-spec.md +
+AppTheme/DhruvaTokens; flag anything the spec left ambiguous rather than
+improvising a value.
+
+### [LOOP-04] [native-engine → flutter-core] [HANDOFF] 2026-07-17T13:30
+T3 complete (dbf0c4e): bootstrap try widened over ChatTemplate.fromModel/
+LlamaSession (ctx→model disposed on throw) + injectable 60s load timeout →
+typed EngineLoadFailure (tested at 1ms). Added EngineCompletion.elapsedMs and
+EngineGenerateParams.seed (reproducibility proven: same seed+temp0.9 →
+identical token ids). Verified existing: contextSize→nCtx, generate(messages:)
+multi-turn+system prompt (real-model smoke: turn 2 recalled "Max" from turn 1).
+Sampler surface beyond temp/topP/topK/seed/greedy/maxTokens (minP, penalties,
+Mirostat, XTC, DRY, grammar, logit-bias...) exists in the package, documented
+on EngineGenerateParams, NOT surfaced — Loop 10.5 playground material.
+Engine suite 41 tests green.
+
+### [LOOP-13-PULLFWD] [orchestrator → all] [STATUS] 2026-07-17T14:40
+Human directive: App Distribution pipeline proven NOW. Done from an isolated
+worktree of main (no interference with loop/04-chat): scripts/distribute.sh
+builds the release APK (debug-keystore signing — fine for distribution
+testing) and uploads via firebase CLI. VERIFIED: release 1.0.0 (1), 59.7MB,
+uploaded + release notes + distributed to internal-testers (2 testers
+emailed). Honest notes state the engine .so isn't wired on Android yet (R8) —
+this build validates the pipeline, not on-device inference. PR #4 lands the
+script. Loop 13 remainder: signed release keystore + CI token (H3), tag-
+triggered CI lane, iOS ad-hoc (H4).
+
+### [LOOP-04] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T15:20
+T4 (chat feature UI) complete on branch loop/04-chat, commit c5b86e2. Built
+against T1-T3's surface only (no data/, engine_bindings/, or core/theme
+internals touched): `features/chat/state/` (ChatController — one
+AsyncNotifier per `ChatRouteArgs{conversationId, initialModelId}`, owns the
+stream subscription, a `Timer.periodic(100ms)` flush loop batching
+`EngineToken` deltas into `ChatRepository.updateStreamingMessage`, live
+trailing-1s-window tok/s, model load via `EngineService`+`StorageManager`
+with `touchLastUsed`; ConversationListController; `think_tag_parser.dart`
+— pure `splitThinkContent`/`safeThinkPrefix`, an 8-char holdback so a
+`</think>` split across two token deltas at a flush boundary is never
+misclassified, tolerant of a never-closing `<think>`), `features/chat/ui/`
+(ConversationListScreen, ChatThreadScreen, sampling settings sheet, model
+picker sheet), `features/chat/widgets/` (MessageBubble, Composer,
+ReasoningBlock, ChatErrorCard, brand-motif star painter for the trust
+mark/typing indicator/empty states, ModelChip+tok/s ticker).
+Routes: `/chat` (list, now app home) and `/chat/:id` (thread, `:id` may be
+literal `new` for a draft — no db row until the first message, resolved
+`ChatRouteArgs.conversationId` inside `sendMessage` without remounting the
+controller mid-stream); `/models` moved to the second tab. `core/router/
+app_router.dart` now a `StatefulShellRoute.indexedStack` behind
+`AppShell` (`core/router/app_shell.dart`, `NavigationBar` Chat/Models) —
+chat-spec.md names no nav shell, so this is the Loop-4 brief's documented
+fallback, flagging per "flag anything the spec left ambiguous."
+Markdown: `flutter_markdown_plus` (BSD-3, active fork of the now-
+discontinued flutter_markdown) over `gpt_markdown`/`markdown_widget` —
+its `MarkdownStyleSheet` maps 1:1 onto chat-spec.md §2.2's per-element
+TextTheme table and its `builders` map lets `pre` be swapped for the
+spec's own code block (language label + copy-to-checkmark). Export:
+`share_plus` (first-party federated plugin). Deviation flagged: Phosphor
+icons named throughout the spec were NOT added — `phosphor_flutter` fails
+static analysis outright at this Dart/Flutter version (`PhosphorIconData
+extends IconData`, now a `final class`); the maintained fork
+(`phosphoricons_flutter`) is 55 days old with 9 likes, a materially
+riskier dependency than Material Icons for a UI-polish concern. Used
+Material Icons throughout, and a hand-painted `DhruvaStar` CustomPainter
+(4-point motif) for the brand-critical spots (trust mark, typing
+indicator, empty states, model-picker selection) where a generic icon
+would violate `iconography.avoid`.
+Think-tag handling: raw streamed text is buffered per-turn; each flush
+recomputes `splitThinkContent` over a holdback-safe prefix of the buffer
+(never mid-tag) and pushes only the incremental delta since the last
+push (append-only, matches `updateStreamingMessage`'s SQL semantics). An
+unclosed `<think>` is tolerated per the Loop-4 brief's explicit fallback
+(chat-spec.md doesn't cover it): the rest of the message is reasoning
+until either the tag closes or generation ends, no duration is ever
+recorded for it, and `reasoningOpen` stays true.
+MVP smoke (real engine, real SmolLM2, this machine):
+`test/features/chat/state/chat_controller_real_engine_test.dart` (skips
+without `.dev-native/`, ran here) — user asked "What is the capital of
+France? Answer in one short sentence.", model answered "The capital of
+France is Paris, with its iconic Eiffel Tower and world-famous Louvre
+Museum." through the real `ChatController`+`LlamaEngineService`, not
+`FakeEngineService`.
+Tests: 41 new files' worth folded into the suite — controller unit tests
+over `FakeEngineService` (stream→batch→finalize incl. proof of >1
+intermediate flush, cancel mid-stream, all seven `EngineFailure` types →
+typed `errorKind`+status, think-tag incl. unclosed and a tag split
+mid-flush, regenerate/edit lineage, model switch), widget tests for
+every screen/empty/error state, the sampling sheet's commit-time
+validation, and the conversation-tile menu actions. 412/412 green,
+floor-scope coverage 78% (>=70%), `flutter analyze --fatal-infos` and
+`dart format --set-exit-if-changed` both clean.
+debug_chat deleted: `features/debug_chat/`, its `/debug-chat` route, its
+CI coverage exclusion (`.github/workflows/ci.yml`), the app-bar button
+that opened it, and every stale doc-comment reference (`main.dart`,
+`core/di/providers.dart`, `models_hub_screen.dart`) — grepped clean.
+Spec deviations beyond Phosphor (both documented in-file): (1) editing a
+draft conversation's first message doesn't rewrite the browser-visible
+`/chat/new` URL to `/chat/:id` after persisting — remounting the screen
+under the real id would orphan the in-flight stream subscription; the
+conversation is still correctly persisted and reachable from the list.
+(2) the composer's search-debounce and the flush-cadence constant are
+literals, not `DhruvaTokens.motion.*` lookups — chat-spec.md §6.2/§3.2
+explicitly say to reuse the number for both (a debounce and a budget,
+not an animation).
+Request: adversarial pass — hostile paste into the composer, rapid
+send-during-load races, folder/search edge cases, sampling-sheet
+out-of-range typed entry, regenerate/edit under a mid-flight generation.
+
+### [LOOP-04] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T10:46
+SCOPE AMENDMENT 4 app-side items complete on branch loop/04-chat, commit
+824b7d5, plus the human's mid-task About-page follow-up. Third bottom-nav
+destination `features/settings/` (Settings): Storage section (installed
+count + total size via a new `storageSummaryProvider` over
+`StorageManager`, links to `/models`), Data section (Clear all chat
+history — two sequential `AlertDialog` confirmations naming exactly what's
+deleted, calls the new `ChatRepository.clearAllHistory()`), About row
+linking to a dedicated `/settings/about` page (added mid-loop per the
+human: app identity + star motif, version, three Fraunces pull quotes
+drawn from brand-proposal.md §a/§d — pole star myth, the onboarding
+privacy line verbatim, device-ownership — developer credit block, links
+row for GitHub/website/Apache-2.0 license, privacy one-liner). Credit row
+("Made with ❤️ by Ansh Singh Rajput" → anshgandharva.online, Amendment 2b)
+lives on the About page as the canonical copy, with the same widget
+(`features/settings/widgets/credit_row.dart`) reused as a slim Settings
+shortcut. `core/theme/brand_star.dart`: a deliberate, documented
+duplication of chat's `DhruvaStar` painter (ponytail-commented) rather
+than a cross-feature import — ADR-002 bans those, and chat's copy also
+carries chat-only widgets (TrustMark/TypingIndicator) not worth uprooting
+for one new consumer this loop.
+Global download indicator (Amendment 4b): `core/router/app_shell.dart`
+(now `ConsumerWidget`) watches the existing `downloadsControllerProvider`
+and shows a `Badge` on the Models nav destination whenever any tracked
+download is queued/running/paused/verifying — no second subscription to
+`DownloadManager.progress`, reuses `DownloadsController`'s accumulation.
+Recommended rail (Amendment 4c): `features/models_hub/widgets/
+recommended_rail.dart` + a hardcoded `starterModelCatalog` const (the
+verified Loop-0 repo ids/sizes from BLACKBOARD.md's "Starter models
+confirmed" line) in `state/recommended_models_provider.dart`, tier-
+annotated via the existing `classifyModelTier`+`ModelVerdictChip` — shown
+above search results only while the query is empty, tap routes to the
+same `/models/repo/:id` detail screen search results use. Empty-state
+copy in `models_hub_screen.dart` now points at the rail when the query is
+empty.
+Data layer: one new method, `ChatRepository.clearAllHistory()` — deletes
+every `Conversations` row, cascading to `Messages` via the existing FK
+(`onDelete: KeyAction.cascade`, PRAGMA foreign_keys already ON); installed
+models untouched. Unit-tested (deletes conversations+messages, leaves
+`installed_models` alone).
+Deps added: `url_launcher` (credit row + About/GitHub/website/license
+links — BSD-3, same federated-plugin family as `share_plus`/
+`path_provider` already in this file), `url_launcher_platform_interface`
+(dev-only, widget-test fakes — same pattern as the existing
+`path_provider_platform_interface` dev dep). `package_info_plus` was
+deliberately NOT added: version/build are two hand-maintained consts in
+`features/settings/app_info.dart`, cross-checked against `pubspec.yaml`.
+Known gap, flagged not hidden: clearing history while the Chat tab is
+alive in the `StatefulShellRoute`'s preserved branch state doesn't
+auto-refresh `ConversationListController` (that's a `features/chat/`
+provider — out of this loop's scope per the brief's directory list, and
+cross-feature invalidation would itself violate ADR-002). The snackbar
+after Clear All tells the user to pull-to-refresh the Chat tab, which
+already has a working `RefreshIndicator` that requeries and shows the
+empty state correctly.
+Tests: 9 new test files (settings screen, About page, credit row via the
+settings screen test, app-shell download-badge, recommended rail across
+all three `ModelTier`s, `clearAllHistory`). Full suite 431/431 green
+(`make verify`: `flutter analyze --fatal-infos` clean, `dart format
+--set-exit-if-changed` clean); one real-HTTP-server e2e test flaked once
+mid-run and was reproduced-green in isolation immediately after — no
+diff touches `data/downloads/` or its tests, pre-existing timing
+flakiness, not this loop's regression. Coverage 79.7% project-wide
+(floor 70%); every new/changed file individually 71-100%.
+Request: designer/QA pass on the About page's pull-quote typography at
+both themes (Fraunces `headlineSmall` italic against the chat-spec's
+existing blockquote left-border language, applied at keepsake scale for
+the first time) and the Models-tab download badge against a real device's
+notch/safe-area — both unverified on-device this loop (simulator/
+`flutter test` only, per the machine's own limits).
+
+### [LOOP-04] [qa-tester → flutter-core] [REVIEW] 2026-07-17T16:40
+Verdict: PASS against the gate (205f60d, 454/454, coverage 81%). MVP journey
+proven with real engine incl. genuine restart simulation (same on-disk db,
+fresh container/engine → history round-trips, second turn works, export
+reflects both sessions). clearAllHistory proven disjoint from models +
+in-flight downloads. Rail/indicator/navigation/think-tag hostility all pass.
+BUGS: (1 MED) ghost bubble on 0-token response — empty-content guard only
+active while streaming id set (chat_thread_screen); (2 MED) switchModel lacks
+isGenerating guard — persists+flips chip mid-stream while engine stays on old
+model (chat_controller); (3 LOW) nested/sequential <think> pairs leak literal
+tags into visible content (parser, documented tradeoff — undersold?);
+(4 MED) malformed /chat/:id deep link → uncaught FormatException red screen
+(app_router int.parse).
+Info: About page ships zero Devanagari — bundled Noto fonts have no live
+consumer yet.
+
+### [LOOP-04] [flutter-core → qa-tester + designer] [HANDOFF] 2026-07-17T11:34
+Both rounds closed in one pass on loop/04-chat: QA's four bugs (commit
+282efec) and the designer's REQUEST_CHANGES (commit 548377b), on top of
+main's network hotfix merge (6e98733). Every QA repro test from 205f60d
+flipped from pinning the bug to asserting the fix, per file:
+BUG-1 (ghost bubble): `MessageBubble` now renders "No response — try
+regenerating." for a finalized, contentless, reasoningless assistant turn
+instead of an empty bubble shell — fix lives in the widget itself (knows
+both `isStreaming` and the finalized-empty case), not
+`chat_thread_screen.dart`'s streaming-only guard. `chat_thread_screen_test.
+dart`'s repro flipped to assert the placeholder text.
+BUG-2 (switchModel no isGenerating guard): one-line guard added, matching
+regenerate/editMessage exactly. `chat_controller_test.dart`'s repro flipped
+to assert modelId/loadedModelIdProvider both stay on the OLD model
+mid-stream, plus a new assertion that the persisted `Conversations.modelId`
+never moved either.
+BUG-3 (think-tag leakage): `splitThinkContent` now strips literal
+`<think>`/`</think>` markers out of `content` even when a second/nested
+pair isn't parsed into `reasoning` (that capture ceiling stays, ponytail-
+commented with the upgrade path: parse every pair if a cataloged model is
+ever observed doing a second reasoning pass). Both `think_tag_parser_test.
+dart` repros flipped to assert `content` contains no raw tag text.
+BUG-4 (malformed deep link crash): `int.tryParse` instead of `int.parse`
+in `app_router.dart`'s `/chat/:id` builder, folding a malformed id into
+the same draft-conversation path `"new"` already takes. `app_router_test.
+dart`'s repro flipped to assert no exception + the same "No model
+installed yet" fallback the nonexistent-numeric-id case gets.
+Designer BLOCKING, closed same pass: (1) Composer hidden whenever
+`state.model == null` — both the brand-new-draft case and the real repro
+(existing conversation, model uninstalled via `Conversations.modelId`'s
+`ON DELETE SET NULL`); new widget test covers the second case explicitly,
+since QA's suite hadn't exercised it. (2) Regenerate/edit/copy-code icons
+swapped from bare `InkWell`+`Icon` to `IconButton` (tooltip + semantic
+label for free, explicit >=44px `constraints` without inflating the 16px
+icon) — `message_bubble_test.dart` now asserts all three tooltips.
+(3) "ध्रुव" added under the "Dhruva AI" headline on the About page
+(design-tokens.json `meta.story`), Fraunces-role text so it's the bundled
+Noto Serif Devanagari fallback's first live consumer — asserted in
+`about_screen_test.dart`.
+Nits, all closed: (4) `brand_motif.dart`'s `TypingIndicator` bootstrap
+duration now reads `TokenMotionDuration.moderate` instead of a raw
+`Duration(milliseconds: 300)` literal. (5) the "↓ New message" pill now
+fades via `AnimatedOpacity` (`motion.fast`/`motion.standard`) instead of a
+bare conditional mount. (6) sheet transitions source duration from
+`motion.moderate`/`motion.fast` via `sheetAnimationStyle` — the
+entrance/exit CURVE is a **documented deviation**, not forced: verified
+against the Flutter SDK source that `AnimationStyle.curve`/`reverseCurve`
+are never read by `_ModalBottomSheetRoute`'s transition builder for
+`showModalBottomSheet`, so there's no public hook without reimplementing
+the route; noted in `chat-spec.md` §10 next to the affected row.
+Tests: net +9 across the two commits (2 new widget tests for the composer-
+hidden repro + tooltip assertions + ध्रुव assertion, on top of every
+flipped QA pin). Full suite 456/456 green, `make verify` clean (`flutter
+analyze --fatal-infos`, `dart format --set-exit-if-changed`), coverage
+80.5% (floor 70%). Not pushed.
+Request: re-run the gate — both the QA bug list and the designer's
+blocking items should now read PASS; flag if the composer-hidden fix or
+the IconButton hit-target change reads differently on-device than the
+`flutter test` harness suggests (this machine has no simulator open this
+pass, so BLOCKING #1/#2's exact visual weight is still simulator/`flutter
+test`-only, same on-device caveat as the prior HANDOFF).
+
+### [LOOP-04] [designer → orchestrator] [REVIEW] 2026-07-17T17:50
+Verdict: SIGN-OFF (verified 282efec + 548377b directly). Composer gated on
+model presence with the CTA still reachable (§7.1 exact); all three bubble
+actions are 44px IconButtons with tooltips/semantics; ध्रुव lives under the
+About headline in the Fraunces titleLarge role — the Devanagari fallback's
+first real consumer. Motion nits tokenized; the bottom-sheet curve limitation
+is a documented, source-verified deviation, not a silent drop.
+
+### [LOOP-04] [reviewer → flutter-core] [REVIEW] 2026-07-17T18:20
+Verdict: REQUEST_CHANGES. BLOCKING B1: chatControllerProvider family lacks
+autoDispose — every visited thread retains controller + full messages list
+for the session (onDispose never fires in normal navigation); fix with
+autoDispose + keepAlive held only while generating. Nits: N1 nested-think
+replaceAll can shrink content mid-stream → persisted/in-memory divergence on
+the append-only delta path (guard: full-write when not a prefix-extension);
+N2 committed 2.4MB AAR reverses "no committed binaries" (mitigated by
+sha256+fetch script — filed to backlog: consider LFS/CI-fetch); N3 hot-path
+notes (no RepaintBoundary on bubbles, O(n²) _rawBuffer at 4096 max tokens —
+watch); N4 markdown links not tappable. Everything else verified clean:
+privacy grep, FFI free paths + timeout no-double-settle, real migration +
+restart tests, atomic clearAllHistory, manifest/minSdk sane, ADR-002 intact.
+
+### [LOOP-04] [flutter-core → reviewer] [HANDOFF] 2026-07-17T12:07
+B1 + N1 + N4 closed on loop/04-chat, commits 7cff9a5 (B1+N1) and 9f1d32c
+(N4). N2/N3 left on backlog per your ruling — not touched.
+B1: `chatControllerProvider` is now `AsyncNotifierProvider.autoDispose.
+family`. `ref.keepAlive()` is acquired at the very TOP of
+`_runAssistantTurn` — before `ensureModelLoaded()`'s own `await`, not
+after `isGenerating` flips true — because that model-load await is real
+async time an unlistened autoDispose provider can be reclaimed during
+(caught this the hard way: the real-engine restart-simulation test threw
+"Cannot use the Ref... after it has been disposed" from inside
+`ensureModelLoaded` until the acquire point moved earlier). Released in
+`_resetStreamState` (every termination path funnels through it) plus
+both early-return branches in `_runAssistantTurn` (model-load error / no
+model selected — no stream ever starts, nothing to hold alive for).
+Fallout: every existing `chat_controller_test.dart` case that reads
+state after a bare `container.read(...).future)` needed a
+`container.listen(...)` added — standing in for the real screen's
+`ref.watch`, which is what actually kept these providers alive before
+autoDispose existed; without a listener, a widget-less container test
+has nothing playing that role. Same one-line fix in
+`sampling_settings_sheet_test.dart`, which hit the identical gap when
+the sheet's "Done" button called back into a by-then-disposed notifier.
+Two new tests prove the actual B1 contract: idle+no-listener disposes
+and rebuilds fresh; generating+listener-dropped does NOT dispose
+(self-held keepAlive), and completion releases it back to reclaimable.
+N1: `_flush` now tracks the exact last-pushed content/reasoning STRINGS
+(not lengths) and checks a real `startsWith` extension before appending
+a delta; on a non-extension (BUG-3's tag-stripping shrinking `content`
+mid-stream) it calls the new `ChatRepository.setStreamingContent` (full
+overwrite) instead. Verified the new controller-level test — the QA
+nested-think sequence streamed one character at a time — actually
+catches the regression: temporarily forced the old append-only path and
+watched it produce visibly corrupted persisted content ("<thil</thi"
+instead of " tailafter") plus a substring RangeError, then restored the
+fix and confirmed green, 3/3 stable reruns.
+N4: `onTapLink` wired to `url_launcher`, external + user-initiated, no
+confirmation dialog (matches the ruling). Only http(s) hrefs launch — a
+model's markdown output is a trust boundary, so `javascript:`/`file:`/
+`intent:` hrefs are silently dropped rather than opened.
+Tests: net +12 across the two commits. Full suite 463/463 green, `make
+verify` clean, coverage 80.7% (floor 70%). Not pushed.
+Request: this was flagged as the last blocker before v0.1.0-alpha — over
+to you for the re-verify.

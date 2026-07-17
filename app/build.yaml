@@ -1,0 +1,17 @@
+# drift_dev codegen options.
+#
+# generate_manager: false — this codebase never uses drift's fluent
+# `db.managers.<table>` API (every repository queries via
+# `db.select(...)..where(...)`, matching `StorageManager`'s established
+# pattern). Leaving it on generates a full Filter/Ordering/Annotation/
+# TableManager class per table that's dead weight from day one — for the
+# Loop-4 chat schema's three new tables specifically, that unused surface
+# was the single largest drag on `flutter test --coverage`'s floor-scope
+# number (see orchestra/BLACKBOARD.md [LOOP-04]). Deleting unused generated
+# code beats writing tests to cover code nothing calls.
+targets:
+  $default:
+    builders:
+      drift_dev:
+        options:
+          generate_manager: false

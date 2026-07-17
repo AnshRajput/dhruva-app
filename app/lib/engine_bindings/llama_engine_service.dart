@@ -130,7 +130,16 @@ final class LlamaEngineService implements EngineService {
   /// Xcode statically linked). On Android pass the basename `'libllama.so'`.
   final String? libraryPath;
 
-  LlamaEngineService({this.libraryPath});
+  /// Ceiling on how long [load] waits for the worker's ready handshake before
+  /// giving up with an [EngineLoadFailure]. Guards against a worker that wedges
+  /// during native init and never replies (which would otherwise hang [load]
+  /// forever). Injectable so the timeout path is testable without a 60s wait.
+  final Duration loadTimeout;
+
+  LlamaEngineService({
+    this.libraryPath,
+    this.loadTimeout = const Duration(seconds: 60),
+  });
 
   Isolate? _isolate;
   SendPort? _commandPort;
@@ -145,6 +154,8 @@ final class LlamaEngineService implements EngineService {
   int? _activeId;
   int _activeTokens = 0;
   bool _activeTerminal = false;
+  // Wall-clock for the in-flight generation; drives EngineCompletion.elapsedMs.
+  Stopwatch? _activeStopwatch;
 
   // Pending shutdown handshake.
   Completer<void>? _shutdownCompleter;
@@ -199,7 +210,13 @@ final class LlamaEngineService implements EngineService {
         errorsAreFatal: true,
         debugName: 'dhruva.engine.worker',
       );
-      final r = await ready.future;
+      final r = await ready.future.timeout(
+        loadTimeout,
+        onTimeout: () => throw EngineLoadFailure(
+          'model load timed out after ${loadTimeout.inSeconds}s '
+          '(worker never signalled ready)',
+        ),
+      );
       _commandPort = r.commandPort;
       _responsePort = response;
       _responseSub = sub;
@@ -245,6 +262,7 @@ final class LlamaEngineService implements EngineService {
             temperature: params.temperature,
             topK: params.topK,
             topP: params.topP,
+            seed: params.seed,
           );
 
     final chat = messages
@@ -258,6 +276,7 @@ final class LlamaEngineService implements EngineService {
         .toList();
 
     controller.onListen = () {
+      _activeStopwatch = Stopwatch()..start();
       _commandPort?.send(
         _GenerateCommand(
           id,
@@ -309,7 +328,13 @@ final class LlamaEngineService implements EngineService {
     _activeTerminal = true;
     final c = _activeController;
     if (c != null && !c.isClosed) {
-      c.add(EngineCompletion(reason: reason, tokenCount: _activeTokens));
+      c.add(
+        EngineCompletion(
+          reason: reason,
+          tokenCount: _activeTokens,
+          elapsedMs: _activeStopwatch?.elapsedMilliseconds ?? 0,
+        ),
+      );
     }
   }
 
@@ -324,6 +349,7 @@ final class LlamaEngineService implements EngineService {
     if (_activeId != id) return;
     _activeController = null;
     _activeId = null;
+    _activeStopwatch = null;
   }
 
   @override
@@ -476,6 +502,12 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
   // model native memory is orphaned on every failed load.
   llama.LlamaModel? loadedModel;
   llama.LlamaContext? loadedContext;
+  // Carry-forward (Loop 2 reviewer nit): fromModel/LlamaSession construction
+  // must sit INSIDE the try. If either throws, the catch disposes ctx→model
+  // (else both native handles leak) and replies with an error (else load()'s
+  // ready.future never completes and hangs — now also timeout-guarded there).
+  String? loadedTemplate;
+  llama.LlamaSession? loadedSession;
   try {
     if (boot.libraryPath == null) {
       llama.LlamaLibrary.loadFromProcess();
@@ -484,6 +516,8 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
     }
     loadedModel = llama.LlamaModel.load(boot.modelParams);
     loadedContext = llama.LlamaContext.create(loadedModel, boot.contextParams);
+    loadedTemplate = llama.ChatTemplate.fromModel(loadedModel);
+    loadedSession = llama.LlamaSession(loadedContext, seqId: 0);
   } catch (e, st) {
     try {
       loadedContext?.dispose();
@@ -501,8 +535,8 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
 
   final model = loadedModel;
   final context = loadedContext;
-  final template = llama.ChatTemplate.fromModel(model);
-  final session = llama.LlamaSession(context, seqId: 0);
+  final template = loadedTemplate;
+  final session = loadedSession;
   // Bounded cancel state: only the single in-flight request can be cancelled,
   // so one flag suffices — no unbounded set of stale ids.
   final gate = _GenGate();

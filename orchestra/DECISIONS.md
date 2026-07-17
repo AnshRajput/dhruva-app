@@ -113,3 +113,69 @@ Distribution groups created: internal-testers, friends-family; first testers
 added (sanchay@eazyapp.tech, rithiksingh92119211@gmail.com). Remaining for
 Loop 13: signed release lane + CI token (H3) and iOS ad-hoc UDIDs (H4).
 Reminder: NO Firebase SDKs inside the app — distribution only (Rule 5).
+
+## SCOPE AMENDMENT 2 — human directive (2026-07-17)
+(a) DEPLOYMENT: when the website is complete end-to-end (Loop 12 gate), deploy
+production to Vercel (primary), keeping the GitHub Pages pipeline as-is.
+(b) CREDIT: "Made with ❤️ by Ansh Singh Rajput" linking to
+https://anshgandharva.online. Website: sticky bottom bar on ALL pages
+(appears at lowest scroll). App: on the settings/about surface ONLY (not all
+pages) — lands with the first settings screen (target Loop 5, before wider
+distribution).
+
+## VERCEL DEPLOY LIVE (2026-07-17, Amendment 2a — interim)
+Human requested an interim deploy to check progress. Live now at
+https://dhruvaai.vercel.app (dhruva-website.vercel.app was taken globally;
+dhruvaai claimed as alias). Project vercel-linked to the GitHub repo — pushes
+to main auto-deploy production. astro.config auto-detects Vercel (root base)
+vs GitHub Pages (/dhruva-website); tokens.css falls back to the committed
+copy on machines without the app checkout (drift check still guards on CI).
+Deployment protection disabled (public site). GitHub Pages pipeline unchanged.
+
+## SCOPE AMENDMENT 3 — human directive (2026-07-17)
+The website must be built out end-to-end NOW (Loop 12 pulled forward) and to
+a high bar: not a basic landing page — it must SHOW what we are building.
+Requirements: visual storytelling per feature pillar (chat, HF browser,
+characters, vision, imagine, voice, docs RAG, toolbox, playground+news),
+build-in-public progress (loops closed, real repo activity), honest UI
+representations (no fake screenshots passed off as real; stylized mockups
+derived from design tokens + chat-spec are fine and must read as design
+mockups), premium design quality (UI-taste skills applied, Playwright visual
+verification, mobile+desktop), model compatibility, manifesto, docs.
+Vercel (dhruvaai.vercel.app) is the primary deploy; auto-deploys on main.
+The formal Loop 12 gate (Lighthouse 95+, real screenshots) still runs later —
+this amendment raises the interim bar.
+
+## SCOPE AMENDMENT 4 — human directives (2026-07-17)
+(a) CONTINUOUS DISTRIBUTION: at every loop close (COMMIT phase), ship all
+three surfaces: app build → Firebase App Distribution (scripts/distribute.sh),
+website → Vercel (auto on main) + GitHub Pages. No loop closes without
+shipping.
+(b) UX COMPLETENESS: downloads always visibly indicated; full conversation
+history and (later) generated assets always browsable; per-conversation
+delete + export; CLEAR ALL HISTORY; think through everyday use cases — the
+bar is a clean, considerate experience. Status: downloads screen, history
+list, per-conversation delete/export exist (Loops 3-4); ADDING NOW: Settings
+screen (clear-all-history w/ double confirm, about section w/ credit row per
+Amendment 2b, storage summary link), global active-download indicator in the
+nav shell.
+(c) HF SECTION: the in-app Hugging Face browser is a first-class section
+(exists as Models tab) and must be interactive + informative: ADDING NOW a
+"Recommended for your device" rail (curated verified starter catalog from
+Loop 0 research, filtered by device tier) above search, with the existing
+verdict chips + license surfacing.
+Also: wire the Android engine AAR now (closes R10) so the v0.1.0-alpha
+distributed build can actually chat on Android.
+
+## TESTER CORRECTION (2026-07-17)
+sanchay@eazyapp.tech was wrongly added as a tester (session context misreported
+it as the human's email) and has been REMOVED from the Firebase project. The
+human's actual email is rithiksingh92119211@gmail.com — the only seed tester.
+Standing rule: never use sanchay@eazyapp.tech for this human anywhere.
+
+## FLUTTER VERSION PIN (2026-07-17, Loop 4 gate)
+Context: CI ran "channel: stable" (3.44.6) while local dev is 3.41.2; newer
+Flutter removed CupertinoPageTransitionsBuilder → all three CI jobs red on a
+diff that is fully green locally.
+Decision: CI pins flutter-version 3.41.2 (== local). Flutter upgrades are
+their own deliberate PR (bump local + CI together, fix API churn there).

@@ -1,8 +1,9 @@
 /// Riverpod DI root (ADR-002: "all state in providers"). Every
 /// cross-feature dependency — the engine, the database, network clients,
 /// the download manager — is exposed here so `features/` code never
-/// constructs a concrete implementation itself (`debug_chat` is the sole,
-/// documented, temporary exception — see its own file).
+/// constructs a concrete implementation itself. (`debug_chat` was the sole,
+/// documented, temporary exception through Loop 3 — deleted in Loop 4 now
+/// that `features/chat` is the real thing.)
 ///
 /// Test/preview overrides: wrap in `ProviderScope(overrides: [...])`, e.g.
 /// `engineServiceProvider.overrideWithValue(FakeEngineService(...))`.
@@ -14,6 +15,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/chat/chat_repository.dart';
 import '../../data/db/database.dart';
 import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
@@ -26,7 +28,13 @@ import '../device_info/device_info_service.dart';
 /// The on-device inference engine. `LlamaEngineService` in production;
 /// override with `FakeEngineService` in tests/widget previews.
 final engineServiceProvider = Provider<EngineService>((ref) {
-  final service = LlamaEngineService();
+  // Android ships the native libs inside the AAR (jni/arm64-v8a/libllama.so),
+  // dlopen'd by basename — Android resolves it from the app's lib dir, and its
+  // NEEDED deps (libggml*, libmtmd) alongside. iOS/macOS static-link the
+  // xcframework/dylib into the process, so the worker loads from the process.
+  final service = LlamaEngineService(
+    libraryPath: Platform.isAndroid ? 'libllama.so' : null,
+  );
   ref.onDispose(() {
     // Fire-and-forget: Provider.onDispose can't be async. dispose() itself
     // is defensive (safe on an unloaded engine).
@@ -80,4 +88,8 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
     db: ref.watch(appDatabaseProvider),
     deviceInfo: ref.watch(deviceInfoServiceProvider),
   );
+});
+
+final chatRepositoryProvider = Provider<ChatRepository>((ref) {
+  return ChatRepository(db: ref.watch(appDatabaseProvider));
 });
