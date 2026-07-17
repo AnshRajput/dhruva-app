@@ -76,3 +76,40 @@ separately on machines with artifacts (mandated exclusion, master prompt §9);
 (b) features/debug_chat/ — temporary dev harness, exclusion is deleted with
 the screen in Loop 4. Measured after exclusion: 86%. Rejected alternative:
 widget-test theater on code scheduled for deletion.
+
+## SCOPE AMENDMENT 1 — human directive (2026-07-17)
+Context: Ansh (the human owner) amended the goal mid-Loop-3: (a) the app must
+be a feature-full "playground for local models" — deep, hands-on controls and
+experimentation around on-device models; (b) UI/UX quality is a first-class
+requirement, not polish-loop-only; (c) add an AI News section.
+Decision:
+(a) PLAYGROUND: new Loop 10.5 consolidates a Playground feature — prompt lab
+(live sampling-param tweaking with immediate regeneration, system-prompt
+editor, chat-template inspector/raw mode, token-stream inspector with
+logprobs-style detail where the engine exposes it), per-model tuning presets,
+benchmarks screen (moved up from Loop 11), and device thermal/RAM live meters
+during inference. Model Arena stays Loop 11.
+(b) UI/UX: designer review becomes BLOCKING at every loop gate from Loop 4 on
+(was Loop 4/11 only); the orchestrator's UI-taste skills are applied to every
+screen-shipping loop.
+(c) AI NEWS: new section in Loop 10.5 — reader for curated public feeds
+(HF blog, r/LocalLLaMA, Hacker News AI search RSS). PRIVACY AMENDMENT to Rule
+5 recorded: network surface widens to user-initiated, opt-in news-feed
+fetches; OFF by default, no accounts, no tracking, no third-party SDKs, plain
+HTTPS GET of public feeds only, honest "this feature goes online" label. The
+zero-telemetry guarantee is unchanged.
+Also: Firebase project creation deferred to Loop 13 per human (GCP quota:
+pending-deletion projects count for 30 days; 4 projects deleted today —
+quota may free before Loop 13 anyway).
+
+## FIREBASE PROJECT (2026-07-17)
+Context: CLI creation of dhruva-appu-inside blocked by GCP quota; human created
+the project manually in the console instead.
+Decision: Firebase project is `dhruvaai-68a00` (display "DhruvaAI") — deviation
+from the master prompt's dhruva-appu-inside id, recorded here. Registered apps:
+Android 1:792596873288:android:2bcb808b7abf3b737bd87d and iOS
+1:792596873288:ios:3b221605fb350a1a7bd87d, both tech.appuinside.dhruva. App
+Distribution groups created: internal-testers, friends-family; first testers
+added (sanchay@eazyapp.tech, rithiksingh92119211@gmail.com). Remaining for
+Loop 13: signed release lane + CI token (H3) and iOS ad-hoc UDIDs (H4).
+Reminder: NO Firebase SDKs inside the app — distribution only (Rule 5).
