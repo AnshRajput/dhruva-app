@@ -777,3 +777,225 @@ Tests: net +12 across the two commits. Full suite 463/463 green, `make
 verify` clean, coverage 80.7% (floor 70%). Not pushed.
 Request: this was flagged as the last blocker before v0.1.0-alpha — over
 to you for the re-verify.
+
+### [LOOP-05] [orchestrator → all] [STATUS] 2026-07-17T19:40
+Loop 5 PLAN — Characters. Branch loop/05-characters. Designer gate BLOCKING.
+Goal: create/edit/chat AI characters; starter pack of 10; import/export
+community character cards.
+Tasks: (T1) data/characters: drift schema (character: id, name, avatarPath/
+emoji, personaSystemPrompt, greeting, exampleDialogues JSON, defaultModelId
+nullable, samplingParams JSON, createdAt) + repository CRUD; chat integration
+(a conversation may reference a characterId → its persona is the system
+prompt, its greeting seeds the thread, its model+sampling default). Character
+card interop: parse/emit the community TavernAI/CharacterCard v2 JSON (and
+PNG-embedded tEXt 'chara' base64 — read+write) — flutter-platform.
+(T2) starter pack: 10 well-written built-in characters (coach, study buddy,
+storyteller, Hinglish dost, code reviewer, therapist-lite, chef, travel
+planner, debate partner, kids' tutor) as an asset JSON — docs-writer drafts
+personas, flutter-core wires. (T3) features/characters UI: gallery (grid,
+starter + user), create/edit form (all fields, avatar pick/emoji, live
+validation), character detail, "chat with" entry that starts a conversation,
+import (file → card parse → preview → save), export (card JSON + PNG) —
+flutter-core, to chat-spec design language. (T4) QA: CRUD, card round-trip
+(import our export, import a real external card fixture), persona actually
+reaches the engine system prompt, chat works. (T5) designer BLOCKING sign-off
++ reviewer. (T6) merge, ship (FAD + web unaffected).
+Exit gate: [G1] character CRUD + chat works (real engine: persona changes
+behavior) [G2] cards round-trip import/export (JSON + PNG) [G3] 10 starters
+[G4] designer SIGN-OFF + QA PASS + reviewer APPROVE [G5] CI green [G6] shipped.
+
+### [LOOP-05] [docs-writer → flutter-core] [HANDOFF] 2026-07-17T19:55
+starter_pack.json committed (10 characters, tuned sampling, safety guardrails
+on Calm Companion + Kids' Tutor). Orchestrator fix: US-only "988" crisis line
+→ region-neutral referral (global app). Ready for T3 UI wiring + seeding via
+flutter-platform's parser.
+
+### [LOOP-05] [flutter-platform → flutter-core] [HANDOFF] 2026-07-17T20:20
+T1 complete: drift v3 (characters + conversations.characterId, migration
+tested), CharacterRepository (CRUD, chatContextFor(id) → {systemPrompt,
+greeting, defaultModelId, samplingParams} for chat to consume, seedBuiltIns-
+IfPresent from the asset), full card interop (importCard/Json/FromPng,
+exportCardJson/Png; V2 chara_card mapping; pure-Dart PNG tEXt/iTXt chunk r/w,
+CRC32 verified). characterRepositoryProvider added, seeds on construction.
+531/531 tests, coverage 79%. Provider surface for UI: characterRepository-
+Provider (CRUD, chatContextFor, import*/export*, listCharacters).
+Request: build features/characters UI + wire persona into chat.
+
+### [LOOP-05] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T21:15
+features/characters UI + chat wiring complete on branch loop/05-characters.
+Screens (`features/characters/`): gallery (`/characters`, 2-col grid,
+built-in badge, empty state, import menu → JSON/PNG), create/edit form
+(`/characters/new`, `/characters/:id/edit` — name+persona required with
+live Save-disable, emoji picker or picked-image avatar copied into
+`<support>/character_avatars/`, example-dialogue add/remove blocks, default-
+model dropdown, optional sampling override via a from-scratch `SamplingEditor`
+— chat's own `_SliderRow` is private to `sampling_settings_sheet.dart`, so
+this is a deliberate small duplicate, not an extraction), detail
+(`/characters/:id` — persona/greeting/examples/sampling summary, "Chat with
+{name}", Export sheet, Edit+Delete for user characters). Built-ins can't be
+deleted or edited in place (`seedBuiltInsIfPresent` upserts them by name
+every launch, so an in-place edit would silently vanish) — they get
+"Duplicate to edit" instead, both on the detail screen and as a blocked view
+if `/characters/:id/edit` is reached directly for one.
+Nav: 4th StatefulShellBranch, `/characters` between Chat and Models
+(`app_router.dart`/`app_shell.dart`, `Icons.theater_comedy`).
+Chat-wiring approach: `ChatController._buildFromCharacter` (new) — a
+character-bound draft creates its `Conversations` row eagerly (not lazily
+on first send like an ordinary draft) so the greeting is visible before the
+user types anything; persona → `systemPrompt`, character's
+`defaultModelId`/`samplingParams` → the conversation's, greeting → first
+assistant message. `ChatRepository.createConversation`/`ConversationSummary`
+gained a `characterId` field (T1's schema had the column; nothing in T1/T2
+surfaced it to `features/chat` yet — closing that gap here). Character →
+chat navigation is `context.push('/chat/new?characterId=<id>')`, a query
+param rather than passing `ChatRouteArgs` as `extra`, specifically so
+`features/characters` never imports `ChatRouteArgs` out of `features/chat`
+(ADR-002's cross-feature-import ban) — `app_router.dart` (the one allowed
+composition root) resolves the param into `ChatRouteArgs.characterId`. The
+AppBar shows the character's avatar+name **alongside** the model chip, not
+instead of it (`_CharacterAppBarTitle`, new small provider
+`features/chat/state/character_info_provider.dart`) — keeping the model
+chip live is what lets a character with no default model still get one
+picked; hiding it would strand that conversation with no composer (chat-
+spec.md §7.1's existing "no model → no composer" rule already covers that
+case, unchanged).
+Persona-reaches-engine evidence: `FakeEngineService` gained two test-only
+hooks (`lastMessages`/`lastParams`, mirroring the existing `loadCount`/
+`unloadCount` pattern) so a test can assert what the "engine" actually
+received, not just controller state. `chat_controller_test.dart`'s new
+"Loop 5: character-bound conversations" group (4 tests) proves: the
+persona lands as the first `ChatTurn.system(...)` sent to `generate()`,
+survives a `regenerate()`, a character's default model/sampling apply on
+creation, and a deleted character degrades to an ordinary draft instead of
+erroring. Real-engine evidence (macOS, real SmolLM2-135M,
+`chat_controller_character_real_engine_test.dart`): same prompt ("Tell me
+about your day.") through a neutral conversation and one bound to a
+"Captain Byte" pirate-captain character — neutral answer stayed on a
+software/algorithm topic, the persona answer switched to a tavern/pirate-
+captain roleplay scene by name. Model is a 135M model so it doesn't inject
+literal "arr"/"matey" slang reliably, but the persona visibly, drastically
+changed the scenario and register — pasted in full in the test file's
+header comment and this loop's completion report.
+Import/export UX: gallery's import parses the picked file with the existing
+`CharacterCardV2.parse`/`extractCardFromPng` + `cardToCharacterFields` (pure
+functions already in `character_card.dart`) and shows a preview dialog
+BEFORE anything is saved — only on confirm does
+`CharactersController.saveImported` call `createCharacter`. This is a
+deliberate deviation from a literal "call `repo.importCard` then preview"
+reading: `importCard` itself persists immediately, which can't produce a
+true preview-before-save; parsing without saving is what the card module's
+own pure functions are for. Export offers both JSON (`share_plus` text) and
+PNG (`exportCardPng` bytes written to a temp file, shared as an `XFile`).
+Tests: 38 new (characters: controller 7, gallery 4, form 4, detail 6, import-
+preview-dialog 3, emoji-picker 2, sampling-editor 2, avatar 2; chat: 4
+persona-binding + 1 real-engine + 1 AppBar-chip widget test;
+chat_repository characterId round-trip 2). Full suite 569/569 green,
+`flutter analyze --fatal-infos` and `dart format --set-exit-if-changed`
+both clean, coverage 79.7% (floor 70%). Not pushed.
+Known gap, flagged: `CharacterAvatar`'s picked-image-file render path has
+no widget test — `Image.file` never signals "settled" under
+`pumpAndSettle()` in this harness (hung >90s, killed) — a test-environment
+limitation, not a suspected widget bug (the branch is a one-line
+`File(path).existsSync()` ternary); upgrade path is `tester.runAsync()` if
+this ever needs covering, noted in the test file itself.
+Request: adversarial pass — card round-trip (import our own export, import
+the external fixture), persona-reaches-engine over the real path once more
+independently, gallery/form/detail edge cases (duplicate-name built-ins,
+deleting a character mid-conversation, switching a character's default
+model while one of its conversations is open).
+
+### [LOOP-05] [flutter-core → qa-tester/designer] [HANDOFF] 2026-07-17T22:05
+Consolidated fix pass closing QA's PASS-with-bugs review and designer's
+sign-off feedback in one commit on loop/05-characters. 988 example-dialogue
+fix already covered by the orchestrator's direct commit — its
+characterization test (character_seed_test.dart) still needed flipping
+since it now failed against the fixed content, done below.
+
+QA HIGH — `SamplingParams.fromJson`'s `as num?` casts threw a raw
+`TypeError` on malformed imported sampling data. Fixed at the one place
+every caller routes through: a new `_numField` helper (`data/chat/models/
+sampling_params.dart`) throws a typed `ValidationFailure` on a
+present-but-wrong-typed field instead of letting the cast throw — all four
+callers (chat/character repositories reading persisted rows, character_seed
+and character_card reading untrusted JSON) get the fix for free.
+`character_card_test.dart`'s pinned repro flipped from
+`throwsA(isA<TypeError>())` to `throwsA(isA<ValidationFailure>())`.
+
+QA MED — `characters_gallery_screen.dart`'s `_import` only caught `on
+ValidationFailure`; a non-UTF-8 picked file crashed uncaught via
+`FileSystemException` from `readAsString()`. Added an `on FileSystemException`
+clause alongside, same SnackBar treatment. QA's own note that a widget-level
+repro hangs under `pumpAndSettle()` (the known real-`dart:io`-file-I/O
+harness limitation already flagged for `CharacterAvatar`) held here too —
+`characters_gallery_import_test.dart` keeps its unit-level repro of the
+underlying `FileSystemException` (still true, unchanged) and gained a second
+test mirroring `_import`'s exact try/catch shape, proving the exception is
+now caught rather than propagating.
+
+QA LOW/INFO — PNG reader's missing chunk-CRC verification documented with a
+`ponytail:` comment at the exact skip point (`png_text_chunk.dart`), naming
+the accept-on-decodable rationale and the `crc32()` upgrade path already
+sitting in the same file. Not implemented: doing so would also need to flip
+QA's own "corrupted-CRC chara chunk is still read successfully" test, which
+QA explicitly scoped as INFO/non-blocking, not something to change.
+
+Designer BLOCKING #1 — chat AppBar's `_CharacterAppBarTitle` rendered
+`avatarEmoji ?? '⭐'` as bare `Text`, ignoring `avatarPath`. Added
+`_MiniCharacterAvatar` (chat_thread_screen.dart) — a small, documented
+duplicate of `features/characters/widgets/character_avatar.dart`'s
+`CharacterAvatar` (same fallback order: image, then emoji, then star) at
+chip scale, not a cross-feature import (ADR-002; same precedent as
+`core/theme/brand_star.dart`'s `DhruvaStar` duplication).
+Designer BLOCKING #2 — `import_preview_dialog.dart`'s raw literals
+(`SizedBox` 8/12, `fontSize: 24`) replaced with `DhruvaTokens` — the
+`fontSize: 24` emoji `Text` is now a `CharacterAvatar(size: 24)` instead,
+reusing the component rather than re-deriving its fallback logic.
+Designer BLOCKING #3 — gallery empty state's `Icons.theater_comedy_outlined`
+swapped for `DhruvaStar` (`core/theme/brand_star.dart`), matching chat's own
+empty states per `iconography.motif`.
+Nits — both "Built-in" badges' raw `vertical: 2` became
+`tokens.spacing.xs / 2` (token-derived, same rendered size, no spacing
+token is small enough on its own); `CharacterAvatar` gained a
+`Semantics(label: 'Character avatar', image: true)` wrapper (also applied
+to the new chat-side mini avatar).
+
+Full suite 588/588 green, `flutter analyze --fatal-infos` and `dart format
+--set-exit-if-changed` both clean, coverage 79.8% (floor 70%). Not pushed.
+Request: re-run the gate — both QA's bug list and the designer's blockers
+should now read fixed.
+
+### [LOOP-05] [designer → flutter-core] [REVIEW] 2026-07-17T21:00
+Verdict: REQUEST_CHANGES (fix alongside QA's findings — one pass). Positive:
+token discipline otherwise clean, gallery/form/detail hierarchy considered.
+BLOCKING: (1) chat_thread_screen.dart:471-505 _CharacterAppBarTitle renders
+avatarEmoji ?? '⭐', ignores avatarPath — image-avatar characters show a
+generic star; use CharacterAvatar(size:~16). (2) import_preview_dialog.dart
+raw literals (SizedBox 8/12, fontSize:24) — only feature file not using
+DhruvaTokens. (3) gallery empty state uses Icons.theater_comedy — reuse the
+DhruvaStar brand motif per iconography.motif (consistency with chat empty
+state). Nits: vertical:2 raw literal in built-in badge; no Semantics label on
+CharacterAvatar.
+
+### [LOOP-05] [qa-tester → flutter-core/flutter-platform] [REVIEW] 2026-07-17T21:40
+Verdict: PASS on gate (G1/G2/G3), 587/587, coverage 79.8%, no flakes over 2
+runs. BUGs: (HIGH) SamplingParams.fromJson 'as num?' casts crash with raw
+TypeError on malformed imported card sampling (temperature:"hot") — reachable
+from untrusted card, must be typed ValidationFailure. (MED) gallery _import
+doesn't catch FileSystemException on non-UTF8 file → uncaught crash. (MED) 988
+still in Calm Companion exampleDialogues (persona prompt was fixed, example
+wasn't). (LOW/INFO) PNG reader skips chunk CRC verification — document.
+Characterization tests in 43524be pin current behavior — flip to fixed asserts.
+
+### [LOOP-05] [designer → orchestrator] [REVIEW] 2026-07-17T22:10
+Verdict: SIGN-OFF (7e3b962 verified). All three blockers closed: chat AppBar
+_MiniCharacterAvatar with correct image→emoji→star fallback; import dialog on
+DhruvaTokens + CharacterAvatar; gallery empty state on DhruvaStar. Semantics
+added. Characters UI approved.
+
+### [LOOP-05] [reviewer → orchestrator] [REVIEW] 2026-07-17T22:30
+Verdict: APPROVE. Trust boundary complete (sampling _numField choke point +
+validate(); avatarPath not restored from cards; PNG length bombs bounds-
+checked; CRC32 correct/pinned), migration correct + tested both jump paths,
+persona snapshot at creation is the right call, privacy clean, ADR-002 held.
+One nit being closed pre-merge: iTXt zlib inflate unbounded (zlib bomb OOM on
+import) — capping. ponytail-deferred CRC-skip agreed non-blocking.

@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async' show unawaited;
+import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/message_info_x.dart';
 import '../widgets/brand_motif.dart';
@@ -137,7 +139,27 @@ class _ThreadScaffold extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: ModelChip(model: state.model, onTap: () => _pickModel(context)),
+        // Loop 5: alongside, not instead of — the model chip is still how
+        // a character-bound conversation with no default model gets one
+        // (its "Pick a model" affordance from chat-spec.md §1.1 is what
+        // gates the composer being visible at all, see the `Composer`
+        // conditional below), so a character identity strip sits beside it
+        // rather than displacing it.
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (state.characterId != null) ...[
+              _CharacterAppBarTitle(characterId: state.characterId!),
+              SizedBox(width: tokens.spacing.xs),
+            ],
+            Flexible(
+              child: ModelChip(
+                model: state.model,
+                onTap: () => _pickModel(context),
+              ),
+            ),
+          ],
+        ),
         titleSpacing: 0,
         actions: [
           if (state.isGenerating)
@@ -437,6 +459,106 @@ class _ThreadScaffold extends ConsumerWidget {
       ShareParams(
         text: content,
         subject: state.title.isEmpty ? 'Dhruva conversation' : state.title,
+      ),
+    );
+  }
+}
+
+/// Loop 5, chat-spec.md §1.1's AppBar slot, character variant: replaces the
+/// model chip with the character's avatar/name for a character-bound
+/// conversation (the persona is still what actually reached the engine —
+/// see `ChatController._buildFromCharacter` — this is display only). Tap
+/// opens the character's detail screen.
+class _CharacterAppBarTitle extends ConsumerWidget {
+  final int characterId;
+  const _CharacterAppBarTitle({required this.characterId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final character = ref.watch(characterInfoProvider(characterId)).value;
+    return InkWell(
+      borderRadius: BorderRadius.circular(tokens.radius.full),
+      onTap: () => context.push('/characters/$characterId'),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.sm,
+          vertical: tokens.spacing.xs,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(tokens.radius.full),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _MiniCharacterAvatar(
+              avatarEmoji: character?.avatarEmoji,
+              avatarPath: character?.avatarPath,
+              size: 16,
+            ),
+            SizedBox(width: tokens.spacing.xs),
+            Text(
+              character?.name ?? 'Character',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Designer BLOCKING #1 (Loop 5 fix pass): the AppBar chip used to render
+/// `avatarEmoji ?? '⭐'` as bare `Text`, ignoring `avatarPath` entirely — an
+/// image-avatar character showed a generic star instead of their real
+/// picture. This mirrors `features/characters/widgets/character_avatar.dart`
+/// `CharacterAvatar` exactly (same fallback order: picked image, then emoji,
+/// then star) at chip scale — a deliberate small duplicate, not a
+/// cross-feature import (ADR-002 bans `features/chat` importing
+/// `features/characters`; same precedent as `core/theme/brand_star.dart`'s
+/// documented duplication of `DhruvaStar`).
+class _MiniCharacterAvatar extends StatelessWidget {
+  final String? avatarEmoji;
+  final String? avatarPath;
+  final double size;
+
+  const _MiniCharacterAvatar({
+    this.avatarEmoji,
+    this.avatarPath,
+    required this.size,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final path = avatarPath;
+    final hasImage = path != null && File(path).existsSync();
+    return Semantics(
+      label: 'Character avatar',
+      image: true,
+      child: ClipOval(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: hasImage
+              ? Image.file(
+                  File(path),
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                )
+              : Text(
+                  avatarEmoji ?? '⭐',
+                  style: TextStyle(
+                    fontSize: size * 0.85,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+        ),
       ),
     );
   }

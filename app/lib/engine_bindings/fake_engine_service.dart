@@ -40,6 +40,15 @@ final class FakeEngineService implements EngineService {
   /// Test hook: number of [unload] calls.
   int unloadCount = 0;
 
+  /// Test hook: the `messages` passed to the most recent [generate] call —
+  /// lets a test assert what actually reached the "engine" (e.g. a
+  /// character's persona system prompt), not just what the caller intended
+  /// to send.
+  List<ChatTurn>? lastMessages;
+
+  /// Test hook: the `params` passed to the most recent [generate] call.
+  EngineGenerateParams? lastParams;
+
   @override
   bool get isLoaded => _loaded && !_disposed;
 
@@ -64,6 +73,8 @@ final class FakeEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
+    lastMessages = messages;
+    lastParams = params;
     // Single error channel (see EngineService.generate): never throw; surface
     // every pre-flight failure via the returned stream's onError.
     final preflight =

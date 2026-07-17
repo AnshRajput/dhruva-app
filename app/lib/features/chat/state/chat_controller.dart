@@ -34,21 +34,31 @@ import 'think_tag_parser.dart';
 
 /// Route args for a chat thread: an existing conversation, or a draft
 /// (`conversationId: null`) seeded with the model the caller already
-/// picked (models hub CTA / model-picker flow before the first message).
+/// picked (models hub CTA / model-picker flow before the first message) —
+/// or, per Loop 5, seeded from a character (`characterId`): the persona
+/// becomes the system prompt, the character's default model/sampling apply,
+/// and its greeting (if any) is posted as the first assistant message. See
+/// [ChatController.build]'s `conversationId == null` branch.
 final class ChatRouteArgs {
   final int? conversationId;
   final int? initialModelId;
+  final int? characterId;
 
-  const ChatRouteArgs({this.conversationId, this.initialModelId});
+  const ChatRouteArgs({
+    this.conversationId,
+    this.initialModelId,
+    this.characterId,
+  });
 
   @override
   bool operator ==(Object other) =>
       other is ChatRouteArgs &&
       other.conversationId == conversationId &&
-      other.initialModelId == initialModelId;
+      other.initialModelId == initialModelId &&
+      other.characterId == characterId;
 
   @override
-  int get hashCode => Object.hash(conversationId, initialModelId);
+  int get hashCode => Object.hash(conversationId, initialModelId, characterId);
 }
 
 final class ChatThreadState {
@@ -58,6 +68,11 @@ final class ChatThreadState {
   final int? folderId;
   final bool pinned;
   final int? modelId;
+
+  /// The character (if any) this thread was started with — chat-spec.md's
+  /// AppBar shows this character's name/avatar in place of the model chip
+  /// when set (Loop 5). See `data/characters/character_repository.dart`.
+  final int? characterId;
 
   /// Resolved install record for [modelId], or null if unset / no longer
   /// installed (`Conversations.modelId` FKs `setNull` on model delete).
@@ -95,6 +110,7 @@ final class ChatThreadState {
     this.folderId,
     this.pinned = false,
     this.modelId,
+    this.characterId,
     this.model,
     this.systemPrompt = '',
     this.samplingParams = const SamplingParams(),
@@ -127,6 +143,7 @@ final class ChatThreadState {
     bool clearFolderId = false,
     bool? pinned,
     int? modelId,
+    int? characterId,
     InstalledModelInfo? model,
     bool clearModel = false,
     String? systemPrompt,
@@ -148,6 +165,7 @@ final class ChatThreadState {
       folderId: clearFolderId ? null : (folderId ?? this.folderId),
       pinned: pinned ?? this.pinned,
       modelId: modelId ?? this.modelId,
+      characterId: characterId ?? this.characterId,
       model: clearModel ? null : (model ?? this.model),
       systemPrompt: systemPrompt ?? this.systemPrompt,
       samplingParams: samplingParams ?? this.samplingParams,
@@ -230,6 +248,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
     final conversationId = args.conversationId;
     if (conversationId == null) {
+      if (args.characterId != null) {
+        return _buildFromCharacter(args.characterId!, args.initialModelId);
+      }
       final model = args.initialModelId == null
           ? null
           : await ref
@@ -254,9 +275,86 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       folderId: convo.folderId,
       pinned: convo.pinned,
       modelId: convo.modelId,
+      characterId: convo.characterId,
       model: model,
       systemPrompt: convo.systemPrompt,
       samplingParams: convo.samplingParams,
+      messages: messages,
+    );
+  }
+
+  /// Loop 5: starts a NEW conversation bound to character [characterId] —
+  /// the persona (`CharacterChatContext.systemPrompt`) becomes the
+  /// conversation's system prompt (so it reaches the engine on the very
+  /// first turn via [_historyTurns], same mechanism every conversation's
+  /// system prompt already uses), the character's default model/sampling
+  /// apply (falling back to [fallbackModelId] — the caller's own pick — when
+  /// the character has none), and its greeting, if any, is posted as the
+  /// first assistant message.
+  ///
+  /// Unlike an ordinary draft, this conversation row is created immediately
+  /// rather than lazily on first send — a greeting is content the user
+  /// should see before typing anything, so there's nothing to defer. If the
+  /// character has since been deleted (`chatContextFor` returns null), this
+  /// degrades to an ordinary model-only draft rather than erroring.
+  Future<ChatThreadState> _buildFromCharacter(
+    int characterId,
+    int? fallbackModelId,
+  ) async {
+    final chatContext = await ref
+        .read(characterRepositoryProvider)
+        .chatContextFor(characterId);
+    if (chatContext == null) {
+      final model = fallbackModelId == null
+          ? null
+          : await ref
+                .read(storageManagerProvider)
+                .getInstalledModel(fallbackModelId);
+      return ChatThreadState(modelId: model?.id, model: model);
+    }
+
+    final samplingParams = chatContext.samplingParams ?? const SamplingParams();
+    final resolvedModelId = chatContext.defaultModelId ?? fallbackModelId;
+    final model = resolvedModelId == null
+        ? null
+        : await ref
+              .read(storageManagerProvider)
+              .getInstalledModel(resolvedModelId);
+
+    final newConversationId = await _repo.createConversation(
+      modelId: model?.id,
+      characterId: characterId,
+      systemPrompt: chatContext.systemPrompt,
+      samplingParams: samplingParams,
+    );
+
+    var messages = const <MessageInfo>[];
+    final greeting = chatContext.greeting?.trim();
+    if (greeting != null && greeting.isNotEmpty) {
+      final greetingId = await _repo.appendMessage(
+        conversationId: newConversationId,
+        role: MessageRole.assistant,
+        content: greeting,
+      );
+      messages = [
+        MessageInfo(
+          id: greetingId,
+          conversationId: newConversationId,
+          role: MessageRole.assistant,
+          content: greeting,
+          status: MessageStatus.complete,
+          createdAt: DateTime.now(),
+        ),
+      ];
+    }
+
+    return ChatThreadState(
+      conversationId: newConversationId,
+      characterId: characterId,
+      modelId: model?.id,
+      model: model,
+      systemPrompt: chatContext.systemPrompt,
+      samplingParams: samplingParams,
       messages: messages,
     );
   }

@@ -7,6 +7,7 @@ import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:dhruva/features/chat/ui/chat_thread_screen.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -231,6 +232,86 @@ void main() {
       // The metadata row (relative-time label) still renders, same as any
       // other assistant turn.
       expect(find.text('now'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Loop 5: a character-bound conversation shows the character\'s avatar '
+    'and name in the AppBar, alongside the model chip',
+    (tester) async {
+      final modelId = await insertModel();
+      final now = DateTime.now();
+      final characterId = await db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: 'Coach',
+              avatarEmoji: const Value('💪'),
+              personaSystemPrompt: 'Be an encouraging coach.',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      final repo = ChatRepository(db: db);
+      final conversationId = await repo.createConversation(
+        modelId: modelId,
+        characterId: characterId,
+        systemPrompt: 'Be an encouraging coach.',
+      );
+
+      await tester.pumpWidget(
+        buildApp(
+          FakeEngineService(),
+          ChatRouteArgs(conversationId: conversationId),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Coach'), findsOneWidget);
+      expect(find.text('💪'), findsOneWidget);
+      // The model chip is still there too (alongside, not instead of).
+      expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'attack list #6: a character with no default model (and no fallback '
+    'installed model on this device) still surfaces "Pick a model" — the '
+    'character binding does not strand the conversation with an '
+    'unreachable model picker',
+    (tester) async {
+      // An installed model exists on-device (so the picker itself has
+      // something to offer once opened) but the character has no
+      // defaultModelId and the draft has no fallback initialModelId.
+      await insertModel();
+      final now = DateTime.now();
+      final characterId = await db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: 'Coach',
+              avatarEmoji: const Value('💪'),
+              personaSystemPrompt: 'Be an encouraging coach.',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      await tester.pumpWidget(
+        buildApp(FakeEngineService(), ChatRouteArgs(characterId: characterId)),
+      );
+      await tester.pumpAndSettle();
+
+      // Character identity still shows even with no model resolved.
+      expect(find.text('Coach'), findsOneWidget);
+      expect(find.text('💪'), findsOneWidget);
+      expect(find.text('Pick a model'), findsOneWidget);
+
+      await tester.tap(find.text('Pick a model'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose a model'), findsOneWidget);
+      expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
     },
   );
 }

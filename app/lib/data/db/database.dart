@@ -77,6 +77,18 @@ class Conversations extends Table {
     #id,
     onDelete: KeyAction.setNull,
   )();
+
+  /// The character (if any) this thread was started with — its persona is
+  /// the system prompt, its greeting seeds the thread, its model/sampling
+  /// are the defaults (see `data/characters/character_repository.dart`'s
+  /// `chatContextFor`). Deleting a character un-sets this (`KeyAction.
+  /// setNull`), same "survives deletion" precedent as `modelId`/`folderId`
+  /// above — the conversation and its history are untouched.
+  IntColumn get characterId => integer().nullable().references(
+    Characters,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get systemPrompt => text().withDefault(const Constant(''))();
 
   /// `SamplingParams.toJson()` (see `data/chat/models/sampling_params.dart`),
@@ -122,13 +134,53 @@ class Messages extends Table {
   )();
 }
 
-@DriftDatabase(tables: [InstalledModels, Folders, Conversations, Messages])
+/// A user-created or built-in AI persona ("character" in the chat UI).
+/// `Conversations.characterId` points a thread at one of these.
+///
+/// `defaultModelId`/`samplingParamsJson` are the character's own defaults —
+/// null means "no override" (the caller falls back to its own default),
+/// same nullable-means-unset convention as `Conversations.
+/// samplingParamsJson`. See `character_repository.dart` for the plain
+/// `CharacterInfo` type `features/` actually consumes (ADR-002: features
+/// never import drift directly) and `character_card.dart` for the
+/// TavernAI/CharacterCard-V2 import/export mapping.
+class Characters extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  TextColumn get avatarEmoji => text().nullable()();
+  TextColumn get avatarPath => text().nullable()();
+  TextColumn get personaSystemPrompt => text()();
+  TextColumn get greeting => text().nullable()();
+
+  /// JSON array of example-dialogue strings (see `character_card.dart`'s
+  /// `mes_example` mapping), or null for none.
+  TextColumn get exampleDialogues => text().nullable()();
+  IntColumn get defaultModelId => integer().nullable().references(
+    InstalledModels,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+
+  /// `SamplingParams.toJson()` (see `data/chat/models/sampling_params.dart`),
+  /// or null for no character-level override.
+  TextColumn get samplingParamsJson => text().nullable()();
+
+  /// True for the shipped starter pack (see `character_repository.dart`'s
+  /// `seedBuiltInsIfPresent`); false for user-created characters.
+  BoolColumn get isBuiltIn => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+}
+
+@DriftDatabase(
+  tables: [InstalledModels, Folders, Conversations, Messages, Characters],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -139,10 +191,24 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       // v1 -> v2 (Loop 4): chat data layer. installed_models is untouched.
       if (from < 2) {
+        // Created fresh from the CURRENT table definitions (this codebase
+        // has no schema-snapshot codegen — see build.yaml's doc comment —
+        // so a `from < 2` jump straight to v3 already gets `conversations`
+        // with `characterId` baked in here; the `from < 3` branch below
+        // must NOT also try to add that column in this case, see its guard.
         await m.createTable(folders);
         await m.createTable(conversations);
         await m.createTable(messages);
         await _createMessagesConversationIndex();
+      }
+      // v2 -> v3 (Loop 5): characters + the conversations.characterId FK.
+      if (from < 3) {
+        await m.createTable(characters);
+        if (from >= 2) {
+          // `conversations` already existed pre-v3 (only created above when
+          // `from < 2`) without this column — add it to the real table.
+          await m.addColumn(conversations, conversations.characterId);
+        }
       }
     },
     beforeOpen: (details) async {

@@ -901,6 +901,758 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   }
 }
 
+class $CharactersTable extends Characters
+    with TableInfo<$CharactersTable, Character> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CharactersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _avatarEmojiMeta = const VerificationMeta(
+    'avatarEmoji',
+  );
+  @override
+  late final GeneratedColumn<String> avatarEmoji = GeneratedColumn<String>(
+    'avatar_emoji',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _avatarPathMeta = const VerificationMeta(
+    'avatarPath',
+  );
+  @override
+  late final GeneratedColumn<String> avatarPath = GeneratedColumn<String>(
+    'avatar_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _personaSystemPromptMeta =
+      const VerificationMeta('personaSystemPrompt');
+  @override
+  late final GeneratedColumn<String> personaSystemPrompt =
+      GeneratedColumn<String>(
+        'persona_system_prompt',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _greetingMeta = const VerificationMeta(
+    'greeting',
+  );
+  @override
+  late final GeneratedColumn<String> greeting = GeneratedColumn<String>(
+    'greeting',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _exampleDialoguesMeta = const VerificationMeta(
+    'exampleDialogues',
+  );
+  @override
+  late final GeneratedColumn<String> exampleDialogues = GeneratedColumn<String>(
+    'example_dialogues',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _defaultModelIdMeta = const VerificationMeta(
+    'defaultModelId',
+  );
+  @override
+  late final GeneratedColumn<int> defaultModelId = GeneratedColumn<int>(
+    'default_model_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES installed_models (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _samplingParamsJsonMeta =
+      const VerificationMeta('samplingParamsJson');
+  @override
+  late final GeneratedColumn<String> samplingParamsJson =
+      GeneratedColumn<String>(
+        'sampling_params_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _isBuiltInMeta = const VerificationMeta(
+    'isBuiltIn',
+  );
+  @override
+  late final GeneratedColumn<bool> isBuiltIn = GeneratedColumn<bool>(
+    'is_built_in',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_built_in" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    avatarEmoji,
+    avatarPath,
+    personaSystemPrompt,
+    greeting,
+    exampleDialogues,
+    defaultModelId,
+    samplingParamsJson,
+    isBuiltIn,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'characters';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Character> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('avatar_emoji')) {
+      context.handle(
+        _avatarEmojiMeta,
+        avatarEmoji.isAcceptableOrUnknown(
+          data['avatar_emoji']!,
+          _avatarEmojiMeta,
+        ),
+      );
+    }
+    if (data.containsKey('avatar_path')) {
+      context.handle(
+        _avatarPathMeta,
+        avatarPath.isAcceptableOrUnknown(data['avatar_path']!, _avatarPathMeta),
+      );
+    }
+    if (data.containsKey('persona_system_prompt')) {
+      context.handle(
+        _personaSystemPromptMeta,
+        personaSystemPrompt.isAcceptableOrUnknown(
+          data['persona_system_prompt']!,
+          _personaSystemPromptMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_personaSystemPromptMeta);
+    }
+    if (data.containsKey('greeting')) {
+      context.handle(
+        _greetingMeta,
+        greeting.isAcceptableOrUnknown(data['greeting']!, _greetingMeta),
+      );
+    }
+    if (data.containsKey('example_dialogues')) {
+      context.handle(
+        _exampleDialoguesMeta,
+        exampleDialogues.isAcceptableOrUnknown(
+          data['example_dialogues']!,
+          _exampleDialoguesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_model_id')) {
+      context.handle(
+        _defaultModelIdMeta,
+        defaultModelId.isAcceptableOrUnknown(
+          data['default_model_id']!,
+          _defaultModelIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sampling_params_json')) {
+      context.handle(
+        _samplingParamsJsonMeta,
+        samplingParamsJson.isAcceptableOrUnknown(
+          data['sampling_params_json']!,
+          _samplingParamsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_built_in')) {
+      context.handle(
+        _isBuiltInMeta,
+        isBuiltIn.isAcceptableOrUnknown(data['is_built_in']!, _isBuiltInMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Character map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Character(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      avatarEmoji: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}avatar_emoji'],
+      ),
+      avatarPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}avatar_path'],
+      ),
+      personaSystemPrompt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}persona_system_prompt'],
+      )!,
+      greeting: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}greeting'],
+      ),
+      exampleDialogues: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}example_dialogues'],
+      ),
+      defaultModelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}default_model_id'],
+      ),
+      samplingParamsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sampling_params_json'],
+      ),
+      isBuiltIn: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_built_in'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CharactersTable createAlias(String alias) {
+    return $CharactersTable(attachedDatabase, alias);
+  }
+}
+
+class Character extends DataClass implements Insertable<Character> {
+  final int id;
+  final String name;
+  final String? avatarEmoji;
+  final String? avatarPath;
+  final String personaSystemPrompt;
+  final String? greeting;
+
+  /// JSON array of example-dialogue strings (see `character_card.dart`'s
+  /// `mes_example` mapping), or null for none.
+  final String? exampleDialogues;
+  final int? defaultModelId;
+
+  /// `SamplingParams.toJson()` (see `data/chat/models/sampling_params.dart`),
+  /// or null for no character-level override.
+  final String? samplingParamsJson;
+
+  /// True for the shipped starter pack (see `character_repository.dart`'s
+  /// `seedBuiltInsIfPresent`); false for user-created characters.
+  final bool isBuiltIn;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Character({
+    required this.id,
+    required this.name,
+    this.avatarEmoji,
+    this.avatarPath,
+    required this.personaSystemPrompt,
+    this.greeting,
+    this.exampleDialogues,
+    this.defaultModelId,
+    this.samplingParamsJson,
+    required this.isBuiltIn,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || avatarEmoji != null) {
+      map['avatar_emoji'] = Variable<String>(avatarEmoji);
+    }
+    if (!nullToAbsent || avatarPath != null) {
+      map['avatar_path'] = Variable<String>(avatarPath);
+    }
+    map['persona_system_prompt'] = Variable<String>(personaSystemPrompt);
+    if (!nullToAbsent || greeting != null) {
+      map['greeting'] = Variable<String>(greeting);
+    }
+    if (!nullToAbsent || exampleDialogues != null) {
+      map['example_dialogues'] = Variable<String>(exampleDialogues);
+    }
+    if (!nullToAbsent || defaultModelId != null) {
+      map['default_model_id'] = Variable<int>(defaultModelId);
+    }
+    if (!nullToAbsent || samplingParamsJson != null) {
+      map['sampling_params_json'] = Variable<String>(samplingParamsJson);
+    }
+    map['is_built_in'] = Variable<bool>(isBuiltIn);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CharactersCompanion toCompanion(bool nullToAbsent) {
+    return CharactersCompanion(
+      id: Value(id),
+      name: Value(name),
+      avatarEmoji: avatarEmoji == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avatarEmoji),
+      avatarPath: avatarPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(avatarPath),
+      personaSystemPrompt: Value(personaSystemPrompt),
+      greeting: greeting == null && nullToAbsent
+          ? const Value.absent()
+          : Value(greeting),
+      exampleDialogues: exampleDialogues == null && nullToAbsent
+          ? const Value.absent()
+          : Value(exampleDialogues),
+      defaultModelId: defaultModelId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultModelId),
+      samplingParamsJson: samplingParamsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(samplingParamsJson),
+      isBuiltIn: Value(isBuiltIn),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Character.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Character(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      avatarEmoji: serializer.fromJson<String?>(json['avatarEmoji']),
+      avatarPath: serializer.fromJson<String?>(json['avatarPath']),
+      personaSystemPrompt: serializer.fromJson<String>(
+        json['personaSystemPrompt'],
+      ),
+      greeting: serializer.fromJson<String?>(json['greeting']),
+      exampleDialogues: serializer.fromJson<String?>(json['exampleDialogues']),
+      defaultModelId: serializer.fromJson<int?>(json['defaultModelId']),
+      samplingParamsJson: serializer.fromJson<String?>(
+        json['samplingParamsJson'],
+      ),
+      isBuiltIn: serializer.fromJson<bool>(json['isBuiltIn']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'avatarEmoji': serializer.toJson<String?>(avatarEmoji),
+      'avatarPath': serializer.toJson<String?>(avatarPath),
+      'personaSystemPrompt': serializer.toJson<String>(personaSystemPrompt),
+      'greeting': serializer.toJson<String?>(greeting),
+      'exampleDialogues': serializer.toJson<String?>(exampleDialogues),
+      'defaultModelId': serializer.toJson<int?>(defaultModelId),
+      'samplingParamsJson': serializer.toJson<String?>(samplingParamsJson),
+      'isBuiltIn': serializer.toJson<bool>(isBuiltIn),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Character copyWith({
+    int? id,
+    String? name,
+    Value<String?> avatarEmoji = const Value.absent(),
+    Value<String?> avatarPath = const Value.absent(),
+    String? personaSystemPrompt,
+    Value<String?> greeting = const Value.absent(),
+    Value<String?> exampleDialogues = const Value.absent(),
+    Value<int?> defaultModelId = const Value.absent(),
+    Value<String?> samplingParamsJson = const Value.absent(),
+    bool? isBuiltIn,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => Character(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    avatarEmoji: avatarEmoji.present ? avatarEmoji.value : this.avatarEmoji,
+    avatarPath: avatarPath.present ? avatarPath.value : this.avatarPath,
+    personaSystemPrompt: personaSystemPrompt ?? this.personaSystemPrompt,
+    greeting: greeting.present ? greeting.value : this.greeting,
+    exampleDialogues: exampleDialogues.present
+        ? exampleDialogues.value
+        : this.exampleDialogues,
+    defaultModelId: defaultModelId.present
+        ? defaultModelId.value
+        : this.defaultModelId,
+    samplingParamsJson: samplingParamsJson.present
+        ? samplingParamsJson.value
+        : this.samplingParamsJson,
+    isBuiltIn: isBuiltIn ?? this.isBuiltIn,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  Character copyWithCompanion(CharactersCompanion data) {
+    return Character(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      avatarEmoji: data.avatarEmoji.present
+          ? data.avatarEmoji.value
+          : this.avatarEmoji,
+      avatarPath: data.avatarPath.present
+          ? data.avatarPath.value
+          : this.avatarPath,
+      personaSystemPrompt: data.personaSystemPrompt.present
+          ? data.personaSystemPrompt.value
+          : this.personaSystemPrompt,
+      greeting: data.greeting.present ? data.greeting.value : this.greeting,
+      exampleDialogues: data.exampleDialogues.present
+          ? data.exampleDialogues.value
+          : this.exampleDialogues,
+      defaultModelId: data.defaultModelId.present
+          ? data.defaultModelId.value
+          : this.defaultModelId,
+      samplingParamsJson: data.samplingParamsJson.present
+          ? data.samplingParamsJson.value
+          : this.samplingParamsJson,
+      isBuiltIn: data.isBuiltIn.present ? data.isBuiltIn.value : this.isBuiltIn,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Character(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('avatarEmoji: $avatarEmoji, ')
+          ..write('avatarPath: $avatarPath, ')
+          ..write('personaSystemPrompt: $personaSystemPrompt, ')
+          ..write('greeting: $greeting, ')
+          ..write('exampleDialogues: $exampleDialogues, ')
+          ..write('defaultModelId: $defaultModelId, ')
+          ..write('samplingParamsJson: $samplingParamsJson, ')
+          ..write('isBuiltIn: $isBuiltIn, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    avatarEmoji,
+    avatarPath,
+    personaSystemPrompt,
+    greeting,
+    exampleDialogues,
+    defaultModelId,
+    samplingParamsJson,
+    isBuiltIn,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Character &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.avatarEmoji == this.avatarEmoji &&
+          other.avatarPath == this.avatarPath &&
+          other.personaSystemPrompt == this.personaSystemPrompt &&
+          other.greeting == this.greeting &&
+          other.exampleDialogues == this.exampleDialogues &&
+          other.defaultModelId == this.defaultModelId &&
+          other.samplingParamsJson == this.samplingParamsJson &&
+          other.isBuiltIn == this.isBuiltIn &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CharactersCompanion extends UpdateCompanion<Character> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<String?> avatarEmoji;
+  final Value<String?> avatarPath;
+  final Value<String> personaSystemPrompt;
+  final Value<String?> greeting;
+  final Value<String?> exampleDialogues;
+  final Value<int?> defaultModelId;
+  final Value<String?> samplingParamsJson;
+  final Value<bool> isBuiltIn;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const CharactersCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.avatarEmoji = const Value.absent(),
+    this.avatarPath = const Value.absent(),
+    this.personaSystemPrompt = const Value.absent(),
+    this.greeting = const Value.absent(),
+    this.exampleDialogues = const Value.absent(),
+    this.defaultModelId = const Value.absent(),
+    this.samplingParamsJson = const Value.absent(),
+    this.isBuiltIn = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CharactersCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.avatarEmoji = const Value.absent(),
+    this.avatarPath = const Value.absent(),
+    required String personaSystemPrompt,
+    this.greeting = const Value.absent(),
+    this.exampleDialogues = const Value.absent(),
+    this.defaultModelId = const Value.absent(),
+    this.samplingParamsJson = const Value.absent(),
+    this.isBuiltIn = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+  }) : name = Value(name),
+       personaSystemPrompt = Value(personaSystemPrompt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<Character> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<String>? avatarEmoji,
+    Expression<String>? avatarPath,
+    Expression<String>? personaSystemPrompt,
+    Expression<String>? greeting,
+    Expression<String>? exampleDialogues,
+    Expression<int>? defaultModelId,
+    Expression<String>? samplingParamsJson,
+    Expression<bool>? isBuiltIn,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (avatarEmoji != null) 'avatar_emoji': avatarEmoji,
+      if (avatarPath != null) 'avatar_path': avatarPath,
+      if (personaSystemPrompt != null)
+        'persona_system_prompt': personaSystemPrompt,
+      if (greeting != null) 'greeting': greeting,
+      if (exampleDialogues != null) 'example_dialogues': exampleDialogues,
+      if (defaultModelId != null) 'default_model_id': defaultModelId,
+      if (samplingParamsJson != null)
+        'sampling_params_json': samplingParamsJson,
+      if (isBuiltIn != null) 'is_built_in': isBuiltIn,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CharactersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String?>? avatarEmoji,
+    Value<String?>? avatarPath,
+    Value<String>? personaSystemPrompt,
+    Value<String?>? greeting,
+    Value<String?>? exampleDialogues,
+    Value<int?>? defaultModelId,
+    Value<String?>? samplingParamsJson,
+    Value<bool>? isBuiltIn,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CharactersCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      avatarEmoji: avatarEmoji ?? this.avatarEmoji,
+      avatarPath: avatarPath ?? this.avatarPath,
+      personaSystemPrompt: personaSystemPrompt ?? this.personaSystemPrompt,
+      greeting: greeting ?? this.greeting,
+      exampleDialogues: exampleDialogues ?? this.exampleDialogues,
+      defaultModelId: defaultModelId ?? this.defaultModelId,
+      samplingParamsJson: samplingParamsJson ?? this.samplingParamsJson,
+      isBuiltIn: isBuiltIn ?? this.isBuiltIn,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (avatarEmoji.present) {
+      map['avatar_emoji'] = Variable<String>(avatarEmoji.value);
+    }
+    if (avatarPath.present) {
+      map['avatar_path'] = Variable<String>(avatarPath.value);
+    }
+    if (personaSystemPrompt.present) {
+      map['persona_system_prompt'] = Variable<String>(
+        personaSystemPrompt.value,
+      );
+    }
+    if (greeting.present) {
+      map['greeting'] = Variable<String>(greeting.value);
+    }
+    if (exampleDialogues.present) {
+      map['example_dialogues'] = Variable<String>(exampleDialogues.value);
+    }
+    if (defaultModelId.present) {
+      map['default_model_id'] = Variable<int>(defaultModelId.value);
+    }
+    if (samplingParamsJson.present) {
+      map['sampling_params_json'] = Variable<String>(samplingParamsJson.value);
+    }
+    if (isBuiltIn.present) {
+      map['is_built_in'] = Variable<bool>(isBuiltIn.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CharactersCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('avatarEmoji: $avatarEmoji, ')
+          ..write('avatarPath: $avatarPath, ')
+          ..write('personaSystemPrompt: $personaSystemPrompt, ')
+          ..write('greeting: $greeting, ')
+          ..write('exampleDialogues: $exampleDialogues, ')
+          ..write('defaultModelId: $defaultModelId, ')
+          ..write('samplingParamsJson: $samplingParamsJson, ')
+          ..write('isBuiltIn: $isBuiltIn, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ConversationsTable extends Conversations
     with TableInfo<$ConversationsTable, Conversation> {
   @override
@@ -956,6 +1708,20 @@ class $ConversationsTable extends Conversations
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES installed_models (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _characterIdMeta = const VerificationMeta(
+    'characterId',
+  );
+  @override
+  late final GeneratedColumn<int> characterId = GeneratedColumn<int>(
+    'character_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES characters (id) ON DELETE SET NULL',
     ),
   );
   static const VerificationMeta _systemPromptMeta = const VerificationMeta(
@@ -1022,6 +1788,7 @@ class $ConversationsTable extends Conversations
     title,
     folderId,
     modelId,
+    characterId,
     systemPrompt,
     samplingParamsJson,
     createdAt,
@@ -1059,6 +1826,15 @@ class $ConversationsTable extends Conversations
       context.handle(
         _modelIdMeta,
         modelId.isAcceptableOrUnknown(data['model_id']!, _modelIdMeta),
+      );
+    }
+    if (data.containsKey('character_id')) {
+      context.handle(
+        _characterIdMeta,
+        characterId.isAcceptableOrUnknown(
+          data['character_id']!,
+          _characterIdMeta,
+        ),
       );
     }
     if (data.containsKey('system_prompt')) {
@@ -1126,6 +1902,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.int,
         data['${effectivePrefix}model_id'],
       ),
+      characterId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}character_id'],
+      ),
       systemPrompt: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}system_prompt'],
@@ -1160,6 +1940,14 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final String title;
   final int? folderId;
   final int? modelId;
+
+  /// The character (if any) this thread was started with — its persona is
+  /// the system prompt, its greeting seeds the thread, its model/sampling
+  /// are the defaults (see `data/characters/character_repository.dart`'s
+  /// `chatContextFor`). Deleting a character un-sets this (`KeyAction.
+  /// setNull`), same "survives deletion" precedent as `modelId`/`folderId`
+  /// above — the conversation and its history are untouched.
+  final int? characterId;
   final String systemPrompt;
 
   /// `SamplingParams.toJson()` (see `data/chat/models/sampling_params.dart`),
@@ -1173,6 +1961,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.title,
     this.folderId,
     this.modelId,
+    this.characterId,
     required this.systemPrompt,
     this.samplingParamsJson,
     required this.createdAt,
@@ -1189,6 +1978,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     }
     if (!nullToAbsent || modelId != null) {
       map['model_id'] = Variable<int>(modelId);
+    }
+    if (!nullToAbsent || characterId != null) {
+      map['character_id'] = Variable<int>(characterId);
     }
     map['system_prompt'] = Variable<String>(systemPrompt);
     if (!nullToAbsent || samplingParamsJson != null) {
@@ -1210,6 +2002,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       modelId: modelId == null && nullToAbsent
           ? const Value.absent()
           : Value(modelId),
+      characterId: characterId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(characterId),
       systemPrompt: Value(systemPrompt),
       samplingParamsJson: samplingParamsJson == null && nullToAbsent
           ? const Value.absent()
@@ -1230,6 +2025,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       title: serializer.fromJson<String>(json['title']),
       folderId: serializer.fromJson<int?>(json['folderId']),
       modelId: serializer.fromJson<int?>(json['modelId']),
+      characterId: serializer.fromJson<int?>(json['characterId']),
       systemPrompt: serializer.fromJson<String>(json['systemPrompt']),
       samplingParamsJson: serializer.fromJson<String?>(
         json['samplingParamsJson'],
@@ -1247,6 +2043,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'title': serializer.toJson<String>(title),
       'folderId': serializer.toJson<int?>(folderId),
       'modelId': serializer.toJson<int?>(modelId),
+      'characterId': serializer.toJson<int?>(characterId),
       'systemPrompt': serializer.toJson<String>(systemPrompt),
       'samplingParamsJson': serializer.toJson<String?>(samplingParamsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1260,6 +2057,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     String? title,
     Value<int?> folderId = const Value.absent(),
     Value<int?> modelId = const Value.absent(),
+    Value<int?> characterId = const Value.absent(),
     String? systemPrompt,
     Value<String?> samplingParamsJson = const Value.absent(),
     DateTime? createdAt,
@@ -1270,6 +2068,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     title: title ?? this.title,
     folderId: folderId.present ? folderId.value : this.folderId,
     modelId: modelId.present ? modelId.value : this.modelId,
+    characterId: characterId.present ? characterId.value : this.characterId,
     systemPrompt: systemPrompt ?? this.systemPrompt,
     samplingParamsJson: samplingParamsJson.present
         ? samplingParamsJson.value
@@ -1284,6 +2083,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       title: data.title.present ? data.title.value : this.title,
       folderId: data.folderId.present ? data.folderId.value : this.folderId,
       modelId: data.modelId.present ? data.modelId.value : this.modelId,
+      characterId: data.characterId.present
+          ? data.characterId.value
+          : this.characterId,
       systemPrompt: data.systemPrompt.present
           ? data.systemPrompt.value
           : this.systemPrompt,
@@ -1303,6 +2105,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('title: $title, ')
           ..write('folderId: $folderId, ')
           ..write('modelId: $modelId, ')
+          ..write('characterId: $characterId, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('samplingParamsJson: $samplingParamsJson, ')
           ..write('createdAt: $createdAt, ')
@@ -1318,6 +2121,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     title,
     folderId,
     modelId,
+    characterId,
     systemPrompt,
     samplingParamsJson,
     createdAt,
@@ -1332,6 +2136,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.title == this.title &&
           other.folderId == this.folderId &&
           other.modelId == this.modelId &&
+          other.characterId == this.characterId &&
           other.systemPrompt == this.systemPrompt &&
           other.samplingParamsJson == this.samplingParamsJson &&
           other.createdAt == this.createdAt &&
@@ -1344,6 +2149,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<String> title;
   final Value<int?> folderId;
   final Value<int?> modelId;
+  final Value<int?> characterId;
   final Value<String> systemPrompt;
   final Value<String?> samplingParamsJson;
   final Value<DateTime> createdAt;
@@ -1354,6 +2160,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.title = const Value.absent(),
     this.folderId = const Value.absent(),
     this.modelId = const Value.absent(),
+    this.characterId = const Value.absent(),
     this.systemPrompt = const Value.absent(),
     this.samplingParamsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1365,6 +2172,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.title = const Value.absent(),
     this.folderId = const Value.absent(),
     this.modelId = const Value.absent(),
+    this.characterId = const Value.absent(),
     this.systemPrompt = const Value.absent(),
     this.samplingParamsJson = const Value.absent(),
     required DateTime createdAt,
@@ -1377,6 +2185,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<String>? title,
     Expression<int>? folderId,
     Expression<int>? modelId,
+    Expression<int>? characterId,
     Expression<String>? systemPrompt,
     Expression<String>? samplingParamsJson,
     Expression<DateTime>? createdAt,
@@ -1388,6 +2197,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (title != null) 'title': title,
       if (folderId != null) 'folder_id': folderId,
       if (modelId != null) 'model_id': modelId,
+      if (characterId != null) 'character_id': characterId,
       if (systemPrompt != null) 'system_prompt': systemPrompt,
       if (samplingParamsJson != null)
         'sampling_params_json': samplingParamsJson,
@@ -1402,6 +2212,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<String>? title,
     Value<int?>? folderId,
     Value<int?>? modelId,
+    Value<int?>? characterId,
     Value<String>? systemPrompt,
     Value<String?>? samplingParamsJson,
     Value<DateTime>? createdAt,
@@ -1413,6 +2224,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       title: title ?? this.title,
       folderId: folderId ?? this.folderId,
       modelId: modelId ?? this.modelId,
+      characterId: characterId ?? this.characterId,
       systemPrompt: systemPrompt ?? this.systemPrompt,
       samplingParamsJson: samplingParamsJson ?? this.samplingParamsJson,
       createdAt: createdAt ?? this.createdAt,
@@ -1435,6 +2247,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     }
     if (modelId.present) {
       map['model_id'] = Variable<int>(modelId.value);
+    }
+    if (characterId.present) {
+      map['character_id'] = Variable<int>(characterId.value);
     }
     if (systemPrompt.present) {
       map['system_prompt'] = Variable<String>(systemPrompt.value);
@@ -1461,6 +2276,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('title: $title, ')
           ..write('folderId: $folderId, ')
           ..write('modelId: $modelId, ')
+          ..write('characterId: $characterId, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('samplingParamsJson: $samplingParamsJson, ')
           ..write('createdAt: $createdAt, ')
@@ -2168,6 +2984,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $FoldersTable folders = $FoldersTable(this);
+  late final $CharactersTable characters = $CharactersTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   @override
@@ -2177,11 +2994,19 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     installedModels,
     folders,
+    characters,
     conversations,
     messages,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'installed_models',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('characters', kind: UpdateKind.update)],
+    ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'folders',
@@ -2192,6 +3017,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'installed_models',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('conversations', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'characters',
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('conversations', kind: UpdateKind.update)],

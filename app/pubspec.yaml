@@ -111,6 +111,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Loop 5 (characters): the built-in starter pack `CharacterRepository.
+  # seedBuiltInsIfPresent` seeds on first access — see data/characters/
+  # character_seed.dart for the JSON schema. Deliberately tolerated as
+  # absent by that loader (returns null, no-op) if this entry or the file
+  # itself is ever missing.
+  assets:
+    - assets/characters/starter_pack.json
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
