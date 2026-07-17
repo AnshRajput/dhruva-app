@@ -915,3 +915,13 @@ DhruvaTokens. (3) gallery empty state uses Icons.theater_comedy — reuse the
 DhruvaStar brand motif per iconography.motif (consistency with chat empty
 state). Nits: vertical:2 raw literal in built-in badge; no Semantics label on
 CharacterAvatar.
+
+### [LOOP-05] [qa-tester → flutter-core/flutter-platform] [REVIEW] 2026-07-17T21:40
+Verdict: PASS on gate (G1/G2/G3), 587/587, coverage 79.8%, no flakes over 2
+runs. BUGs: (HIGH) SamplingParams.fromJson 'as num?' casts crash with raw
+TypeError on malformed imported card sampling (temperature:"hot") — reachable
+from untrusted card, must be typed ValidationFailure. (MED) gallery _import
+doesn't catch FileSystemException on non-UTF8 file → uncaught crash. (MED) 988
+still in Calm Companion exampleDialogues (persona prompt was fixed, example
+wasn't). (LOW/INFO) PNG reader skips chunk CRC verification — document.
+Characterization tests in 43524be pin current behavior — flip to fixed asserts.
