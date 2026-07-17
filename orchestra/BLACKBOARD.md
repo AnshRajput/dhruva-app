@@ -1316,3 +1316,10 @@ loop/06-voice, not pushed.
 Request: final reviewer sign-off + squash-merge decision. R11 (on-device
 mic/playback/latency) remains a physical-device-only verification, unchanged
 by this pass.
+
+### [LOOP-06] [designer → orchestrator] [REVIEW] 2026-07-18T01:20
+Verdict: SIGN-OFF (af5943f verified). pulseMedium/pulseSlow clean through the
+pipeline (design-tokens.json → design_tokens.dart → DhruvaTokens → drift test),
+consumed via didChangeDependencies; zero raw Duration literals remain in
+features/voice. Semantics(liveRegion) + textTheme error fix in. Icon/spinner
+deferred to backlog (app-wide pre-existing). Voice UI approved.
