@@ -145,3 +145,24 @@ verification, mobile+desktop), model compatibility, manifesto, docs.
 Vercel (dhruvaai.vercel.app) is the primary deploy; auto-deploys on main.
 The formal Loop 12 gate (Lighthouse 95+, real screenshots) still runs later —
 this amendment raises the interim bar.
+
+## SCOPE AMENDMENT 4 — human directives (2026-07-17)
+(a) CONTINUOUS DISTRIBUTION: at every loop close (COMMIT phase), ship all
+three surfaces: app build → Firebase App Distribution (scripts/distribute.sh),
+website → Vercel (auto on main) + GitHub Pages. No loop closes without
+shipping.
+(b) UX COMPLETENESS: downloads always visibly indicated; full conversation
+history and (later) generated assets always browsable; per-conversation
+delete + export; CLEAR ALL HISTORY; think through everyday use cases — the
+bar is a clean, considerate experience. Status: downloads screen, history
+list, per-conversation delete/export exist (Loops 3-4); ADDING NOW: Settings
+screen (clear-all-history w/ double confirm, about section w/ credit row per
+Amendment 2b, storage summary link), global active-download indicator in the
+nav shell.
+(c) HF SECTION: the in-app Hugging Face browser is a first-class section
+(exists as Models tab) and must be interactive + informative: ADDING NOW a
+"Recommended for your device" rail (curated verified starter catalog from
+Loop 0 research, filtered by device tier) above search, with the existing
+verdict chips + license surfacing.
+Also: wire the Android engine AAR now (closes R10) so the v0.1.0-alpha
+distributed build can actually chat on Android.
