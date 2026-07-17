@@ -41,6 +41,7 @@ dependencies:
   # no custom MethodChannel needed.
   drift: ^2.34.2
   drift_flutter: ^0.3.1 # bundles sqlite3_flutter_libs; native lib loading for drift.
+  file_selector: ^1.1.0
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.3.2
@@ -68,6 +69,8 @@ dev_dependencies:
     sdk: flutter
   freezed: ^3.2.5
   json_serializable: ^6.14.0
+  path_provider_platform_interface: ^2.1.3
+  plugin_platform_interface: ^2.1.8
 
 
 # For information on the generic Dart part of this file, see the

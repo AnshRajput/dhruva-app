@@ -44,13 +44,17 @@ ModelTier classifyModelTier({
   required int totalRamBytes,
   String? quant,
 }) {
-  final floor = _ramFloorFor(fileSizeBytes);
+  final floor = ramFloorBytesFor(fileSizeBytes);
   if (totalRamBytes < floor) return ModelTier.notRecommended;
   if (totalRamBytes < floor * _comfortableMultiplier) return ModelTier.possible;
   return ModelTier.comfortable;
 }
 
-int _ramFloorFor(int fileSizeBytes) {
+/// The RAM floor (bytes) [classifyModelTier] applies for a GGUF of
+/// [fileSizeBytes]. Public so UI can build the verdict chip's one-line
+/// explanation ("needs ~6GB RAM, you have 8GB") without duplicating the
+/// size-class bucket table.
+int ramFloorBytesFor(int fileSizeBytes) {
   if (fileSizeBytes <= _class1BMaxBytes) return _floor1BBytes;
   if (fileSizeBytes <= _class3BMaxBytes) return _floor3BBytes;
   return _floor4BPlusBytes;
