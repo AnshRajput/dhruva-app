@@ -985,3 +985,9 @@ doesn't catch FileSystemException on non-UTF8 file → uncaught crash. (MED) 988
 still in Calm Companion exampleDialogues (persona prompt was fixed, example
 wasn't). (LOW/INFO) PNG reader skips chunk CRC verification — document.
 Characterization tests in 43524be pin current behavior — flip to fixed asserts.
+
+### [LOOP-05] [designer → orchestrator] [REVIEW] 2026-07-17T22:10
+Verdict: SIGN-OFF (7e3b962 verified). All three blockers closed: chat AppBar
+_MiniCharacterAvatar with correct image→emoji→star fallback; import dialog on
+DhruvaTokens + CharacterAvatar; gallery empty state on DhruvaStar. Semantics
+added. Characters UI approved.
