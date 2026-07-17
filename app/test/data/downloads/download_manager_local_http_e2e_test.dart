@@ -16,6 +16,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
@@ -452,10 +453,11 @@ void main() {
 
   test(
     'offline mid-download: connection dies partway -> failed status, partial '
-    'file cleaned up (attack #2 — pins the actual promise: cleanup, not a '
-    'resumable partial; errorMessage arrives as a plain String on the '
-    'progress stream, not a typed AppFailure — DownloadManager never '
-    'reconstructs one for async backend failures)',
+    'file cleaned up, typed as a NetworkUnknownFailure (attack #2 — FIXED: '
+    'this used to pin errorMessage as a plain String with no typed AppFailure '
+    'reconstructed for async backend failures; DownloadManager now always '
+    'attaches one, even though a bare "failed" status carries no further '
+    'detail from the plugin than the message itself)',
     () async {
       server.killAfterBytes = 400 * 1024; // die well before EOF
       final request = await searchAndBuildRequest(
@@ -470,6 +472,7 @@ void main() {
       expect(finalState.state, DownloadState.failed);
       expect(finalState.errorMessage, isNotNull);
       expect(finalState.errorMessage, isA<String>());
+      expect(finalState.failure, isA<NetworkUnknownFailure>());
 
       // The code's actual promise on a failed task: no partial file left
       // behind, and nothing registered in drift.

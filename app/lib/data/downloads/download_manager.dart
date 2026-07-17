@@ -30,6 +30,19 @@ final class DownloadProgress {
   final int? totalBytes;
   final String? errorMessage;
 
+  /// The typed failure behind [errorMessage], when [state] is
+  /// [DownloadState.failed]. Async failures (backend status updates,
+  /// integrity checks) used to only ever surface a raw string here — this
+  /// keeps them in the ADR-002 taxonomy so the UI can use
+  /// `friendlyFailureMessage`/recovery-affordance logic instead of just
+  /// displaying text. `notFound` is typed as an HTTP 404
+  /// ([NetworkHttpFailure]) because that's background_downloader's own
+  /// documented meaning for that status; a generic `failed` status has no
+  /// further detail available without deeper plugin-exception mapping (that
+  /// would touch the untested native adapter — left for a later loop), so
+  /// it's [NetworkUnknownFailure] rather than left untyped.
+  final AppFailure? failure;
+
   const DownloadProgress({
     required this.taskId,
     required this.repoId,
@@ -38,6 +51,7 @@ final class DownloadProgress {
     required this.downloadedBytes,
     this.totalBytes,
     this.errorMessage,
+    this.failure,
   });
 }
 
@@ -96,33 +110,59 @@ final class DownloadManager {
 
   Stream<DownloadProgress> get progress => _controller.stream;
 
-  /// Enqueues [request]. Throws [StorageInsufficientSpaceFailure] if
+  /// Enqueues [request]. Throws [ValidationFailure] if `request.fileName`
+  /// doesn't sanitize to a usable local file name (see
+  /// `sanitizeLocalFileName` — this is the trust boundary: a subfolder HF
+  /// path like `"mmproj/x.gguf"` is flattened, a traversal/garbage name is
+  /// rejected outright). Throws [StorageInsufficientSpaceFailure] if
   /// [freeBytes] doesn't leave enough headroom for the file — call this with
   /// a fresh `DeviceStorageInfo.freeBytes` reading from `DeviceInfoService`.
   Future<void> enqueue(
     DownloadRequest request, {
     required int freeBytes,
   }) async {
+    final safeFileName = sanitizeLocalFileName(request.fileName);
+    if (safeFileName == null) {
+      throw ValidationFailure(
+        'invalid download fileName: "${request.fileName}"',
+      );
+    }
+    // The remote resolve URL (`request.url`) is a separate field, built by
+    // the caller from the original (possibly subfoldered) HF path — it is
+    // deliberately NOT derived from `safeFileName` and is left untouched.
+    final safeRequest = safeFileName == request.fileName
+        ? request
+        : DownloadRequest(
+            repoId: request.repoId,
+            fileName: safeFileName,
+            url: request.url,
+            expectedSizeBytes: request.expectedSizeBytes,
+            expectedSha256: request.expectedSha256,
+            quant: request.quant,
+            license: request.license,
+            gated: request.gated,
+          );
+
     final guardFailure = checkStorageGuard(
-      requiredBytes: request.expectedSizeBytes,
+      requiredBytes: safeRequest.expectedSizeBytes,
       freeBytes: freeBytes,
     );
     if (guardFailure != null) throw guardFailure;
 
-    _active[request.taskId] = request;
+    _active[safeRequest.taskId] = safeRequest;
     final enqueued = await _backend.enqueue(
       BackendDownloadRequest(
-        taskId: request.taskId,
-        url: request.url,
-        fileName: request.fileName,
+        taskId: safeRequest.taskId,
+        url: safeRequest.url,
+        fileName: safeRequest.fileName,
         directoryPath: modelsDirectory.path,
       ),
     );
     if (!enqueued) {
-      _active.remove(request.taskId);
+      _active.remove(safeRequest.taskId);
       throw const StorageIoFailure('failed to enqueue download');
     }
-    _emit(request, DownloadState.queued, downloadedBytes: 0);
+    _emit(safeRequest, DownloadState.queued, downloadedBytes: 0);
   }
 
   Future<void> pause(String taskId) => _backend.pause(taskId);
@@ -178,11 +218,20 @@ final class DownloadManager {
       case BackendTaskStatus.notFound:
         await _cleanupPartialFile(request.taskId);
         _active.remove(request.taskId);
+        final message = update.errorMessage ?? 'download failed';
+        // notFound is background_downloader's documented status for an
+        // HTTP 404; a bare `failed` carries no further detail without
+        // mapping the plugin's TaskException subtypes (untested native
+        // adapter — deferred), so it lands in the last-resort bucket.
+        final failure = update.status == BackendTaskStatus.notFound
+            ? NetworkHttpFailure(message, statusCode: 404)
+            : NetworkUnknownFailure(message);
         _emit(
           request,
           DownloadState.failed,
           downloadedBytes: 0,
-          errorMessage: update.errorMessage ?? 'download failed',
+          errorMessage: message,
+          failure: failure,
         );
       case BackendTaskStatus.canceled:
         _active.remove(request.taskId);
@@ -204,11 +253,15 @@ final class DownloadManager {
     final file = File(path);
     if (!file.existsSync()) {
       _active.remove(request.taskId);
+      const missingFileFailure = StorageNotFoundFailure(
+        'downloaded file is missing on disk',
+      );
       _emit(
         request,
         DownloadState.failed,
         downloadedBytes: 0,
-        errorMessage: 'downloaded file is missing on disk',
+        errorMessage: missingFileFailure.message,
+        failure: missingFileFailure,
       );
       return;
     }
@@ -231,6 +284,7 @@ final class DownloadManager {
         DownloadState.failed,
         downloadedBytes: 0,
         errorMessage: integrityFailure.message,
+        failure: integrityFailure,
       );
       return;
     }
@@ -279,6 +333,7 @@ final class DownloadManager {
     required int downloadedBytes,
     int? totalBytes,
     String? errorMessage,
+    AppFailure? failure,
   }) {
     _controller.add(
       DownloadProgress(
@@ -289,6 +344,7 @@ final class DownloadManager {
         downloadedBytes: downloadedBytes,
         totalBytes: totalBytes ?? request.expectedSizeBytes,
         errorMessage: errorMessage,
+        failure: failure,
       ),
     );
   }

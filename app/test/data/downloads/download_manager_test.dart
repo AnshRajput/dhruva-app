@@ -199,6 +199,7 @@ void main() {
       final progress = await future;
 
       expect(progress.errorMessage, contains('size mismatch'));
+      expect(progress.failure, isA<StorageCorruptFileFailure>());
       expect(await db.select(db.installedModels).get(), isEmpty);
       expect(file.existsSync(), isFalse);
     });
@@ -261,6 +262,7 @@ void main() {
       final progress = await future;
 
       expect(progress.errorMessage, contains('missing'));
+      expect(progress.failure, isA<StorageNotFoundFailure>());
     });
   });
 
@@ -286,22 +288,35 @@ void main() {
       final progress = await future;
 
       expect(progress.errorMessage, 'boom');
+      expect(progress.failure, isA<NetworkUnknownFailure>());
       expect(partial.existsSync(), isFalse);
     });
 
-    test('notFound status is treated the same as failed', () async {
-      final r = req();
-      await manager.enqueue(r, freeBytes: 1 << 30);
+    test(
+      'notFound status is treated the same as failed, typed as an HTTP 404',
+      () async {
+        final r = req();
+        await manager.enqueue(r, freeBytes: 1 << 30);
 
-      final future = _nextWhere(
-        manager.progress,
-        (p) => p.state == DownloadState.failed,
-      );
-      backend.emit(
-        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.notFound),
-      );
-      await future;
-    });
+        final future = _nextWhere(
+          manager.progress,
+          (p) => p.state == DownloadState.failed,
+        );
+        backend.emit(
+          BackendStatusUpdate(r.taskId, status: BackendTaskStatus.notFound),
+        );
+        final progress = await future;
+
+        expect(
+          progress.failure,
+          isA<NetworkHttpFailure>().having(
+            (e) => e.statusCode,
+            'statusCode',
+            404,
+          ),
+        );
+      },
+    );
 
     test(
       'cancel calls the backend, deletes the partial file, emits canceled',
@@ -385,55 +400,90 @@ void main() {
     });
   });
 
-  group('trust boundary: fileName sanitization (attack #7)', () {
+  group('trust boundary: fileName sanitization (attack #7 — FIXED)', () {
+    test('a path-traversal fileName is sanitized at the DownloadManager choke '
+        'point (enqueue), not left to the UI call site: it is flattened to '
+        'its basename, and every subsequent path DownloadManager touches for '
+        'that task stays inside modelsDirectory.', () async {
+      final r = DownloadRequest(
+        repoId: 'evil/repo',
+        fileName: '../../../../etc/dhruva-traversal-poc.gguf',
+        url: Uri.parse('https://huggingface.co/evil/repo/resolve/main/x'),
+        expectedSizeBytes: 5,
+      );
+
+      final queuedFuture = _nextWhere(
+        manager.progress,
+        (p) => p.state == DownloadState.queued,
+      );
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      final queued = await queuedFuture;
+
+      // Sanitized to a plain basename — the taskId the manager actually
+      // tracks (and reports back on the progress stream) reflects that,
+      // not the caller's original, unsanitized `r.taskId`.
+      expect(queued.fileName, 'dhruva-traversal-poc.gguf');
+      expect(queued.taskId, 'evil/repo::dhruva-traversal-poc.gguf');
+      expect(backend.enqueuedRequests.keys, contains(queued.taskId));
+      expect(
+        backend.enqueuedRequests[queued.taskId]!.fileName,
+        'dhruva-traversal-poc.gguf',
+      );
+
+      final resolvedPath = p.normalize(p.join(modelsDir.path, queued.fileName));
+      expect(
+        p.isWithin(modelsDir.path, resolvedPath),
+        isTrue,
+        reason: 'the on-disk path must stay inside modelsDirectory',
+      );
+    });
+
     test(
-      'BUG repro: DownloadManager does not sanitize a path-traversal fileName '
-      'itself — it trusts the caller completely. The models directory is '
-      'escaped when resolving the on-disk path for a completed/failed task. '
-      'Production is only saved by the UI call site (model_detail_screen.dart '
-      'using p.basename) — DownloadManager, the shared data-layer choke '
-      'point, provides no defense-in-depth. HIGH: any future caller that '
-      "forwards an HF tree entry's raw path as fileName (subfolder files, "
-      'e.g. mmproj/*, are a legitimate real-world case that already needs '
-      'basename stripping) reintroduces arbitrary-file-delete/escape risk.',
+      'a legitimate subfolder path (e.g. an HF mmproj file) is flattened '
+      'the same way the traversal case is — the local fileName is the '
+      'basename, but the remote resolve URL keeps the original subfolder '
+      'path (they are separate fields, only fileName is sanitized).',
       () async {
         final r = DownloadRequest(
+          repoId: 'ggml-org/SmolVLM2-2.2B-Instruct-GGUF',
+          fileName: 'mmproj/mmproj-Q8_0.gguf',
+          url: Uri.parse(
+            'https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/'
+            'resolve/main/mmproj/mmproj-Q8_0.gguf',
+          ),
+          expectedSizeBytes: 5,
+        );
+
+        final queuedFuture = _nextWhere(
+          manager.progress,
+          (p) => p.state == DownloadState.queued,
+        );
+        await manager.enqueue(r, freeBytes: 1 << 30);
+        final queued = await queuedFuture;
+
+        expect(queued.fileName, 'mmproj-Q8_0.gguf');
+        final enqueued = backend.enqueuedRequests[queued.taskId]!;
+        expect(enqueued.fileName, 'mmproj-Q8_0.gguf');
+        expect(enqueued.url.toString(), contains('/mmproj/mmproj-Q8_0.gguf'));
+      },
+    );
+
+    test('a fileName that sanitizes to nothing usable is rejected with '
+        'ValidationFailure before anything reaches the backend', () async {
+      for (final bad in ['..', '.', '', '../..', '///']) {
+        final r = DownloadRequest(
           repoId: 'evil/repo',
-          fileName: '../../../../etc/dhruva-traversal-poc.gguf',
+          fileName: bad,
           url: Uri.parse('https://huggingface.co/evil/repo/resolve/main/x'),
           expectedSizeBytes: 5,
         );
-        await manager.enqueue(r, freeBytes: 1 << 30);
-
-        // Simulate the backend reporting no known file path (the fallback
-        // branch DownloadManager itself computes via p.join(modelsDirectory,
-        // fileName) — this is the exact code path a real completed/failed
-        // task with a malicious fileName would hit).
-        final future = _nextWhere(
-          manager.progress,
-          (p) => p.state == DownloadState.failed,
+        await expectLater(
+          () => manager.enqueue(r, freeBytes: 1 << 30),
+          throwsA(isA<ValidationFailure>()),
+          reason: 'fileName: "$bad"',
         );
-        backend.emit(
-          BackendStatusUpdate(r.taskId, status: BackendTaskStatus.failed),
-        );
-        await future;
-
-        // What SHOULD be true: any path DownloadManager touches for this
-        // task stays inside modelsDirectory. It currently is not — the
-        // resolved path's normalized form is outside modelsDir.
-        final resolvedInsideModelsDir = p.isWithin(
-          modelsDir.path,
-          p.normalize(p.join(modelsDir.path, r.fileName)),
-        );
-        expect(
-          resolvedInsideModelsDir,
-          isFalse,
-          reason:
-              'Documents the current (unsafe) behavior — see BUG note above. '
-              'When lib/ is fixed to reject/sanitize traversal fileNames at '
-              'the DownloadManager boundary, flip this to isTrue.',
-        );
-      },
-    );
+      }
+      expect(backend.enqueuedRequests, isEmpty);
+    });
   });
 }

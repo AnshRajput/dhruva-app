@@ -9,8 +9,29 @@ library;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/failures/app_failure.dart';
+
+/// Sanitizes a caller-supplied local file name for writing under
+/// `modelsDirectory`. `DownloadManager.enqueue` is the trust boundary for
+/// every path that ends up on disk, so it can't assume a caller already
+/// stripped directory components — a raw HF tree path legitimately looks
+/// like `"mmproj/model-Q8_0.gguf"` (subfolder files), and a hostile
+/// `fileName` can look like `"../../../etc/x.gguf"`. Both get flattened to
+/// their basename; only the basename is used for the on-disk name (the
+/// remote resolve URL is a separate field and is never touched here).
+/// Returns null — reject — when the basename is empty, a bare `.`/`..`, or
+/// (the `"///"` edge case: `p.basename` of an all-separator string returns
+/// the separator itself, e.g. `"/"`, which `p.join` then treats as an
+/// absolute-path override and escapes `modelsDirectory` entirely) still
+/// contains a separator — i.e. not a name that can identify a real file.
+String? sanitizeLocalFileName(String fileName) {
+  final base = p.basename(fileName);
+  if (base.isEmpty || base == '.' || base == '..') return null;
+  if (base.contains('/') || base.contains(r'\')) return null;
+  return base;
+}
 
 /// The 4-byte magic every valid GGUF file starts with (ASCII "GGUF").
 const ggufMagicBytes = [0x47, 0x47, 0x55, 0x46];

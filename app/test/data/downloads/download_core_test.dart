@@ -31,6 +31,65 @@ void main() {
     });
   });
 
+  group('sanitizeLocalFileName', () {
+    test('a plain file name passes through unchanged', () {
+      expect(sanitizeLocalFileName('model-Q4_K_M.gguf'), 'model-Q4_K_M.gguf');
+    });
+
+    test(
+      'a subfolder path (e.g. an HF mmproj file) is flattened to its basename',
+      () {
+        expect(
+          sanitizeLocalFileName('mmproj/mmproj-Q8_0.gguf'),
+          'mmproj-Q8_0.gguf',
+        );
+      },
+    );
+
+    test(
+      'a path-traversal fileName is flattened to its basename, not left escaping',
+      () {
+        expect(
+          sanitizeLocalFileName('../../../../etc/dhruva-traversal-poc.gguf'),
+          'dhruva-traversal-poc.gguf',
+        );
+      },
+    );
+
+    test('nested traversal + subfolder still flattens correctly', () {
+      expect(sanitizeLocalFileName('../../mmproj/../evil.gguf'), 'evil.gguf');
+    });
+
+    test('rejects an empty fileName', () {
+      expect(sanitizeLocalFileName(''), isNull);
+    });
+
+    test('rejects a bare "."', () {
+      expect(sanitizeLocalFileName('.'), isNull);
+    });
+
+    test('rejects a bare ".."', () {
+      expect(sanitizeLocalFileName('..'), isNull);
+    });
+
+    test('rejects "../.." (basename is still "..")', () {
+      expect(sanitizeLocalFileName('../..'), isNull);
+    });
+
+    test('rejects an all-separator name ("///") whose basename is just "/" '
+        '— p.join would otherwise treat that as an absolute-path override '
+        'and escape modelsDirectory entirely', () {
+      expect(sanitizeLocalFileName('///'), isNull);
+    });
+
+    test(
+      'a name that is only dots but not "." or ".." is a valid (if odd) file name',
+      () {
+        expect(sanitizeLocalFileName('....'), '....');
+      },
+    );
+  });
+
   group('verifyIntegrity', () {
     test('null (ok) when size matches and no checksum is known', () {
       expect(
