@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
@@ -51,7 +52,10 @@ Future<void> _pump(
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         downloadsControllerProvider.overrideWith(_EmptyDownloadsController.new),
       ],
-      child: MaterialApp(home: ModelDetailScreen(repoId: repoId)),
+      child: MaterialApp(
+        theme: AppTheme.dark,
+        home: ModelDetailScreen(repoId: repoId),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -157,8 +161,9 @@ void main() {
             deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
             downloadManagerProvider.overrideWith((ref) async => manager),
           ],
-          child: const MaterialApp(
-            home: ModelDetailScreen(repoId: 'evil/repo'),
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const ModelDetailScreen(repoId: 'evil/repo'),
           ),
         ),
       );
