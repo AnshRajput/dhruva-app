@@ -126,10 +126,15 @@ class _QuantTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // A vision quant's "will it run?" verdict counts the paired mmproj
+    // projector's footprint too — both load into memory together (Loop-7
+    // T1's `EngineLoadParams.mmprojPath`, model_tier.dart's D4).
+    final mmprojSizeBytes = quant.mmprojFile?.sizeBytes ?? 0;
     final tier = classifyModelTier(
       fileSizeBytes: quant.file.sizeBytes,
       totalRamBytes: memory.totalBytes,
       quant: quant.label,
+      mmprojSizeBytes: mmprojSizeBytes,
     );
     final request = DownloadRequest(
       repoId: repoId,
@@ -142,6 +147,7 @@ class _QuantTile extends ConsumerWidget {
       quant: quant.label,
       license: license.license,
       gated: license.requiresAuth,
+      isVision: quant.isVision,
     );
     final actions = ref.watch(downloadActionsControllerProvider);
     final pending = actions.isPending(request.taskId);
@@ -165,7 +171,10 @@ class _QuantTile extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${quant.label} · ${_formatBytes(quant.file.sizeBytes)}',
+                    quant.isVision
+                        ? '${quant.label} · ${_formatBytes(quant.file.sizeBytes)} '
+                              '+ ${_formatBytes(mmprojSizeBytes)} vision'
+                        : '${quant.label} · ${_formatBytes(quant.file.sizeBytes)}',
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -173,6 +182,7 @@ class _QuantTile extends ConsumerWidget {
                   tier: tier,
                   fileSizeBytes: quant.file.sizeBytes,
                   totalRamBytes: memory.totalBytes,
+                  mmprojSizeBytes: mmprojSizeBytes,
                 ),
               ],
             ),
@@ -255,11 +265,22 @@ class _QuantTile extends ConsumerWidget {
             )
           : const Icon(Icons.download),
       label: Text(pending ? 'Starting…' : 'Download'),
+      // A vision quant also enqueues its paired mmproj projector (Loop-7 T2
+      // D2) — same resumable DownloadManager, chained after the model file
+      // completes. A plain quant keeps using the controller's generic enqueue.
       onPressed: pending
           ? null
-          : () => ref
-                .read(downloadActionsControllerProvider.notifier)
-                .enqueue(request),
+          : () => quant.isVision
+                ? ref
+                      .read(downloadActionsControllerProvider.notifier)
+                      .enqueueVisionQuant(
+                        repoId: repoId,
+                        quant: quant,
+                        license: license,
+                      )
+                : ref
+                      .read(downloadActionsControllerProvider.notifier)
+                      .enqueue(request),
     );
   }
 }

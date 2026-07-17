@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Loop 7 (vision): image_picker's gallery/camera attach flow — same
+	     copy as ios/Runner/Info.plist. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Dhruva uses the camera to attach a photo to a chat message with a vision model — nothing leaves your device.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Dhruva uses your photo library to attach a photo to a chat message with a vision model — nothing leaves your device.</string>
 </dict>
 </plist>

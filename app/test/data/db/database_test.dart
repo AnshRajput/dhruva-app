@@ -134,8 +134,8 @@ void main() {
     expect(rows, hasLength(2));
   });
 
-  test('schemaVersion is 3', () {
-    expect(db.schemaVersion, 3);
+  test('schemaVersion is 4', () {
+    expect(db.schemaVersion, 4);
   });
 
   group('generated row/companion surface', () {
@@ -152,6 +152,8 @@ void main() {
       gated: false,
       downloadedAt: downloadedAt,
       lastUsedAt: lastUsedAt,
+      mmprojPath: '/data/models/mmproj-m-Q8_0.gguf',
+      isVision: true,
     );
 
     test('toJson / fromJson round-trip', () {
@@ -170,6 +172,8 @@ void main() {
       expect(restored.localPath, row().localPath);
       expect(restored.license, row().license);
       expect(restored.gated, row().gated);
+      expect(restored.mmprojPath, row().mmprojPath);
+      expect(restored.isVision, row().isVision);
       expect(
         restored.downloadedAt.isAtSameMomentAs(row().downloadedAt),
         isTrue,

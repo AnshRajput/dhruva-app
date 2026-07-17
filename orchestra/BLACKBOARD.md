@@ -1413,6 +1413,193 @@ _activeMic set + _releaseRequested check, no await gap; endHold belt-and-
 suspenders; exception paths cold). Double-SpeechEnded flag + real pinned
 sha256 (integrity pre-extraction) close the nits. Loop 6 clean to merge.
 
+### [LOOP-07] [orchestrator → all] [STATUS] 2026-07-18T02:30
+Loop 7 PLAN — Vision (image analysis). Branch loop/07-vision. Designer BLOCKING.
+Verified: llama_cpp_dart exposes mtmd (lib/src/multimodal/mtmd_bitmap, mtmd_
+chunks, media.dart) — the reason we picked it (ADR-001). Pairing convention
+confirmed on HF: vision model + mmproj-<name> projector live in the SAME repo
+(SmolVLM-500M: 416MB model + 103MB mmproj Q8; SmolVLM2-2.2B: 1061MB + 565MB).
+Goal: attach photos/screenshots to any chat; camera capture; multimodal GGUF +
+auto-paired mmproj; photo Q&A, screenshot explanation, text extraction w/ copy.
+Tasks: (T1) native-engine: extend EngineService for multimodal — load a vision
+model WITH its mmproj projector, generate(messages incl. image) via libmtmd;
+prove image→question→answer on macOS with SmolVLM-500M (real round-trip).
+(T2) flutter-platform: Model Manager marks vision models (has mmproj sibling)
++ AUTO-PAIRS the projector on download (download both, associate in drift); a
+vision-model catalog subset; device-tier for the model+projector combined size.
+(T3) flutter-core: chat attach flow — attach button (image_picker: gallery +
+camera capture) shown ONLY for vision-capable loaded models (non-vision hide
+it, gate G), image in the message bubble, one-tap text-extract → copy. (T4)
+QA: image→Q→A integration test w/ small vision model; auto-pairing; non-vision
+hides attach; corrupt/huge image; EXIF/orientation. (T5) designer BLOCKING +
+reviewer. (T6) merge + ship.
+Exit gate: [G1] image→question→answer round trip passes integration test w/ a
+small vision model (real on macOS) [G2] mmproj pairing automatic [G3] non-vision
+models cleanly hide the attach button [G4] designer SIGN-OFF + QA PASS +
+reviewer APPROVE [G5] CI green [G6] shipped.
+
+### [LOOP-07] [native-engine → flutter-platform/flutter-core] [HANDOFF] 2026-07-18T03:10
+T1 vision engine complete (1aa199a): mtmd wired via llama_cpp_dart. EngineLoad-
+Params.mmprojPath (missing/bad projector → typed EngineLoadFailure; vision GGUF
+w/o projector loads text-only), ChatTurn.images, EngineService.isMultimodal
+capability signal (true only when projector loaded). REAL proof: SmolVLM-500M +
+mmproj answered "Red." to a red PNG (gate G1). Free path: mtmd freed first on
+unload, flat RSS over 4 reloads. FakeEngineService.multimodal returns a canned
+grounded answer for UI tests. 693 tests. Providers unchanged (engineService).
+Requests: flutter-platform — Model Manager detects vision models (mmproj-<name>
+sibling in same repo), auto-downloads+pairs the projector, associates in drift,
+combined-size device tier. flutter-core — chat image attach (image_picker
+gallery+camera) shown ONLY when loaded model isMultimodal (gate G3), image in
+bubble, one-tap text-extract→copy.
+
+### [LOOP-07] [flutter-platform → flutter-core/reviewer] [HANDOFF] 2026-07-18T04:10
+T2 Model Manager vision support complete (commit 741d231, branch
+loop/07-vision): vision detection + mmproj auto-pairing + combined-size tier,
+all four in `data/hf_api/`, `data/db/`, `data/downloads/`, `features/
+models_hub/state/`.
+Matching rule (`data/hf_api/vision_pairing.dart`): a GGUF is vision-capable
+iff the repo has any `mmproj*.gguf` sibling (subfolder-flattened, same walk
+`getRepoFiles` already does). Per quant: (1) exact quant-label match (Q8_0
+model -> mmproj-*-Q8_0) (2) else smallest F16 projector (3) else smallest
+mmproj overall. `quantVariantsFrom` no longer lists mmproj files as their own
+downloadable quant (behavior change — updated the one existing test that
+asserted the old count).
+Schema v3->v4 (tested, data-preserving): `installed_models` +mmprojPath
+(nullable) +isVision. isVision marks "this row IS a vision model" independent
+of whether the projector landed; `isVision && mmprojPath == null` is the
+"needs projector" half-state — surfaced, not silently dropped or duplicated.
+Pairing flow (`download_actions_controller.dart`'s `enqueueVisionQuant`):
+model enqueues first through the existing DownloadManager; ONLY once it
+completes does the coordinator chain-enqueue the mmproj
+(`registerAsInstalledModel: false` — verified + kept on disk, no row of its
+own) and patch its path onto the model's row (`StorageManager.
+attachProjector`). Sequential by design — no race to patch a row that
+doesn't exist yet. Model-fails -> nothing enqueued, nothing installed.
+Projector-fails-after-model -> row stays `isVision: true, mmprojPath: null`
+(needs-projector), failure surfaced under the model's own taskId (existing
+per-tile error slot). Cancel covers both: the projector never gets a row, so
+canceling it mid-flight just leaves the half-state, no orphan.
+StorageManager.delete removes both files for a vision model + the one row;
+totalUsageBytes stats the projector file too (no 3rd size column — the path
+is already known). classifyModelTier/ModelVerdictChip take an optional
+mmprojSizeBytes for the combined-footprint RAM verdict; wired into
+model_detail_screen's quant tiles + download button (routes vision quants
+through enqueueVisionQuant, plain quants through the existing enqueue).
+Catalog: `vision_model_catalog.dart` — SmolVLM-500M Q8_0 (416MB+103MB) and
+SmolVLM2-2.2B Q4_K_M (1061MB+565MB, ggml-org/SmolVLM2-2.2B-Instruct-GGUF,
+verified repo/sizes from T1's real round-trip + orchestra/research/
+hf-api.md §5), same shape a live HF pairing produces via
+`visionCatalogQuantVariant`.
+50 new tests (SmolVLM-style repo-tree fixture, quant<->mmproj matching incl.
+both fallback rules, v3->v4 migration incl. two pre-existing migration test
+fixtures that needed the same "createTable builds current shape, DROP COLUMN
+the new ones" fix chat/character migration tests already used, paired
+download incl. mmproj-fails-after-model, combined-size tier, storage delete/
+usage-counts-both). 718/718 suite, make verify green, floor-scope coverage
+81%. No push (per instruction).
+Request: flutter-core — build the chat image-attach flow (T3) on this
+surface (isVision on QuantVariant, isVision/mmprojPath on InstalledModelInfo/
+InstalledModels); reviewer — full diff review.
+
+### [LOOP-07] [flutter-core → reviewer/QA] [HANDOFF] 2026-07-18T05:20
+T3 chat image-attach vision UI complete (commit 2dc4016, branch
+loop/07-vision). Composer gets an attach `IconButton` (gate G3: `widget.
+isMultimodal`, default false — hidden for a text-only/no-model conversation,
+shown once the loaded model's projector initialised) offering Photo Library
++ Camera via a new `ImageAttacher` abstraction (`lib/vision/
+image_attach_source.dart` + `SystemImageAttacher`/`image_picker`, mirroring
+`voice/mic_audio_source.dart`'s `MicSource` — `features/chat` never imports
+`image_picker` directly; `lib/vision/fake_image_attacher.dart` is the test
+double, wired via a new `imageAttacherProvider`).
+Load path: `ChatController.ensureModelLoaded` now passes `model.mmprojPath`
+into `EngineLoadParams.mmprojPath`, and mirrors `engine.isMultimodal` into a
+new `ChatThreadState.isMultimodal` field — this is what the composer's gate
+reads (real proof engine.load actually received it: `FakeEngineService.
+lastLoadParams`, a new test hook). Found + fixed a real bug in my own first
+pass: the send-time guard read `isMultimodal` from state BEFORE that turn's
+own `ensureModelLoaded()` ran (stale-false on a fresh conversation's first
+message) — moved the guard to `_runAssistantTurn`'s post-load `current`
+instead, caught by my own controller test before it ever shipped.
+Send/render: `sendMessage(text, {imageBytes})` allows image-only sends;
+images live in `ChatThreadState.attachedImages` (`Map<int,Uint8List>` keyed
+by message id) — same "session-only, not persisted" precedent as
+`reasoningDurationMs` (no `Messages` schema column this loop; `data/` was
+out of my file scope and a schema migration felt like more than a chat-UI
+loop needed — flagged here as the deviation, upgrade path is a drift
+migration if a future loop needs images to survive an app restart). Bubble
+renders the thumbnail (tap → `features/vision/widgets/image_lightbox.dart`,
+a modal `InteractiveViewer`, no new route). Downscale: `lib/features/chat/
+state/image_downscale.dart`'s `downscaleImage` uses `dart:ui`'s
+`instantiateImageCodec(targetWidth/targetHeight)` (ladder rung 4 — native
+platform feature, no `image`-processing package) to cap at 1024px
+preserving aspect ratio, no-op if already smaller; verified against a real
+2000x2000 PNG built in-test with `dart:ui` (`image_downscale_test.dart`).
+Extract-text: a preset-prompt quick action on the attach chip (`vision_
+presets.dart`'s `extractTextPrompt`); its reply gets a copy-to-clipboard
+button, detected structurally (preceding user turn == the preset text + had
+an attached image) rather than a new persisted flag. Vision-catalog
+discoverability: a structural hint in `model_picker_sheet.dart` ("Want to
+chat about photos? Browse vision models →" → `/models`) shown whenever no
+installed model has `isVision` — no new vision-rail screen built (out of
+scope; `/models` already exists).
+Platform config: added `NSCameraUsageDescription`/`NSPhotoLibraryUsageDescription`
+to iOS+macOS `Info.plist`, `android.permission.CAMERA` to the manifest, and
+`com.apple.security.device.camera` to macOS `Release.entitlements` —
+image_picker crashes on first camera/photo request without these; flagged
+as a small necessary scope extension beyond `features/chat`+`features/
+vision`.
+Real check (T7): `test/features/chat/state/chat_controller_vision_real_engine_test.dart`
+drives image→question→answer through the REAL `ChatController` +
+`LlamaEngineService` + SmolVLM-500M + its mmproj (not the fake) —
+`test/assets/red_64.png` → "What is the main color of this image?" →
+model answered **"Red."** (printed in test output), `isMultimodal` and
+`mmprojPath` both asserted along the way. Skips cleanly without
+`.dev-native/` artifacts (same pattern as `engine_vision_test.dart`).
+29 new tests across composer/message_bubble/chat_controller/chat_thread_
+screen/model_picker_sheet/image_downscale + the 1 real-engine test (747/747
+suite total, up from 718). `make verify` green (analyze --fatal-infos +
+format + full suite). Floor-scope coverage ~88% (platform-glue
+`SystemImageAttacher` is the one 0%-covered file, same exclusion precedent
+as `llama_engine_service.dart`/`mic_audio_source.dart`). Committed
+(2dc4016), not pushed.
+Deviations from stated file scope: touched `core/di/providers.dart` (new
+`imageAttacherProvider`, same pattern as every other engine/voice provider
+there), `engine_bindings/fake_engine_service.dart` (added `lastLoadParams`
+test hook — needed to prove the mmprojPath load-path gate for real), and
+the platform config files above. New top-level `lib/vision/` (not `features/
+vision/`) for the `ImageAttacher` abstraction — mirrors `lib/voice/`'s
+existing split (platform bindings outside `features/`, importable from
+`core/di`) rather than violating ADR-002's features→data→core direction by
+having `core/di` import `features/vision`.
+Request: reviewer — full diff review; QA — corrupt/huge image, EXIF/
+orientation edge cases (not covered this pass — downscaleImage doesn't
+correct EXIF orientation, documented as a ponytail-marked known gap in
+`image_downscale.dart`), auto-pairing + non-vision-hides-attach on a real
+device if practical.
+
+### [LOOP-07] [designer → flutter-core] [REVIEW] 2026-07-18T04:20
+Verdict: REQUEST_CHANGES (fix with QA's, one pass). BLOCKING: (1) image_lightbox
+.dart:13,16,29 raw Colors.black87/transparent/white — use colorScheme.scrim
+(the token exists exactly for modal backdrops) + token-derived icon color; the
+only lib/features file with raw Colors literals. (2) composer.dart:306-321
+_AttachedImageChip remove X — bare GestureDetector, no tooltip/Semantics, ~20px
+target; reintroduces the exact pattern fixed as Designer BLOCKING #2 in Loop 4
+(message_bubble regenerate). Use IconButton w/ tooltip. (3) message_bubble.dart
+:282-293 _AttachedImageThumbnail tap-to-view — same bare GestureDetector, add
+Semantics/tooltip "View image". Nit: multimodal composer chrome ~192dp tight on
+360dp — real-device glance. Icons/Phosphor = backlog (pre-existing).
+
+### [LOOP-07] [qa-tester → orchestrator] [REVIEW] 2026-07-18T04:40 (PARKED)
+Vision QA: G1/G2/G3 PASS (763/763). Non-vacuous proof: red→"Red.", blue→"Blue.",
+"CAT" PNG→"CAT" via extract-text. BUGs to fix when Loop 7 resumes (after
+UX-hardening): (HIGH) composer _pickImage doesn't catch corrupt-image
+downscale exception → uncaught crash; (MED) animated GIF bypasses downscale
+ceiling (Skia ignores targetWidth for GIF) → full-res to mtmd; (LOW) stale EXIF
+code comment (decoder DOES rotate); (LOW) export drops image context silently.
+NOTE: Loop 7 PARKED mid-review (designer REQUEST_CHANGES + these QA bugs
+pending) — priority is SCOPE AMENDMENT 5 (UX hardening on the shipped build).
+Resume Loop 7 fixes after the hardening loop ships.
+
 ### [UX-HARDENING] [orchestrator → all] [DECISION] 2026-07-18T05:00
 Diagnosis synthesis (4 agents, reports in orchestra/research/ux/). ROOT CAUSE
 of "can't start a convo / no reply": installedModelsProvider (+ character
@@ -1462,3 +1649,19 @@ Installed tab delete-only (no Chat, inconsistent w/ Search tab); 5-chip Wrap
 busy on narrow; Icons/spinner pre-existing debt.
 NOTE: tap-target miss is now the 4th recurrence — file a shared IconAction
 widget + a lint as a Loop 11 polish item so it stops recurring.
+
+### [LOOP-07] [designer → orchestrator] [REVIEW] 2026-07-18T07:30
+Verdict: SIGN-OFF (681f70c verified post-merge). All 3 blockers fixed +
+token-clean: lightbox barrierColor→scrim + close icon→onSurface (Dialog
+transparent bg deliberately kept); chip remove→IconButton tooltip 44px;
+thumbnail→Tooltip + button Semantics. Composer row (attach+field+mic+send)
+lays out cleanly with spacing.sm, no crowding. Vision UI approved.
+
+### [LOOP-07] [reviewer → orchestrator] [REVIEW] 2026-07-18T07:50
+Verdict: APPROVE. Merge clean — both features survive on all 5 conflict files
+(composer has mic+attach+model-context; chat_controller has Chat-carries-model
++ attachedImages + mmprojPath; detail has DownloadProgressRing + enqueueVision-
+Quant; schema v4 monotonic; download controllers separate+both present). All
+QA+designer fixes confirmed. Trust/privacy intact (no new network, typed
+failures on bad image/mmproj, 100% local). Real vision tests intact. Loop 7
+APPROVED — QA PASS + designer SIGN-OFF + reviewer APPROVE.

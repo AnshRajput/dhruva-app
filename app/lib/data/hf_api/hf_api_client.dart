@@ -11,6 +11,7 @@ import 'models/hf_search_result.dart';
 import 'models/model_license_info.dart';
 import 'models/quant_variant.dart';
 import 'quant_parser.dart';
+import 'vision_pairing.dart';
 
 /// Hugging Face Hub API client. Endpoints + response shapes verified with
 /// real curl calls — see orchestra/research/hf-api.md. Public/unauthenticated
@@ -127,12 +128,27 @@ final class HfApiClient {
   }
 
   /// Filters [files] down to entries whose filename carries a recognized
-  /// GGUF quant token.
+  /// GGUF quant token — excluding the mmproj projector files themselves
+  /// (see [isMmprojFile]; a projector isn't a user-selectable download, it
+  /// rides along automatically with its paired model, see
+  /// `download_actions_controller.dart`'s `enqueueVisionQuant`). Each
+  /// remaining quant is paired with its best-matched mmproj projector, if
+  /// this repo has any (see [matchMmprojFor]) — that pairing is what marks
+  /// [QuantVariant.isVision].
   List<QuantVariant> quantVariantsFrom(List<HfRepoFile> files) {
+    final mmprojFiles = files.where((f) => isMmprojFile(f.path)).toList();
     final variants = <QuantVariant>[];
     for (final file in files) {
+      if (isMmprojFile(file.path)) continue;
       final label = extractQuantVariant(file.path);
-      if (label != null) variants.add(QuantVariant(label: label, file: file));
+      if (label == null) continue;
+      variants.add(
+        QuantVariant(
+          label: label,
+          file: file,
+          mmprojFile: matchMmprojFor(file, mmprojFiles),
+        ),
+      );
     }
     return variants;
   }

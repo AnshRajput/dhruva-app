@@ -2,6 +2,13 @@
     <!-- Dhruva's ONLY network use: Hugging Face model browsing + downloads
          (user-initiated). Zero telemetry — see orchestra/PROTOCOL rule 5. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Loop 7 (vision): camera capture for the chat attach button.
+         image_picker's gallery source uses the system photo picker on API
+         33+ (no permission needed) and READ_EXTERNAL_STORAGE below API 33
+         (merged in automatically by the plugin's own manifest); camera
+         needs this declared explicitly since the plugin doesn't force it
+         on apps that only use the gallery source. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Android 13+ (API 33): required for background_downloader to show a
          download-progress notification. Requested at runtime on first
          download setup (BackgroundDownloaderBackend.configureNotifications). -->

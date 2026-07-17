@@ -26,6 +26,15 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Loop 7 (vision): image_picker's gallery/camera attach flow. Only
+	     shown to the OS when the user actually taps the chat attach button
+	     (image_picker requests lazily) — matches the non-negotiable "no
+	     network calls beyond user-initiated HF downloads," this is local
+	     device access, not a network permission. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Dhruva uses the camera to attach a photo to a chat message with a vision model — nothing leaves your device.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Dhruva uses your photo library to attach a photo to a chat message with a vision model — nothing leaves your device.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

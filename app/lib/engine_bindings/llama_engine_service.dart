@@ -43,6 +43,10 @@ import 'package:llama_cpp_dart/llama_cpp_dart.dart' as llama;
 
 import 'engine_service.dart';
 
+/// Marker mtmd substitutes with the next image's chunks, one per image, in
+/// order. Must match [llama.MultimodalParams.mediaMarker] (its default).
+const _mediaMarker = '<__media__>';
+
 // ---------------------------------------------------------------------------
 // Error mapping
 // ---------------------------------------------------------------------------
@@ -160,8 +164,15 @@ final class LlamaEngineService implements EngineService {
   // Pending shutdown handshake.
   Completer<void>? _shutdownCompleter;
 
+  // Set from the worker's ready handshake: true when a projector loaded and
+  // supports vision. Reset on unload.
+  bool _isMultimodal = false;
+
   @override
   bool get isLoaded => _isolate != null && !_disposed;
+
+  @override
+  bool get isMultimodal => isLoaded && _isMultimodal;
 
   @override
   Future<void> load(
@@ -173,6 +184,10 @@ final class LlamaEngineService implements EngineService {
     // native error strings.
     if (!File(modelPath).existsSync()) {
       throw EngineLoadFailure('model file not found: $modelPath');
+    }
+    final mmproj = params.mmprojPath;
+    if (mmproj != null && !File(mmproj).existsSync()) {
+      throw EngineLoadFailure('vision projector not found: $mmproj');
     }
     if (_isolate != null) await unload();
 
@@ -206,6 +221,9 @@ final class LlamaEngineService implements EngineService {
             nUbatch: params.batchSize,
             nSeqMax: params.maxSequences,
           ),
+          multimodalParams: mmproj == null
+              ? null
+              : llama.MultimodalParams(mmprojPath: mmproj),
         ),
         errorsAreFatal: true,
         debugName: 'dhruva.engine.worker',
@@ -220,6 +238,7 @@ final class LlamaEngineService implements EngineService {
       _commandPort = r.commandPort;
       _responsePort = response;
       _responseSub = sub;
+      _isMultimodal = r.multimodalLoaded;
     } catch (e, st) {
       await sub.cancel();
       response.close();
@@ -265,15 +284,7 @@ final class LlamaEngineService implements EngineService {
             seed: params.seed,
           );
 
-    final chat = messages
-        ?.map(
-          (m) => switch (m.role) {
-            EngineRole.system => llama.ChatMessage.system(m.content),
-            EngineRole.user => llama.ChatMessage.user(m.content),
-            EngineRole.assistant => llama.ChatMessage.assistant(m.content),
-          },
-        )
-        .toList();
+    final chat = messages?.map(_toChatMessage).toList();
 
     controller.onListen = () {
       _activeStopwatch = Stopwatch()..start();
@@ -297,6 +308,26 @@ final class LlamaEngineService implements EngineService {
 
     return controller.stream;
   }
+
+  /// Map a neutral [ChatTurn] to the package's [llama.ChatMessage]. Images on
+  /// a user turn become [llama.LlamaMedia] and one [_mediaMarker] is prepended
+  /// to the content per image, in order, so mtmd_tokenize substitutes each
+  /// marker with that image's chunks. LlamaMedia holds only bytes + primitives,
+  /// so the command stays isolate-sendable.
+  llama.ChatMessage _toChatMessage(ChatTurn m) => switch (m.role) {
+    EngineRole.system => llama.ChatMessage.system(m.content),
+    EngineRole.assistant => llama.ChatMessage.assistant(m.content),
+    EngineRole.user =>
+      m.images.isEmpty
+          ? llama.ChatMessage.user(m.content)
+          : llama.ChatMessage.user(
+              '${_mediaMarker * m.images.length}\n${m.content}',
+              media: [
+                for (final bytes in m.images)
+                  llama.LlamaMedia.imageBytes(bytes),
+              ],
+            ),
+  };
 
   void _handleWorkerMessage(dynamic msg) {
     switch (msg) {
@@ -378,6 +409,7 @@ final class LlamaEngineService implements EngineService {
     _commandPort = null;
     _responsePort = null;
     _responseSub = null;
+    _isMultimodal = false;
 
     if (isolate == null) return;
 
@@ -420,11 +452,15 @@ final class _Bootstrap {
   final String? libraryPath;
   final llama.ModelParams modelParams;
   final llama.ContextParams contextParams;
+
+  /// Non-null → load a multimodal projector and enable image input.
+  final llama.MultimodalParams? multimodalParams;
   const _Bootstrap({
     required this.replyPort,
     required this.libraryPath,
     required this.modelParams,
     required this.contextParams,
+    required this.multimodalParams,
   });
 }
 
@@ -459,7 +495,14 @@ final class _ShutdownCommand extends _Command {
 final class _ReadyMsg {
   final SendPort commandPort;
   final String? chatTemplate;
-  const _ReadyMsg(this.commandPort, this.chatTemplate);
+
+  /// True when a vision projector initialised in the worker.
+  final bool multimodalLoaded;
+  const _ReadyMsg(
+    this.commandPort,
+    this.chatTemplate, {
+    this.multimodalLoaded = false,
+  });
 }
 
 final class _TokenMsg {
@@ -508,6 +551,9 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
   // ready.future never completes and hangs — now also timeout-guarded there).
   String? loadedTemplate;
   llama.LlamaSession? loadedSession;
+  // The projector (vision/mmproj). Null for text-only loads. Disposed first
+  // on shutdown, and in the catch below if a later load step throws.
+  llama.MultimodalContext? loadedMtmd;
   try {
     if (boot.libraryPath == null) {
       llama.LlamaLibrary.loadFromProcess();
@@ -518,7 +564,18 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
     loadedContext = llama.LlamaContext.create(loadedModel, boot.contextParams);
     loadedTemplate = llama.ChatTemplate.fromModel(loadedModel);
     loadedSession = llama.LlamaSession(loadedContext, seqId: 0);
+    if (boot.multimodalParams != null) {
+      loadedMtmd = llama.MultimodalContext.init(
+        model: loadedModel,
+        params: boot.multimodalParams!,
+      );
+    }
   } catch (e, st) {
+    try {
+      loadedMtmd?.dispose();
+    } catch (_) {
+      /* ignore */
+    }
     try {
       loadedContext?.dispose();
     } catch (_) {
@@ -537,13 +594,20 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
   final context = loadedContext;
   final template = loadedTemplate;
   final session = loadedSession;
+  final mtmd = loadedMtmd;
   // Bounded cancel state: only the single in-flight request can be cancelled,
   // so one flag suffices — no unbounded set of stale ids.
   final gate = _GenGate();
   final commandRx = ReceivePort();
   final done = Completer<void>();
 
-  reply.send(_ReadyMsg(commandRx.sendPort, template));
+  reply.send(
+    _ReadyMsg(
+      commandRx.sendPort,
+      template,
+      multimodalLoaded: mtmd != null && mtmd.supportsVision,
+    ),
+  );
 
   commandRx.listen((dynamic msg) {
     if (msg is _CancelCommand) {
@@ -551,7 +615,14 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
       return;
     }
     if (msg is _ShutdownCommand) {
-      // The full free sequence (ADR-001): KV → context → model → library.
+      // The full free sequence (ADR-001): mtmd → KV → context → model →
+      // library. The projector holds encoder weights + graph, so it's freed
+      // first (mtmd_free) — otherwise it leaks one mmproj per load/unload.
+      try {
+        mtmd?.dispose(); // mtmd_free
+      } catch (_) {
+        /* ignore */
+      }
       try {
         session.clear();
       } catch (_) {
@@ -574,11 +645,146 @@ Future<void> _llamaEngineWorker(_Bootstrap boot) async {
       return;
     }
     if (msg is _GenerateCommand) {
-      unawaited(_runGenerate(msg, session, template, gate, reply));
+      final hasMedia = msg.messages?.any((m) => m.media.isNotEmpty) ?? false;
+      if (hasMedia) {
+        unawaited(_runGenerateMedia(msg, context, mtmd, template, gate, reply));
+      } else {
+        unawaited(_runGenerate(msg, session, template, gate, reply));
+      }
     }
   });
 
   await done.future;
+}
+
+/// Multimodal generation: render the chat (media markers inline), let libmtmd
+/// tokenize + encode + decode the prompt-with-images into the context KV
+/// (`evalChunks`), then run a manual decode/sample loop from the resulting
+/// position. Mirrors the package worker's `_runGenerateChatMedia` +
+/// `_streamSampleAfterPrefill` (worker.dart:371-633) — we reimplement it here
+/// so the free path (mtmd/ctx/model dispose on unload) stays ours. The image
+/// bitmaps are built and freed inside `evalChunks` (its `finally`), so no
+/// image buffer outlives this call.
+Future<void> _runGenerateMedia(
+  _GenerateCommand cmd,
+  llama.LlamaContext context,
+  llama.MultimodalContext? mtmd,
+  String? template,
+  _GenGate gate,
+  SendPort reply,
+) async {
+  gate.inFlightId = cmd.id;
+  gate.cancelRequested = false;
+  if (mtmd == null) {
+    reply.send(
+      _ErrorMsg(
+        cmd.id,
+        _FailKind.validation,
+        'this model has no vision projector; image input needs a multimodal '
+        'model loaded with an mmprojPath',
+      ),
+    );
+    gate.inFlightId = null;
+    return;
+  }
+  if (template == null) {
+    reply.send(
+      _ErrorMsg(
+        cmd.id,
+        _FailKind.validation,
+        'model has no chat template; image input requires one',
+      ),
+    );
+    gate.inFlightId = null;
+    return;
+  }
+
+  final b = llama.LlamaLibrary.bindings;
+  final model = context.model;
+  final tokenizer = llama.Tokenizer(model.vocab);
+  final accumulator = llama.Utf8Accumulator();
+  final batch = llama.LlamaBatch(context.nBatch);
+  final sampler = llama.SamplerFactory.build(cmd.sampler, model: model);
+  try {
+    final prompt = llama.ChatTemplate.apply(
+      template: template,
+      messages: cmd.messages!,
+      addAssistant: true,
+    );
+    final media = [for (final m in cmd.messages!) ...m.media];
+
+    // Reset the seq-0 KV before mtmd prefills into it.
+    b.llama_memory_seq_rm(b.llama_get_memory(context.pointer), 0, -1, -1);
+
+    // evalChunks builds bitmaps from the encoded image bytes, tokenizes
+    // prompt+images into chunks, decodes them into KV, and frees every native
+    // bitmap/chunk/arena before returning newNPast.
+    var pos = mtmd.evalChunks(
+      llamaContext: context,
+      prompt: prompt,
+      media: media,
+      nPast: 0,
+      seqId: 0,
+      nBatch: context.nBatch,
+      addSpecial: true,
+      parseSpecial: true,
+      logitsLast: true,
+    );
+
+    var count = 0;
+    while (true) {
+      // Force an event-loop turn so a pending _CancelCommand is registered
+      // between tokens (this decode loop is otherwise synchronous).
+      await Future<void>.delayed(Duration.zero);
+      if (gate.cancelRequested) {
+        reply.send(_DoneMsg(cmd.id, EngineStopReason.cancelled, count));
+        return;
+      }
+
+      final token = sampler.sample(context);
+      sampler.accept(token);
+      if (model.vocab.isEog(token)) {
+        reply.send(_DoneMsg(cmd.id, EngineStopReason.endOfSequence, count));
+        return;
+      }
+
+      final text = accumulator.accept(tokenizer.encodeToken(token));
+      count++;
+      if (text.isNotEmpty) reply.send(_TokenMsg(cmd.id, token, text));
+
+      if (count >= cmd.maxTokens) {
+        final trailing = accumulator.flush();
+        if (trailing.isNotEmpty) reply.send(_TokenMsg(cmd.id, -1, trailing));
+        reply.send(_DoneMsg(cmd.id, EngineStopReason.maxTokens, count));
+        return;
+      }
+
+      batch.clear();
+      batch.add(token, pos, const [0], wantLogits: true);
+      final rc = b.llama_decode(context.pointer, batch.raw);
+      if (rc != 0) {
+        reply.send(
+          _ErrorMsg(
+            cmd.id,
+            _FailKind.decode,
+            'llama_decode failed during multimodal sampling: rc=$rc',
+          ),
+        );
+        return;
+      }
+      pos++;
+    }
+  } catch (e, st) {
+    if (gate.cancelRequested) {
+      reply.send(_DoneMsg(cmd.id, EngineStopReason.cancelled, 0));
+    } else {
+      reply.send(_ErrorMsg(cmd.id, _classify(e), '$e\n$st'));
+    }
+  } finally {
+    sampler.dispose();
+    batch.dispose();
+    if (gate.inFlightId == cmd.id) gate.inFlightId = null;
+  }
 }
 
 /// Bounded cancel state for the worker's single in-flight generation.

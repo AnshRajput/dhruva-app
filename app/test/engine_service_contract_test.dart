@@ -2,6 +2,8 @@
 // Covers streaming, cancel mid-stream, unload-while-streaming, and the
 // EngineFailure taxonomy + mapping (ADR-002).
 
+import 'dart:typed_data';
+
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/engine_bindings/llama_engine_service.dart';
@@ -240,6 +242,67 @@ void main() {
     test('already-mapped failure is returned unchanged', () {
       const f = EngineDecodeFailure('x');
       expect(mapToEngineFailure(f), same(f));
+    });
+  });
+
+  group('multimodal (fake contract)', () {
+    test('text-only fake is never multimodal', () async {
+      final engine = FakeEngineService();
+      await engine.load('m');
+      expect(engine.isMultimodal, isFalse);
+    });
+
+    test('isMultimodal follows load state on a multimodal fake', () async {
+      final engine = FakeEngineService(multimodal: true);
+      expect(engine.isMultimodal, isFalse, reason: 'not loaded yet');
+      await engine.load('m');
+      expect(engine.isMultimodal, isTrue);
+      await engine.unload();
+      expect(engine.isMultimodal, isFalse, reason: 'unloaded');
+    });
+
+    test('image turn streams the canned grounded vision answer', () async {
+      final engine = FakeEngineService(
+        multimodal: true,
+        tokenDelay: const Duration(milliseconds: 1),
+      );
+      await engine.load('m');
+
+      final events = await engine
+          .generate(
+            messages: [
+              ChatTurn.user(
+                'What color?',
+                images: [
+                  Uint8List.fromList(const [1, 2, 3]),
+                ],
+              ),
+            ],
+          )
+          .toList();
+
+      final answer = events.whereType<EngineToken>().map((t) => t.text).join();
+      expect(answer, 'I see a red image.');
+      expect(answer.toLowerCase(), contains('red'));
+      expect(engine.lastImageCount, 1);
+      expect(
+        events.whereType<EngineCompletion>().single.reason,
+        EngineStopReason.endOfSequence,
+      );
+    });
+
+    test('text turn on a multimodal fake still uses scripted tokens', () async {
+      final engine = FakeEngineService(
+        multimodal: true,
+        scriptedTokens: const ['ok'],
+        tokenDelay: const Duration(milliseconds: 1),
+      );
+      await engine.load('m');
+      final events = await engine
+          .generate(messages: [const ChatTurn.user('hi')])
+          .toList();
+      expect(events.whereType<EngineToken>().map((t) => t.text).join(), 'ok');
+      expect(engine.lastImageCount, 0);
     });
   });
 }

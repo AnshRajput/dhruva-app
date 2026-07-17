@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/data/hf_api/models/model_license_info.dart';
+import 'package:dhruva/data/hf_api/vision_pairing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -165,27 +166,28 @@ void main() {
       expect(subfolderFile.sizeBytes, 500000000);
     });
 
-    test(
-      'quantVariantsFrom filters to files with a recognized quant token',
-      () async {
-        final client = HfApiClient(
-          client: MockClient((request) async {
-            if (request.url.path.endsWith('/mmproj')) {
-              return http.Response(_fixture('mmproj_tree.json'), 200);
-            }
-            return http.Response(_fixture('repo_tree.json'), 200);
-          }),
-        );
-        final files = await client.getRepoFiles(
-          'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
-        );
-        final variants = client.quantVariantsFrom(files);
+    test('quantVariantsFrom filters to files with a recognized quant token, '
+        'excluding mmproj projector files themselves', () async {
+      final client = HfApiClient(
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/mmproj')) {
+            return http.Response(_fixture('mmproj_tree.json'), 200);
+          }
+          return http.Response(_fixture('repo_tree.json'), 200);
+        }),
+      );
+      final files = await client.getRepoFiles(
+        'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+      );
+      final variants = client.quantVariantsFrom(files);
 
-        // 8 quantized files in the fixture + 1 mmproj file = 9.
-        expect(variants, hasLength(9));
-        expect(variants.map((v) => v.label), contains('Q4_K_M'));
-      },
-    );
+      // 8 quantized model files in the fixture — the mmproj file is
+      // excluded from the list (it's not its own downloadable quant, it
+      // rides along with whichever model quant it's paired to).
+      expect(variants, hasLength(8));
+      expect(variants.map((v) => v.label), contains('Q4_K_M'));
+      expect(variants.any((v) => v.file.path.contains('mmproj')), isFalse);
+    });
 
     test('404 on a repo maps to NetworkHttpFailure', () async {
       final client = HfApiClient(
@@ -244,6 +246,105 @@ void main() {
         expect(files.single.path, '');
       },
     );
+  });
+
+  group('vision detection + mmproj pairing (Loop-7 T2 D1)', () {
+    test('a real SmolVLM-style repo tree: mmproj files are excluded from the '
+        'quant list, each model quant is marked vision, exact-quant matches '
+        'win, and a quant with no exact match falls back to the smallest F16 '
+        'projector', () async {
+      final client = HfApiClient(
+        client: MockClient(
+          (request) async => http.Response(_fixture('smolvlm_tree.json'), 200),
+        ),
+      );
+      final files = await client.getRepoFiles(
+        'ggml-org/SmolVLM-500M-Instruct-GGUF',
+      );
+      final variants = client.quantVariantsFrom(files);
+
+      // 3 model quants (Q4_K_M, Q8_0, f16) — the 2 mmproj files and the
+      // 2 non-GGUF files (no quant token) are not their own entries.
+      expect(variants, hasLength(3));
+      expect(variants.every((v) => v.isVision), isTrue);
+
+      final q8 = variants.firstWhere((v) => v.label == 'Q8_0');
+      expect(q8.mmprojFile!.path, 'mmproj-SmolVLM-500M-Instruct-Q8_0.gguf');
+
+      final f16 = variants.firstWhere((v) => v.label == 'F16');
+      expect(f16.mmprojFile!.path, 'mmproj-SmolVLM-500M-Instruct-f16.gguf');
+
+      // Q4_K_M has no quant-matched mmproj in this repo — falls back to
+      // the (only, hence smallest) F16 projector rather than the Q8_0 one.
+      final q4 = variants.firstWhere((v) => v.label == 'Q4_K_M');
+      expect(q4.mmprojFile!.path, 'mmproj-SmolVLM-500M-Instruct-f16.gguf');
+    });
+
+    test('a repo with no mmproj files at all: every quant has isVision false '
+        'and a null mmprojFile', () async {
+      final client = HfApiClient(
+        client: MockClient(
+          (request) async => http.Response(
+            jsonEncode([
+              {
+                'type': 'file',
+                'path': 'TextOnly-1B-Q4_K_M.gguf',
+                'size': 800000000,
+              },
+              {
+                'type': 'file',
+                'path': 'TextOnly-1B-Q8_0.gguf',
+                'size': 1200000000,
+              },
+            ]),
+            200,
+          ),
+        ),
+      );
+      final files = await client.getRepoFiles('x/text-only');
+      final variants = client.quantVariantsFrom(files);
+
+      expect(variants, hasLength(2));
+      expect(variants.every((v) => v.isVision), isFalse);
+      expect(variants.every((v) => v.mmprojFile == null), isTrue);
+    });
+
+    test('fallback rule 3: no exact quant match and no F16 projector published '
+        '-> falls back to the smallest mmproj file overall', () async {
+      final client = HfApiClient(
+        client: MockClient(
+          (request) async => http.Response(
+            jsonEncode([
+              {'type': 'file', 'path': 'ModelX-Q4_K_M.gguf', 'size': 500000000},
+              {'type': 'file', 'path': 'mmproj-ModelX-Q8_0.gguf', 'size': 200},
+              {
+                'type': 'file',
+                'path': 'mmproj-ModelX-Q5_K_M.gguf',
+                'size': 500,
+              },
+            ]),
+            200,
+          ),
+        ),
+      );
+      final files = await client.getRepoFiles('x/modelx');
+      final variants = client.quantVariantsFrom(files);
+
+      final only = variants.single;
+      expect(only.label, 'Q4_K_M');
+      expect(only.isVision, isTrue);
+      // Neither mmproj file matches "Q4_K_M" and neither is F16 — the
+      // smallest of the two (200 bytes) wins.
+      expect(only.mmprojFile!.path, 'mmproj-ModelX-Q8_0.gguf');
+    });
+
+    test('isMmprojFile matches the documented naming convention', () {
+      expect(isMmprojFile('mmproj-Q8_0.gguf'), isTrue);
+      expect(isMmprojFile('MMPROJ-F16.GGUF'), isTrue);
+      expect(isMmprojFile('mmproj/mmproj-Q8_0.gguf'), isTrue);
+      expect(isMmprojFile('SmolVLM-500M-Instruct-Q8_0.gguf'), isFalse);
+      expect(isMmprojFile('mmproj-readme.txt'), isFalse);
+    });
   });
 
   group('HfApiClient.getModelLicenseInfo', () {

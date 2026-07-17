@@ -19,8 +19,24 @@ class _V1Database extends AppDatabase {
   int get schemaVersion => 1;
 
   @override
-  MigrationStrategy get migration =>
-      MigrationStrategy(onCreate: (m) => m.createTable(installedModels));
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createTable(installedModels);
+      // No schema-snapshot codegen in this repo (see build.yaml's doc
+      // comment) — `createTable` always builds the table's CURRENT (v4)
+      // shape, including the Loop-7 mmproj_path/is_vision columns that
+      // didn't exist at v1. Drop them so the later real onUpgrade(1, 4)'s
+      // `addColumn` calls have something to add, same trick
+      // character_migration_test.dart's `_V2Database` already uses for
+      // `conversations.character_id`.
+      await customStatement(
+        'ALTER TABLE installed_models DROP COLUMN mmproj_path',
+      );
+      await customStatement(
+        'ALTER TABLE installed_models DROP COLUMN is_vision',
+      );
+    },
+  );
 }
 
 void main() {
@@ -56,11 +72,12 @@ void main() {
       expect(v1.schemaVersion, 1);
       await v1.close();
 
-      // Reopen with the real (current, v3) AppDatabase over the same file —
-      // this must trigger the real onUpgrade(1, 3), running both the v1->v2
-      // and v2->v3 branches in one jump (see database.dart's migration doc).
+      // Reopen with the real (current, v4) AppDatabase over the same file —
+      // this must trigger the real onUpgrade(1, 4), running the v1->v2,
+      // v2->v3, and v3->v4 branches in one jump (see database.dart's
+      // migration doc).
       final v2 = AppDatabase(NativeDatabase(dbFile));
-      expect(v2.schemaVersion, 3);
+      expect(v2.schemaVersion, 4);
 
       final installedRows = await v2.select(v2.installedModels).get();
       expect(installedRows, hasLength(1));
@@ -105,7 +122,7 @@ void main() {
 
   test('a fresh database creates all five tables directly', () async {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 3);
+    expect(db.schemaVersion, 4);
     expect(
       db.allTables.map((t) => t.actualTableName),
       containsAll(<String>[

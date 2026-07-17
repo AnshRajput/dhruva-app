@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
@@ -10,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+final _redPng = File('test/assets/red_64.png').readAsBytesSync();
 
 class _FakeUrlLauncher extends UrlLauncherPlatform {
   final List<String> launched = [];
@@ -259,5 +263,88 @@ void main() {
     expect(regenerated, isTrue);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     expect(edited, isTrue);
+  });
+
+  group('vision (Loop 7)', () {
+    testWidgets(
+      'D2: an attached image renders as a thumbnail, tap opens it full-size',
+      (tester) async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(role: MessageRole.user, content: 'what is this?'),
+            attachedImage: _redPng,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Image), findsOneWidget);
+        expect(find.byType(Dialog), findsNothing);
+        // Designer BLOCKING: the tap-to-view thumbnail carries a "View image"
+        // tooltip + button semantics (was a bare, unlabeled GestureDetector).
+        expect(find.byTooltip('View image'), findsOneWidget);
+
+        // Invoked directly rather than via `tester.tap` — the bubble's
+        // `FractionallySizedBox`/`Align` scaffolding (built for a bounded
+        // `ListView` item, not this isolated `SingleChildScrollView` host)
+        // makes the thumbnail's true hit-test geometry unreliable in this
+        // test harness; the callback itself is what's under test.
+        tester
+            .widget<GestureDetector>(
+              find.byKey(const Key('attached-image-thumbnail')),
+            )
+            .onTap!();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsOneWidget);
+        expect(find.byType(InteractiveViewer), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        expect(find.byType(Dialog), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'D3: an extract-text result shows a copy-to-clipboard affordance',
+      (tester) async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(
+              role: MessageRole.assistant,
+              content: 'Hello World',
+            ),
+            isExtractResult: true,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byTooltip('Copy text'), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Copy text'));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byIcon(Icons.check), findsOneWidget);
+        // Revert timer — drain it so no pending timer trips flutter_test's
+        // end-of-test invariant check.
+        await tester.pump(const Duration(milliseconds: 950));
+      },
+    );
+
+    testWidgets(
+      'a normal (non-extract) assistant reply has no copy affordance',
+      (tester) async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(role: MessageRole.assistant, content: 'hi'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byTooltip('Copy text'), findsNothing);
+      },
+    );
   });
 }

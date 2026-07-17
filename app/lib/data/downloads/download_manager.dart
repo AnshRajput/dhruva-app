@@ -73,6 +73,22 @@ final class DownloadRequest {
   final String? license;
   final bool gated;
 
+  /// True when this is a vision model's own GGUF (not its projector) —
+  /// recorded on the `installed_models` row as `isVision` so a paired-but-
+  /// not-yet-downloaded projector reads as a "needs projector" half-state
+  /// rather than an indistinguishable plain text model. See
+  /// `database.dart`'s `InstalledModels.isVision` doc and
+  /// `download_actions_controller.dart`'s `enqueueVisionQuant`.
+  final bool isVision;
+
+  /// False for a vision model's mmproj projector download: the file is
+  /// still verified + kept on disk by the normal flow below, but it does
+  /// NOT get its own `installed_models` row — its path is patched onto the
+  /// paired model's row instead (`StorageManager.attachProjector`), so a
+  /// vision model is exactly one row, not two. True (default) for every
+  /// other caller.
+  final bool registerAsInstalledModel;
+
   const DownloadRequest({
     required this.repoId,
     required this.fileName,
@@ -82,6 +98,8 @@ final class DownloadRequest {
     this.quant,
     this.license,
     this.gated = false,
+    this.isVision = false,
+    this.registerAsInstalledModel = true,
   });
 
   /// Stable per repo+file — re-enqueuing the same file reuses the id so a
@@ -101,6 +119,8 @@ final class DownloadRequest {
     if (quant != null) 'quant': quant,
     if (license != null) 'license': license,
     'gated': gated,
+    'isVision': isVision,
+    'registerAsInstalledModel': registerAsInstalledModel,
   });
 
   /// The inverse of [_encodeMetaData]. Returns null (skip this rehydrated
@@ -120,6 +140,9 @@ final class DownloadRequest {
         quant: json['quant'] as String?,
         license: json['license'] as String?,
         gated: json['gated'] as bool? ?? false,
+        isVision: json['isVision'] as bool? ?? false,
+        registerAsInstalledModel:
+            json['registerAsInstalledModel'] as bool? ?? true,
       );
     } catch (_) {
       return null;
@@ -227,6 +250,8 @@ final class DownloadManager {
             quant: request.quant,
             license: request.license,
             gated: request.gated,
+            isVision: request.isVision,
+            registerAsInstalledModel: request.registerAsInstalledModel,
           );
 
     final guardFailure = checkStorageGuard(
@@ -390,19 +415,27 @@ final class DownloadManager {
       return;
     }
 
-    await _db.upsertInstalledModel(
-      InstalledModelsCompanion.insert(
-        repoId: request.repoId,
-        fileName: request.fileName,
-        quant: Value(request.quant),
-        sizeBytes: actualSize,
-        sha256: Value(request.expectedSha256),
-        localPath: path,
-        license: Value(request.license),
-        gated: Value(request.gated),
-        downloadedAt: DateTime.now(),
-      ),
-    );
+    // A vision projector's own download (`registerAsInstalledModel: false`)
+    // is verified + kept on disk above like any other file, but doesn't get
+    // its own row here — see the field's doc comment and
+    // `StorageManager.attachProjector`, which patches its path onto the
+    // paired model's row once both are known.
+    if (request.registerAsInstalledModel) {
+      await _db.upsertInstalledModel(
+        InstalledModelsCompanion.insert(
+          repoId: request.repoId,
+          fileName: request.fileName,
+          quant: Value(request.quant),
+          sizeBytes: actualSize,
+          sha256: Value(request.expectedSha256),
+          localPath: path,
+          license: Value(request.license),
+          gated: Value(request.gated),
+          isVision: Value(request.isVision),
+          downloadedAt: DateTime.now(),
+        ),
+      );
+    }
 
     _active.remove(request.taskId);
     _emit(

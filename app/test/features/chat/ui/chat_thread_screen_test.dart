@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
@@ -7,11 +9,15 @@ import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:dhruva/features/chat/ui/chat_thread_screen.dart';
+import 'package:dhruva/vision/fake_image_attacher.dart';
+import 'package:dhruva/vision/image_attach_source.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+final _redPng = File('test/assets/red_64.png').readAsBytesSync();
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -43,12 +49,35 @@ void main() {
         );
   }
 
-  Widget buildApp(FakeEngineService engine, ChatRouteArgs args) {
+  // Loop 7: a vision-capable installed row (mmprojPath set).
+  Future<int> insertVisionModel() {
+    return db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'ggml-org/SmolVLM-500M-Instruct-GGUF',
+            fileName: 'vision-model.gguf',
+            sizeBytes: 100,
+            localPath: '/tmp/dhruva-thread-vision-test.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+            mmprojPath: const Value('/tmp/dhruva-thread-mmproj.gguf'),
+            isVision: const Value(true),
+          ),
+        );
+  }
+
+  Widget buildApp(
+    FakeEngineService engine,
+    ChatRouteArgs args, {
+    FakeImageAttacher? imageAttacher,
+  }) {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        if (imageAttacher != null)
+          imageAttacherProvider.overrideWithValue(imageAttacher),
       ],
       child: MaterialApp(
         theme: AppTheme.dark,
@@ -314,4 +343,103 @@ void main() {
       expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
     },
   );
+
+  group('Loop 7: vision', () {
+    testWidgets('gate G3: a text-only loaded model hides the attach button', (
+      tester,
+    ) async {
+      final modelId = await insertModel();
+      await tester.pumpWidget(
+        buildApp(FakeEngineService(), ChatRouteArgs(initialModelId: modelId)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.add_photo_alternate_outlined), findsNothing);
+    });
+
+    testWidgets(
+      'gate G3: a vision-capable loaded model shows the attach button',
+      (tester) async {
+        final modelId = await insertVisionModel();
+        await tester.pumpWidget(
+          buildApp(
+            FakeEngineService(multimodal: true),
+            ChatRouteArgs(initialModelId: modelId),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.add_photo_alternate_outlined), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'D2: attaching + sending an image renders it in the user bubble and '
+      "the model's grounded vision answer streams in",
+      (tester) async {
+        final modelId = await insertVisionModel();
+        final engine = FakeEngineService(
+          multimodal: true,
+          visionTokens: const ['a ', 'red ', 'square', '.'],
+          tokenDelay: const Duration(milliseconds: 5),
+        );
+        final imageAttacher = FakeImageAttacher()..nextImage = _redPng;
+        await tester.pumpWidget(
+          buildApp(
+            engine,
+            ChatRouteArgs(initialModelId: modelId),
+            imageAttacher: imageAttacher,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Photo Library'));
+        await tester.pumpAndSettle();
+        expect(imageAttacher.lastSource, ImageAttachSource.gallery);
+
+        await tester.enterText(find.byType(TextField), 'what is this?');
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+        await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+        // The image renders in the user's bubble (thumbnail).
+        expect(find.byType(Image), findsWidgets);
+        // The vision-canned answer streamed in as the assistant reply.
+        expect(find.textContaining('a red square.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('D3: extract-text preset answer shows a copy affordance', (
+      tester,
+    ) async {
+      final modelId = await insertVisionModel();
+      final engine = FakeEngineService(
+        multimodal: true,
+        visionTokens: const ['EXTRACTED TEXT'],
+        tokenDelay: const Duration(milliseconds: 5),
+      );
+      final imageAttacher = FakeImageAttacher()..nextImage = _redPng;
+      await tester.pumpWidget(
+        buildApp(
+          engine,
+          ChatRouteArgs(initialModelId: modelId),
+          imageAttacher: imageAttacher,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Photo Library'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Extract text'));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      expect(find.text('EXTRACTED TEXT'), findsOneWidget);
+      expect(find.byTooltip('Copy text'), findsOneWidget);
+    });
+  });
 }

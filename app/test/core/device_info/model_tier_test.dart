@@ -174,4 +174,61 @@ void main() {
       ModelTier.notRecommended,
     );
   });
+
+  group('classifyModelTier — vision combined footprint (Loop-7 T2 D4)', () {
+    test('mmprojSizeBytes defaults to 0 — unchanged behavior for a plain '
+        'text model', () {
+      const fileSize = 900 * 1024 * 1024;
+      expect(
+        classifyModelTier(fileSizeBytes: fileSize, totalRamBytes: 4 * _gib),
+        classifyModelTier(
+          fileSizeBytes: fileSize,
+          totalRamBytes: 4 * _gib,
+          mmprojSizeBytes: 0,
+        ),
+      );
+    });
+
+    test(
+      'a 416MB model + 103MB projector (~519MB combined) is still 1B-class '
+      '(<=1.2GiB), floor 4GB — matches classifying the combined size alone',
+      () {
+        const modelBytes = 436207616; // ~416 MB
+        const mmprojBytes = 108003328; // ~103 MB
+        expect(
+          classifyModelTier(
+            fileSizeBytes: modelBytes,
+            totalRamBytes: 4 * _gib,
+            mmprojSizeBytes: mmprojBytes,
+          ),
+          classifyModelTier(
+            fileSizeBytes: modelBytes + mmprojBytes,
+            totalRamBytes: 4 * _gib,
+          ),
+        );
+      },
+    );
+
+    test('the projector pushes a model across a size-class boundary into a '
+        'higher RAM floor', () {
+      // Model alone (~1.1GiB) is 1B-class (floor 4GB) — "possible" at
+      // 4GB RAM (below the 6GB comfortable threshold). Combined with a
+      // 200MB projector it crosses the 1.2GiB boundary into the 3-4B
+      // floor (6GB), which the same 4GB RAM now fails outright.
+      const modelBytes = 1181116006; // ~1.1 GiB
+      const mmprojBytes = 200 * 1024 * 1024;
+      expect(
+        classifyModelTier(fileSizeBytes: modelBytes, totalRamBytes: 4 * _gib),
+        ModelTier.possible,
+      );
+      expect(
+        classifyModelTier(
+          fileSizeBytes: modelBytes,
+          totalRamBytes: 4 * _gib,
+          mmprojSizeBytes: mmprojBytes,
+        ),
+        ModelTier.notRecommended,
+      );
+    });
+  });
 }

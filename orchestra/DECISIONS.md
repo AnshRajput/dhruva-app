@@ -180,6 +180,28 @@ diff that is fully green locally.
 Decision: CI pins flutter-version 3.41.2 (== local). Flutter upgrades are
 their own deliberate PR (bump local + CI together, fix API churn there).
 
+## SCOPE AMENDMENT 5 — CRITICAL UX/FUNCTIONALITY HARDENING (2026-07-18)
+Context: human tested the distributed v0.1.0-alpha on a real Android device and
+reports the CORE experience is broken: (a) download gives no feedback on tap,
+no progress indication, not seamless; (b) cannot start a conversation; (c) chat
+does not reply; (d) models not shown mobile-optimized / ranked / device-spec-
+recommended; (e) no delete-model on the listing; (f) app "not usable", UX
+broken; (g) state management "feels broken". Green tests missed all of this =
+the real Android release path + true E2E UX are undertested.
+Decision: dedicated hardening loop (loop/ux-hardening off main, the SHIPPED
+code) takes priority over finishing Loop 7 (vision, parked in review). Process
+per human request: research/diagnose FIRST (fan-out agents reproduce + root-
+cause, discuss/synthesize), THEN implement, test everything, deploy to FAD.
+Ruling on "use a good state management tool": KEEP Riverpod (already a good
+tool); "feels broken" = state BUGS (stale lists, missing refresh, autoDispose
+gaps) to be fixed, NOT a tool swap (rejected as high-risk rewrite). Diagnose
+the actual defects. Scope of fixes: download UX (tap feedback + circular
+progress button + seamless + OS notification w/ progress via background_
+downloader's notification config), chat/convo start + reply (incl. the Android
+on-device inference path — R10 residual may be the real culprit), model
+discovery (mobile-optimized filter, ranking, device-spec recommendations,
+delete on listing), general usability + performance, state-bug fixes.
+
 ## SCOPE AMENDMENT 6 — REAL END-TO-END VERIFICATION (2026-07-18)
 Context: Phase A hotfix shipped but the user reports on-device it STILL fails —
 can't chat, model still needs a restart to appear, download button still no

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show NullsOrder, OrderingTerm, Value;
+import 'package:drift/drift.dart';
 
 import '../../core/device_info/device_info_service.dart';
 import '../../core/failures/app_failure.dart';
@@ -23,6 +23,12 @@ final class InstalledModelInfo {
   final DateTime downloadedAt;
   final DateTime? lastUsedAt;
 
+  /// Local path of the paired mmproj projector, or null — see
+  /// `database.dart`'s `InstalledModels.mmprojPath` doc for the "needs
+  /// projector" half-state `isVision && mmprojPath == null` represents.
+  final String? mmprojPath;
+  final bool isVision;
+
   const InstalledModelInfo({
     required this.id,
     required this.repoId,
@@ -35,7 +41,13 @@ final class InstalledModelInfo {
     required this.gated,
     required this.downloadedAt,
     this.lastUsedAt,
+    this.mmprojPath,
+    this.isVision = false,
   });
+
+  /// True when this is a vision model whose projector download hasn't
+  /// completed yet — the model itself is installed and usable text-only.
+  bool get needsProjector => isVision && mmprojPath == null;
 }
 
 /// Everything about installed models that isn't "is it downloading" —
@@ -84,18 +96,30 @@ final class StorageManager {
     }
   }
 
+  /// Sums every installed model's own file size plus, for a vision model
+  /// whose projector has landed, the projector file's size too (D5: "total
+  /// usage counts both"). The projector's size isn't a stored column (only
+  /// its path is — see `database.dart`'s `InstalledModels.mmprojPath`), so
+  /// it's `stat`'d off disk here rather than adding a third schema column
+  /// for a value the filesystem already knows.
   Future<int> totalUsageBytes() async {
     final rows = await listInstalledModels();
     var total = 0;
     for (final row in rows) {
       total += row.sizeBytes;
+      final mmprojPath = row.mmprojPath;
+      if (mmprojPath != null) {
+        final mmprojFile = File(mmprojPath);
+        if (mmprojFile.existsSync()) total += mmprojFile.lengthSync();
+      }
     }
     return total;
   }
 
-  /// Deletes both the file on disk and the drift row. Throws
+  /// Deletes the file on disk (plus its mmproj projector, if this is a
+  /// vision model with one — D5) and the drift row. Throws
   /// [StorageNotFoundFailure] if [id] isn't installed, [StorageIoFailure] if
-  /// the file exists but can't be deleted (row is left in place so the app
+  /// a file exists but can't be deleted (row is left in place so the app
   /// doesn't lose track of an orphaned file).
   Future<void> delete(int id) async {
     final row = await (_db.select(
@@ -110,7 +134,45 @@ final class StorageManager {
     } on FileSystemException catch (e) {
       throw StorageIoFailure('failed to delete ${row.localPath}', cause: e);
     }
+    final mmprojPath = row.mmprojPath;
+    if (mmprojPath != null) {
+      final mmprojFile = File(mmprojPath);
+      try {
+        if (mmprojFile.existsSync()) await mmprojFile.delete();
+      } on FileSystemException catch (e) {
+        throw StorageIoFailure('failed to delete $mmprojPath', cause: e);
+      }
+    }
     await (_db.delete(_db.installedModels)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Records where a vision model's mmproj projector landed once its own
+  /// (separately enqueued, sequential) download completes — the second half
+  /// of a vision pairing; see `download_actions_controller.dart`'s
+  /// `enqueueVisionQuant`. Throws [StorageNotFoundFailure] if no installed
+  /// model matches (repoId, fileName) — the projector download is only ever
+  /// started after the model's own row is written, so this should never
+  /// actually be reached; kept as a typed guard rather than a silent no-op.
+  Future<void> attachProjector({
+    required String repoId,
+    required String fileName,
+    required String mmprojPath,
+  }) async {
+    final updated =
+        await (_db.update(_db.installedModels)..where(
+              (t) => t.repoId.equals(repoId) & t.fileName.equals(fileName),
+            ))
+            .write(
+              InstalledModelsCompanion(
+                mmprojPath: Value(mmprojPath),
+                isVision: const Value(true),
+              ),
+            );
+    if (updated == 0) {
+      throw StorageNotFoundFailure(
+        'no installed model $repoId/$fileName to attach a projector to',
+      );
+    }
   }
 
   /// Guard before enqueueing a download/import of [requiredBytes]. Throws
@@ -137,5 +199,7 @@ final class StorageManager {
     gated: row.gated,
     downloadedAt: row.downloadedAt,
     lastUsedAt: row.lastUsedAt,
+    mmprojPath: row.mmprojPath,
+    isVision: row.isVision,
   );
 }

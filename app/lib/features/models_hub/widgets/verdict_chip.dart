@@ -13,11 +13,18 @@ class ModelVerdictChip extends StatelessWidget {
   final int fileSizeBytes;
   final int totalRamBytes;
 
+  /// A vision model's paired mmproj projector size, added to [fileSizeBytes]
+  /// for the explanation's RAM figure — mirrors `classifyModelTier`'s own
+  /// combined-footprint accounting so the label matches the tier it's
+  /// attached to. 0 for a plain text model.
+  final int mmprojSizeBytes;
+
   const ModelVerdictChip({
     super.key,
     required this.tier,
     required this.fileSizeBytes,
     required this.totalRamBytes,
+    this.mmprojSizeBytes = 0,
   });
 
   @override
@@ -56,7 +63,9 @@ class ModelVerdictChip extends StatelessWidget {
   }
 
   String get explanation {
-    final neededGb = _formatGb(ramFloorBytesFor(fileSizeBytes));
+    final neededGb = _formatGb(
+      ramFloorBytesFor(fileSizeBytes + mmprojSizeBytes),
+    );
     final haveGb = _formatGb(totalRamBytes);
     return 'needs ~${neededGb}GB RAM, you have ${haveGb}GB';
   }

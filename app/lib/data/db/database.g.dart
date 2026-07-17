@@ -128,6 +128,32 @@ class $InstalledModelsTable extends InstalledModels
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _mmprojPathMeta = const VerificationMeta(
+    'mmprojPath',
+  );
+  @override
+  late final GeneratedColumn<String> mmprojPath = GeneratedColumn<String>(
+    'mmproj_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isVisionMeta = const VerificationMeta(
+    'isVision',
+  );
+  @override
+  late final GeneratedColumn<bool> isVision = GeneratedColumn<bool>(
+    'is_vision',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_vision" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -141,6 +167,8 @@ class $InstalledModelsTable extends InstalledModels
     gated,
     downloadedAt,
     lastUsedAt,
+    mmprojPath,
+    isVision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -233,6 +261,18 @@ class $InstalledModelsTable extends InstalledModels
         ),
       );
     }
+    if (data.containsKey('mmproj_path')) {
+      context.handle(
+        _mmprojPathMeta,
+        mmprojPath.isAcceptableOrUnknown(data['mmproj_path']!, _mmprojPathMeta),
+      );
+    }
+    if (data.containsKey('is_vision')) {
+      context.handle(
+        _isVisionMeta,
+        isVision.isAcceptableOrUnknown(data['is_vision']!, _isVisionMeta),
+      );
+    }
     return context;
   }
 
@@ -290,6 +330,14 @@ class $InstalledModelsTable extends InstalledModels
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_used_at'],
       ),
+      mmprojPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mmproj_path'],
+      ),
+      isVision: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_vision'],
+      )!,
     );
   }
 
@@ -311,6 +359,25 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
   final bool gated;
   final DateTime downloadedAt;
   final DateTime? lastUsedAt;
+
+  /// Local path of the mmproj projector paired with this installed vision
+  /// model (Loop-7 `vision_pairing.dart`'s matching rule), or null.
+  ///
+  /// `isVision && mmprojPath == null` is the "needs projector" half-state: the
+  /// model file downloaded and verified fine, but its paired projector
+  /// download hasn't landed yet (still in flight, or failed after the model
+  /// succeeded — see `download_actions_controller.dart`'s
+  /// `enqueueVisionQuant`). The row exists and the model is usable text-only
+  /// in that state; nothing is silently lost, but it isn't vision-ready.
+  /// `isVision && mmprojPath != null` is fully vision-ready — the engine
+  /// loads it with `EngineLoadParams.mmprojPath` set (Loop-7 T1).
+  final String? mmprojPath;
+
+  /// True when this row IS a vision model (paired with a projector at
+  /// download-enqueue time — see `DownloadRequest.isVision`), independent of
+  /// whether [mmprojPath] has landed yet — see its doc for the two-state
+  /// meaning of the pair.
+  final bool isVision;
   const InstalledModel({
     required this.id,
     required this.repoId,
@@ -323,6 +390,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
     required this.gated,
     required this.downloadedAt,
     this.lastUsedAt,
+    this.mmprojPath,
+    required this.isVision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -346,6 +415,10 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
     if (!nullToAbsent || lastUsedAt != null) {
       map['last_used_at'] = Variable<DateTime>(lastUsedAt);
     }
+    if (!nullToAbsent || mmprojPath != null) {
+      map['mmproj_path'] = Variable<String>(mmprojPath);
+    }
+    map['is_vision'] = Variable<bool>(isVision);
     return map;
   }
 
@@ -370,6 +443,10 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
       lastUsedAt: lastUsedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastUsedAt),
+      mmprojPath: mmprojPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mmprojPath),
+      isVision: Value(isVision),
     );
   }
 
@@ -390,6 +467,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
       gated: serializer.fromJson<bool>(json['gated']),
       downloadedAt: serializer.fromJson<DateTime>(json['downloadedAt']),
       lastUsedAt: serializer.fromJson<DateTime?>(json['lastUsedAt']),
+      mmprojPath: serializer.fromJson<String?>(json['mmprojPath']),
+      isVision: serializer.fromJson<bool>(json['isVision']),
     );
   }
   @override
@@ -407,6 +486,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
       'gated': serializer.toJson<bool>(gated),
       'downloadedAt': serializer.toJson<DateTime>(downloadedAt),
       'lastUsedAt': serializer.toJson<DateTime?>(lastUsedAt),
+      'mmprojPath': serializer.toJson<String?>(mmprojPath),
+      'isVision': serializer.toJson<bool>(isVision),
     };
   }
 
@@ -422,6 +503,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
     bool? gated,
     DateTime? downloadedAt,
     Value<DateTime?> lastUsedAt = const Value.absent(),
+    Value<String?> mmprojPath = const Value.absent(),
+    bool? isVision,
   }) => InstalledModel(
     id: id ?? this.id,
     repoId: repoId ?? this.repoId,
@@ -434,6 +517,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
     gated: gated ?? this.gated,
     downloadedAt: downloadedAt ?? this.downloadedAt,
     lastUsedAt: lastUsedAt.present ? lastUsedAt.value : this.lastUsedAt,
+    mmprojPath: mmprojPath.present ? mmprojPath.value : this.mmprojPath,
+    isVision: isVision ?? this.isVision,
   );
   InstalledModel copyWithCompanion(InstalledModelsCompanion data) {
     return InstalledModel(
@@ -452,6 +537,10 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
       lastUsedAt: data.lastUsedAt.present
           ? data.lastUsedAt.value
           : this.lastUsedAt,
+      mmprojPath: data.mmprojPath.present
+          ? data.mmprojPath.value
+          : this.mmprojPath,
+      isVision: data.isVision.present ? data.isVision.value : this.isVision,
     );
   }
 
@@ -468,7 +557,9 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
           ..write('license: $license, ')
           ..write('gated: $gated, ')
           ..write('downloadedAt: $downloadedAt, ')
-          ..write('lastUsedAt: $lastUsedAt')
+          ..write('lastUsedAt: $lastUsedAt, ')
+          ..write('mmprojPath: $mmprojPath, ')
+          ..write('isVision: $isVision')
           ..write(')'))
         .toString();
   }
@@ -486,6 +577,8 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
     gated,
     downloadedAt,
     lastUsedAt,
+    mmprojPath,
+    isVision,
   );
   @override
   bool operator ==(Object other) =>
@@ -501,7 +594,9 @@ class InstalledModel extends DataClass implements Insertable<InstalledModel> {
           other.license == this.license &&
           other.gated == this.gated &&
           other.downloadedAt == this.downloadedAt &&
-          other.lastUsedAt == this.lastUsedAt);
+          other.lastUsedAt == this.lastUsedAt &&
+          other.mmprojPath == this.mmprojPath &&
+          other.isVision == this.isVision);
 }
 
 class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
@@ -516,6 +611,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
   final Value<bool> gated;
   final Value<DateTime> downloadedAt;
   final Value<DateTime?> lastUsedAt;
+  final Value<String?> mmprojPath;
+  final Value<bool> isVision;
   const InstalledModelsCompanion({
     this.id = const Value.absent(),
     this.repoId = const Value.absent(),
@@ -528,6 +625,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
     this.gated = const Value.absent(),
     this.downloadedAt = const Value.absent(),
     this.lastUsedAt = const Value.absent(),
+    this.mmprojPath = const Value.absent(),
+    this.isVision = const Value.absent(),
   });
   InstalledModelsCompanion.insert({
     this.id = const Value.absent(),
@@ -541,6 +640,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
     this.gated = const Value.absent(),
     required DateTime downloadedAt,
     this.lastUsedAt = const Value.absent(),
+    this.mmprojPath = const Value.absent(),
+    this.isVision = const Value.absent(),
   }) : repoId = Value(repoId),
        fileName = Value(fileName),
        sizeBytes = Value(sizeBytes),
@@ -558,6 +659,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
     Expression<bool>? gated,
     Expression<DateTime>? downloadedAt,
     Expression<DateTime>? lastUsedAt,
+    Expression<String>? mmprojPath,
+    Expression<bool>? isVision,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -571,6 +674,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
       if (gated != null) 'gated': gated,
       if (downloadedAt != null) 'downloaded_at': downloadedAt,
       if (lastUsedAt != null) 'last_used_at': lastUsedAt,
+      if (mmprojPath != null) 'mmproj_path': mmprojPath,
+      if (isVision != null) 'is_vision': isVision,
     });
   }
 
@@ -586,6 +691,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
     Value<bool>? gated,
     Value<DateTime>? downloadedAt,
     Value<DateTime?>? lastUsedAt,
+    Value<String?>? mmprojPath,
+    Value<bool>? isVision,
   }) {
     return InstalledModelsCompanion(
       id: id ?? this.id,
@@ -599,6 +706,8 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
       gated: gated ?? this.gated,
       downloadedAt: downloadedAt ?? this.downloadedAt,
       lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+      mmprojPath: mmprojPath ?? this.mmprojPath,
+      isVision: isVision ?? this.isVision,
     );
   }
 
@@ -638,6 +747,12 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
     if (lastUsedAt.present) {
       map['last_used_at'] = Variable<DateTime>(lastUsedAt.value);
     }
+    if (mmprojPath.present) {
+      map['mmproj_path'] = Variable<String>(mmprojPath.value);
+    }
+    if (isVision.present) {
+      map['is_vision'] = Variable<bool>(isVision.value);
+    }
     return map;
   }
 
@@ -654,7 +769,9 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
           ..write('license: $license, ')
           ..write('gated: $gated, ')
           ..write('downloadedAt: $downloadedAt, ')
-          ..write('lastUsedAt: $lastUsedAt')
+          ..write('lastUsedAt: $lastUsedAt, ')
+          ..write('mmprojPath: $mmprojPath, ')
+          ..write('isVision: $isVision')
           ..write(')'))
         .toString();
   }

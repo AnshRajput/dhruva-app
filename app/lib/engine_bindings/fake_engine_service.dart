@@ -14,6 +14,12 @@ final class FakeEngineService implements EngineService {
   /// Tokens emitted per [generate] call (each becomes one [EngineToken]).
   final List<String> scriptedTokens;
 
+  /// Tokens emitted when a [generate] turn carries images (and this fake is
+  /// [multimodal]). Joined they form a canned vision answer that references
+  /// the image, so UI/vision tests exercise the attach → answer flow without
+  /// native code.
+  final List<String> visionTokens;
+
   /// Delay between tokens; also the cooperative-cancel checkpoint interval.
   final Duration tokenDelay;
 
@@ -23,11 +29,17 @@ final class FakeEngineService implements EngineService {
   /// When set, [generate]'s stream emits this error instead of tokens.
   final EngineFailure? generateFailure;
 
+  /// When true, a successful [load] reports [isMultimodal] and image turns
+  /// stream [visionTokens]. Models the vision-capable model in UI tests.
+  final bool multimodal;
+
   FakeEngineService({
     this.scriptedTokens = const ['Hello', ' ', 'world', '!'],
+    this.visionTokens = const ['I ', 'see ', 'a ', 'red ', 'image', '.'],
     this.tokenDelay = const Duration(milliseconds: 10),
     this.loadFailure,
     this.generateFailure,
+    this.multimodal = false,
   });
 
   bool _loaded = false;
@@ -36,6 +48,12 @@ final class FakeEngineService implements EngineService {
 
   /// Test hook: number of successful [load] calls.
   int loadCount = 0;
+
+  /// Test hook: the `params` passed to the most recent [load] call — Loop 7
+  /// gate, lets a test assert `mmprojPath` actually reached the engine
+  /// (`ChatController.ensureModelLoaded`'s load path), not just that the
+  /// controller's own state object carries it.
+  EngineLoadParams? lastLoadParams;
 
   /// Test hook: number of [unload] calls.
   int unloadCount = 0;
@@ -49,14 +67,22 @@ final class FakeEngineService implements EngineService {
   /// Test hook: the `params` passed to the most recent [generate] call.
   EngineGenerateParams? lastParams;
 
+  /// Test hook: number of images across the messages of the most recent
+  /// [generate] call.
+  int lastImageCount = 0;
+
   @override
   bool get isLoaded => _loaded && !_disposed;
+
+  @override
+  bool get isMultimodal => isLoaded && multimodal;
 
   @override
   Future<void> load(
     String modelPath, {
     EngineLoadParams params = const EngineLoadParams(),
   }) async {
+    lastLoadParams = params;
     if (_disposed) {
       throw const EngineDisposedFailure('engine has been disposed');
     }
@@ -75,6 +101,11 @@ final class FakeEngineService implements EngineService {
   }) {
     lastMessages = messages;
     lastParams = params;
+    lastImageCount = messages?.fold<int>(0, (n, m) => n + m.images.length) ?? 0;
+    // Image turns on a multimodal fake stream the canned vision answer.
+    final tokens = (multimodal && lastImageCount > 0)
+        ? visionTokens
+        : scriptedTokens;
     // Single error channel (see EngineService.generate): never throw; surface
     // every pre-flight failure via the returned stream's onError.
     final preflight =
@@ -99,19 +130,19 @@ final class FakeEngineService implements EngineService {
           return;
         }
         var emitted = 0;
-        final limit = params.maxTokens < scriptedTokens.length
+        final limit = params.maxTokens < tokens.length
             ? params.maxTokens
-            : scriptedTokens.length;
+            : tokens.length;
         for (var i = 0; i < limit; i++) {
           await Future<void>.delayed(tokenDelay);
           if (run.cancelled || controller.isClosed) break;
-          controller.add(EngineToken(tokenId: i, text: scriptedTokens[i]));
+          controller.add(EngineToken(tokenId: i, text: tokens[i]));
           emitted++;
         }
         if (!controller.isClosed) {
           final reason = run.cancelled
               ? EngineStopReason.cancelled
-              : (emitted >= scriptedTokens.length
+              : (emitted >= tokens.length
                     ? EngineStopReason.endOfSequence
                     : EngineStopReason.maxTokens);
           controller.add(

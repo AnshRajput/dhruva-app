@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dhruva/data/chat/chat_export.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
@@ -205,6 +207,79 @@ void main() {
       final json = formatConversationJson(data);
       expect(json, contains('"status": "error"'));
       expect(json, contains('"errorKind": "EngineDecodeFailure"'));
+    });
+  });
+
+  // QA LOW FIXED (Loop-7 export): attached-image bytes are session-only
+  // (`ChatThreadState.attachedImages`), so the export still can't embed the
+  // picture — but `chat_thread_screen.dart`'s `_export` now passes the live
+  // set of message ids that had an image (`imageMessageIds`) into the export,
+  // so the context isn't dropped silently. A `[image attached]` marker lands
+  // in both the markdown and JSON for those messages, and messages with no
+  // image (or an export in a later session where the map is empty) are
+  // unchanged.
+  group('QA LOW FIXED: image attachments are marked in export', () {
+    test('markdown export marks an image-attached message with '
+        '[image attached]', () {
+      final data = ChatExportData(
+        title: 'Photo Q&A',
+        createdAt: createdAt,
+        messages: [
+          message(
+            id: 1,
+            role: MessageRole.user,
+            content: 'What is the main color of this image?',
+          ),
+          message(id: 2, role: MessageRole.assistant, content: 'Red.'),
+        ],
+        imageMessageIds: const {1},
+      );
+      final md = formatConversationMarkdown(data);
+      expect(md, contains('What is the main color of this image?'));
+      expect(md, contains('Red.'));
+      expect(md, contains('[image attached]'));
+      // The marker sits under the user turn (which had the image), not the
+      // assistant reply.
+      final userSection = md.substring(
+        md.indexOf('## User'),
+        md.indexOf('## Assistant'),
+      );
+      expect(userSection, contains('[image attached]'));
+    });
+
+    test('markdown export without imageMessageIds has no marker (later-session '
+        'export or a text-only exchange)', () {
+      final data = ChatExportData(
+        title: 'Photo Q&A',
+        createdAt: createdAt,
+        messages: [
+          message(id: 1, role: MessageRole.user, content: 'Hello there'),
+        ],
+      );
+      expect(formatConversationMarkdown(data), isNot(contains('[image')));
+    });
+
+    test('JSON export sets imageAttached:true on the image-bearing message '
+        'only', () {
+      final data = ChatExportData(
+        title: 'Photo Q&A',
+        createdAt: createdAt,
+        messages: [
+          message(
+            id: 1,
+            role: MessageRole.user,
+            content: 'Extract all text from this image, output only the text',
+          ),
+          message(id: 2, role: MessageRole.assistant, content: 'CAT'),
+        ],
+        imageMessageIds: const {1},
+      );
+      final decoded =
+          jsonDecode(formatConversationJson(data)) as Map<String, dynamic>;
+      final messages = (decoded['messages'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(messages[0]['imageAttached'], true);
+      expect(messages[1].containsKey('imageAttached'), isFalse);
     });
   });
 }

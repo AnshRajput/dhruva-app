@@ -4,5 +4,11 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- Loop 7 (vision): camera capture for the chat attach button (image_
+	     picker's macOS backend uses AVFoundation for the camera source; the
+	     gallery source goes through NSOpenPanel, which the sandbox already
+	     auto-grants without a dedicated entitlement). -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
 </dict>
 </plist>

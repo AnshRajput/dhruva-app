@@ -35,6 +35,16 @@ class _V2Database extends AppDatabase {
       await customStatement(
         'ALTER TABLE conversations DROP COLUMN character_id',
       );
+      // Same "createTable always builds the CURRENT shape" trick as above,
+      // now for `installed_models`'s Loop-7 mmproj_path/is_vision columns
+      // (didn't exist at v2) — see chat_migration_test.dart's `_V1Database`
+      // for the same fix, needed for the same reason.
+      await customStatement(
+        'ALTER TABLE installed_models DROP COLUMN mmproj_path',
+      );
+      await customStatement(
+        'ALTER TABLE installed_models DROP COLUMN is_vision',
+      );
       await customStatement(
         'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
         'ON messages (conversation_id)',
@@ -83,10 +93,11 @@ void main() {
         );
     await v2.close();
 
-    // Reopen with the real (v3) AppDatabase over the same file — this
-    // must trigger the real onUpgrade(2, 3).
+    // Reopen with the real (current, v4) AppDatabase over the same file —
+    // this must trigger the real onUpgrade(2, 4), running both the v2->v3
+    // and v3->v4 branches in one jump.
     final v3 = AppDatabase(NativeDatabase(dbFile));
-    expect(v3.schemaVersion, 3);
+    expect(v3.schemaVersion, 4);
 
     final conversations = await v3.select(v3.conversations).get();
     expect(conversations, hasLength(1));
