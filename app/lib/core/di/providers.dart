@@ -1,8 +1,9 @@
 /// Riverpod DI root (ADR-002: "all state in providers"). Every
 /// cross-feature dependency — the engine, the database, network clients,
 /// the download manager — is exposed here so `features/` code never
-/// constructs a concrete implementation itself (`debug_chat` is the sole,
-/// documented, temporary exception — see its own file).
+/// constructs a concrete implementation itself. (`debug_chat` was the sole,
+/// documented, temporary exception through Loop 3 — deleted in Loop 4 now
+/// that `features/chat` is the real thing.)
 ///
 /// Test/preview overrides: wrap in `ProviderScope(overrides: [...])`, e.g.
 /// `engineServiceProvider.overrideWithValue(FakeEngineService(...))`.

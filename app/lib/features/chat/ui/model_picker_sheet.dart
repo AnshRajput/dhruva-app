@@ -1,0 +1,158 @@
+/// Model picker bottom sheet (chat-spec.md §6.1). Opened from the AppBar
+/// model chip, and from the OOM error card's "Try a smaller model"
+/// affordance (pre-filtered to `comfortable`/`possible` tiers for this
+/// device — reuses `core/device_info`'s existing tiering).
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/device_info/device_info_service.dart';
+import '../../../core/device_info/model_tier.dart';
+import '../../../core/di/providers.dart';
+import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../data/downloads/storage_manager.dart';
+import '../state/installed_models_provider.dart';
+import '../widgets/brand_motif.dart';
+import '../widgets/model_chip.dart';
+
+/// Returns the picked model, or null if the sheet was dismissed.
+Future<InstalledModelInfo?> showModelPickerSheet(
+  BuildContext context, {
+  int? selectedModelId,
+  bool smallerModelsOnly = false,
+}) {
+  return showModalBottomSheet<InstalledModelInfo>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => _ModelPickerSheet(
+      selectedModelId: selectedModelId,
+      smallerModelsOnly: smallerModelsOnly,
+    ),
+  );
+}
+
+class _ModelPickerSheet extends ConsumerWidget {
+  final int? selectedModelId;
+  final bool smallerModelsOnly;
+
+  const _ModelPickerSheet({
+    this.selectedModelId,
+    required this.smallerModelsOnly,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final modelsAsync = ref.watch(installedModelsProvider);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Choose a model', style: theme.textTheme.titleMedium),
+            SizedBox(height: tokens.spacing.sm),
+            switch (modelsAsync) {
+              AsyncData(:final value) => _ModelList(
+                models: value,
+                selectedModelId: selectedModelId,
+                smallerModelsOnly: smallerModelsOnly,
+              ),
+              AsyncError() => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Could not load installed models.'),
+              ),
+              _ => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            },
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelList extends ConsumerWidget {
+  final List<InstalledModelInfo> models;
+  final int? selectedModelId;
+  final bool smallerModelsOnly;
+
+  const _ModelList({
+    required this.models,
+    required this.selectedModelId,
+    required this.smallerModelsOnly,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (models.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No models installed yet.'),
+      );
+    }
+    if (!smallerModelsOnly) return _list(context, models);
+
+    return FutureBuilder<DeviceMemoryInfo>(
+      future: ref.read(deviceInfoServiceProvider).getMemoryInfo(),
+      builder: (context, snapshot) {
+        final memory = snapshot.data;
+        if (memory == null) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final filtered = models.where((m) {
+          final tier = classifyModelTier(
+            fileSizeBytes: m.sizeBytes,
+            totalRamBytes: memory.totalBytes,
+          );
+          return tier != ModelTier.notRecommended;
+        }).toList();
+        return _list(context, filtered.isEmpty ? models : filtered);
+      },
+    );
+  }
+
+  Widget _list(BuildContext context, List<InstalledModelInfo> items) {
+    final theme = Theme.of(context);
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final model = items[i];
+        final selected = model.id == selectedModelId;
+        return ListTile(
+          leading: selected
+              ? DhruvaStar(size: 20, color: theme.colorScheme.primary)
+              : const SizedBox(width: 20),
+          title: Text(
+            modelShortLabel(model.repoId),
+            style: theme.textTheme.titleSmall,
+          ),
+          subtitle: Text(
+            '${model.quant ?? 'unknown quant'} · ${_formatBytes(model.sizeBytes)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          onTap: () => Navigator.of(context).pop(model),
+        );
+      },
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
+}

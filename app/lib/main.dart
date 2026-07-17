@@ -7,9 +7,9 @@ import 'core/theme/app_theme.dart';
 void main() {
   // Loop 3: ProviderScope wraps the app so core/di/providers.dart's
   // providers (EngineService, AppDatabase, HfApiClient, DownloadManager,
-  // StorageManager) are reachable from features/. debug_chat is the one
-  // documented exception — it still constructs its own EngineService (see
-  // its file header) and doesn't read from providers.
+  // StorageManager) are reachable from features/. `debug_chat` (the one
+  // documented exception, per Loop 2/3) was deleted in Loop 4 — its
+  // developer-harness role is now the real chat feature.
   runApp(const ProviderScope(child: DhruvaApp()));
 }
 
