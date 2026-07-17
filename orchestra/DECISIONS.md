@@ -122,3 +122,12 @@ https://anshgandharva.online. Website: sticky bottom bar on ALL pages
 (appears at lowest scroll). App: on the settings/about surface ONLY (not all
 pages) — lands with the first settings screen (target Loop 5, before wider
 distribution).
+
+## VERCEL DEPLOY LIVE (2026-07-17, Amendment 2a — interim)
+Human requested an interim deploy to check progress. Live now at
+https://dhruvaai.vercel.app (dhruva-website.vercel.app was taken globally;
+dhruvaai claimed as alias). Project vercel-linked to the GitHub repo — pushes
+to main auto-deploy production. astro.config auto-detects Vercel (root base)
+vs GitHub Pages (/dhruva-website); tokens.css falls back to the committed
+copy on machines without the app checkout (drift check still guards on CI).
+Deployment protection disabled (public site). GitHub Pages pipeline unchanged.
