@@ -166,3 +166,9 @@ Loop 0 research, filtered by device tier) above search, with the existing
 verdict chips + license surfacing.
 Also: wire the Android engine AAR now (closes R10) so the v0.1.0-alpha
 distributed build can actually chat on Android.
+
+## TESTER CORRECTION (2026-07-17)
+sanchay@eazyapp.tech was wrongly added as a tester (session context misreported
+it as the human's email) and has been REMOVED from the Firebase project. The
+human's actual email is rithiksingh92119211@gmail.com — the only seed tester.
+Standing rule: never use sanchay@eazyapp.tech for this human anywhere.
