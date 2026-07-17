@@ -44,31 +44,44 @@ class _ReasoningBlockState extends State<ReasoningBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedRotation(
-                    turns: _expanded ? 0.25 : 0,
-                    duration: tokens.motion.fast,
-                    curve: tokens.motion.standard,
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: 16,
-                      color: onSurfaceVariant,
+          // mk-reason (mock.css): a quiet tinted pill, not a bare row — the
+          // caret takes the brand's secondary (blue) accent.
+          Material(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.55,
+            ),
+            borderRadius: BorderRadius.circular(tokens.radius.sm),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: tokens.spacing.sm,
+                  vertical: tokens.spacing.xs,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedRotation(
+                      turns: _expanded ? 0.25 : 0,
+                      duration: tokens.motion.fast,
+                      curve: tokens.motion.standard,
+                      child: Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: theme.colorScheme.secondary,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: tokens.spacing.xs),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: onSurfaceVariant,
+                    SizedBox(width: tokens.spacing.xs),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

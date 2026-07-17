@@ -97,11 +97,14 @@ class TrustMark extends StatelessWidget {
     final color = theme.colorScheme.onSurfaceVariant;
     final effectiveStyle = (style ?? theme.textTheme.labelSmall)?.copyWith(
       color: color,
+      fontWeight: FontWeight.w700,
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        DhruvaStar(size: starSize, color: color),
+        // mk-trust: the star carries the brand's gold (primary) accent, the
+        // one bit of color in an otherwise quiet line.
+        DhruvaStar(size: starSize, color: theme.colorScheme.primary),
         SizedBox(width: tokens.spacing.xs),
         Text('Runs 100% on your device', style: effectiveStyle),
       ],
@@ -148,24 +151,42 @@ class _TypingIndicatorState extends State<TypingIndicator>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final color = theme.colorScheme.onSurfaceVariant;
+    final color = theme.colorScheme.primary;
     final curve = tokens.motion.emphasized;
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < 3; i++) ...[
-              if (i > 0) SizedBox(width: tokens.spacing.xs),
-              Opacity(
-                opacity: _pulseOpacity(curve, _controller.value, i),
-                child: DhruvaStar(size: 6, color: color),
-              ),
+    // mk-typing: the pulsing stars live inside a bot-shaped bubble (surface
+    // variant, bottom-left corner tightened to `radius.xs`) so the "thinking"
+    // state reads as an assistant turn taking shape, not loose glyphs.
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.md,
+        vertical: tokens.spacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(tokens.radius.lg),
+          topRight: Radius.circular(tokens.radius.lg),
+          bottomRight: Radius.circular(tokens.radius.lg),
+          bottomLeft: Radius.circular(tokens.radius.xs),
+        ),
+      ),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < 3; i++) ...[
+                if (i > 0) SizedBox(width: tokens.spacing.xs),
+                Opacity(
+                  opacity: _pulseOpacity(curve, _controller.value, i),
+                  child: DhruvaStar(size: 6, color: color),
+                ),
+              ],
             ],
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

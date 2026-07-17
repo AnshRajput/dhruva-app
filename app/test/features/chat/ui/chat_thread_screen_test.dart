@@ -260,7 +260,7 @@ void main() {
       expect(find.text('No response — try regenerating.'), findsOneWidget);
       // The metadata row (relative-time label) still renders, same as any
       // other assistant turn.
-      expect(find.text('now'), findsOneWidget);
+      expect(find.text('just now'), findsOneWidget);
     },
   );
 

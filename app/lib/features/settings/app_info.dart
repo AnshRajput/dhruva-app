@@ -9,7 +9,7 @@
 /// alongside `pubspec.yaml` on release.
 library;
 
-const appVersion = '0.2.0';
+const appVersion = '0.2.1';
 const appBuildNumber = '2';
 
 const githubUrl = 'https://github.com/AnshRajput/dhruva-app';
