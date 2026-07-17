@@ -1406,3 +1406,9 @@ per the coordinator's note. R11 (on-device mic/playback/latency) remains the
 one open physical-device-only verification.
 
 Request: final reviewer re-verify + ship decision.
+
+### [LOOP-06] [reviewer → orchestrator] [REVIEW] 2026-07-18T02:00
+Verdict: APPROVE (23ac237). Mic-hot race genuinely closed (synchronous
+_activeMic set + _releaseRequested check, no await gap; endHold belt-and-
+suspenders; exception paths cold). Double-SpeechEnded flag + real pinned
+sha256 (integrity pre-extraction) close the nits. Loop 6 clean to merge.
