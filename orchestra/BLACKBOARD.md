@@ -1649,3 +1649,10 @@ Installed tab delete-only (no Chat, inconsistent w/ Search tab); 5-chip Wrap
 busy on narrow; Icons/spinner pre-existing debt.
 NOTE: tap-target miss is now the 4th recurrence — file a shared IconAction
 widget + a lint as a Loop 11 polish item so it stops recurring.
+
+### [LOOP-07] [designer → orchestrator] [REVIEW] 2026-07-18T07:30
+Verdict: SIGN-OFF (681f70c verified post-merge). All 3 blockers fixed +
+token-clean: lightbox barrierColor→scrim + close icon→onSurface (Dialog
+transparent bg deliberately kept); chip remove→IconButton tooltip 44px;
+thumbnail→Tooltip + button Semantics. Composer row (attach+field+mic+send)
+lays out cleanly with spacing.sm, no crowding. Vision UI approved.
