@@ -28,7 +28,13 @@ import '../device_info/device_info_service.dart';
 /// The on-device inference engine. `LlamaEngineService` in production;
 /// override with `FakeEngineService` in tests/widget previews.
 final engineServiceProvider = Provider<EngineService>((ref) {
-  final service = LlamaEngineService();
+  // Android ships the native libs inside the AAR (jni/arm64-v8a/libllama.so),
+  // dlopen'd by basename — Android resolves it from the app's lib dir, and its
+  // NEEDED deps (libggml*, libmtmd) alongside. iOS/macOS static-link the
+  // xcframework/dylib into the process, so the worker loads from the process.
+  final service = LlamaEngineService(
+    libraryPath: Platform.isAndroid ? 'libllama.so' : null,
+  );
   ref.onDispose(() {
     // Fire-and-forget: Provider.onDispose can't be async. dispose() itself
     // is defensive (safe on an unloaded engine).
