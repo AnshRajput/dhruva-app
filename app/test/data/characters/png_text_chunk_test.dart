@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io' show ZLibEncoder;
 import 'dart:typed_data';
 
+import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/characters/png_text_chunk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,6 +111,38 @@ void main() {
 
       final png = _pngWithRawChunk('iTXt', itxtData);
       expect(readTextChunk(png, 'chara'), 'itxt-payload');
+    });
+
+    test('FIXED (reviewer, Loop 5): a compressed iTXt chunk that would inflate '
+        'to way past the cap throws ValidationFailure instead of OOM-ing — a '
+        'zlib bomb (~20KB compressed -> 20MB decompressed, ~1000x) in an '
+        'imported PNG is an untrusted-import trust boundary', () {
+      // Highly compressible: 20MB of zeros compresses down to ~20KB, but is
+      // well past the reader's 8MB inflated-size cap — proving the cap
+      // trips during streaming decompression, not after fully materializing
+      // the bomb (which would defeat the point).
+      final bomb = Uint8List(20 * 1024 * 1024);
+      final compressed = ZLibEncoder().convert(bomb);
+      expect(
+        compressed.length,
+        lessThan(100 * 1024),
+        reason: 'sanity check that this really is a small compressed input',
+      );
+
+      final builder = BytesBuilder();
+      builder.add(ascii.encode('chara'));
+      builder.addByte(0); // null after keyword
+      builder.addByte(1); // compression flag: compressed
+      builder.addByte(0); // compression method (0 = zlib)
+      builder.addByte(0); // empty language tag + its null terminator
+      builder.addByte(0); // empty translated keyword + its null terminator
+      builder.add(compressed);
+
+      final png = _pngWithRawChunk('iTXt', builder.toBytes());
+      expect(
+        () => readTextChunk(png, 'chara'),
+        throwsA(isA<ValidationFailure>()),
+      );
     });
   });
 

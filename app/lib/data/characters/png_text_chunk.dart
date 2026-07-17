@@ -10,6 +10,8 @@ import 'dart:convert';
 import 'dart:io' show ZLibDecoder;
 import 'dart:typed_data';
 
+import '../../core/failures/app_failure.dart';
+
 /// The 8-byte PNG file signature every valid file starts with.
 const List<int> pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -168,9 +170,54 @@ String? _readITxt(Uint8List data, String keyword) {
   offset = translatedEnd + 1;
   final textBytes = data.sublist(offset);
   if (compressionFlag == 1) {
-    return utf8.decode(ZLibDecoder().convert(textBytes));
+    return utf8.decode(_inflateBounded(textBytes));
   }
   return utf8.decode(textBytes);
+}
+
+/// A compressed iTXt chunk's declared/compressed size says nothing about
+/// its inflated size — a zlib bomb (a few KB compressed -> gigabytes
+/// decompressed) in an imported PNG is an untrusted-import trust-boundary
+/// crash vector (reviewer finding, Loop 5). A character card's persona/
+/// example dialogues are at most a few KB, so anything past this ceiling is
+/// rejected outright.
+const _maxInflatedTextBytes = 8 * 1024 * 1024;
+
+/// Inflates [compressed] via `ZLibDecoder`'s *streaming* chunked-conversion
+/// API (not `.convert(...)`, which buffers the entire output before
+/// returning) — output arrives in bounded increments as the decoder
+/// produces it, so [_BoundedSink] can abort the moment the running total
+/// crosses [_maxInflatedTextBytes], throwing [ValidationFailure] before the
+/// decoder is ever asked to allocate a buffer sized to the (attacker-
+/// controlled) full inflated length.
+Uint8List _inflateBounded(Uint8List compressed) {
+  final sink = _BoundedSink(_maxInflatedTextBytes);
+  final input = ZLibDecoder().startChunkedConversion(sink);
+  input.add(compressed);
+  input.close();
+  return sink.bytes;
+}
+
+class _BoundedSink implements Sink<List<int>> {
+  final int limit;
+  final BytesBuilder _builder = BytesBuilder(copy: false);
+  int _total = 0;
+
+  _BoundedSink(this.limit);
+
+  Uint8List get bytes => _builder.toBytes();
+
+  @override
+  void add(List<int> chunk) {
+    _total += chunk.length;
+    if (_total > limit) {
+      throw const ValidationFailure('character card image text too large');
+    }
+    _builder.add(chunk);
+  }
+
+  @override
+  void close() {}
 }
 
 /// CRC-32 (ISO-HDLC / zip / PNG's checksum) over [bytes]. Pure Dart,
