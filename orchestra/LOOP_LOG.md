@@ -173,3 +173,31 @@ the right call when a real need doesn't match existing tokens. (3) Reviewer's
 privacy-first lens on a capture feature earned its cost — the second race was
 invisible to functional tests. (4) sherpa macOS codesign self-heal (R11) is a
 dev-env quirk, not a product issue; on-device voice still needs a physical pass.
+
+## UX-HARDENING LOOP (2026-07-18) — Amendments 5+6, shipped v0.2.0+21
+Trigger: human tested distributed alpha on real Android — core broken (can't
+chat, model needs restart to appear, no download feedback, "not usable").
+Method change: unit-test-green was NOT proof; adopted real-component verification.
+Diagnosis (4 parallel agents, orchestra/research/ux/): ROOT CAUSE = installed-
+model providers never invalidated on download-complete → model invisible until
+restart → can't start a chat / no model loads. SECOND root cause (why our first
+hotfix "didn't work" on device): every build shipped as versionCode 1.0.0+1 →
+Android kept the OLD APK on reinstall → user retested stale binaries.
+Fixed + verified with REAL components on macOS: A1 invalidation (real
+DownloadManager completion → model visible w/o restart, proven via real UI
+E2E STEP1-5); real engine streams a real reply (unit test); Chat action carries
+model (was landing in empty chat = "can't chat"); download-on-listing +
+DownloadProgressRing (circular, ≥44px cancel, Semantics) + detail-tile feedback
++ OS notifications w/ progress + delete-on-listing + ranked/mobile/device-tiered
+discovery + clear-all/new-chat refresh + first-run guidance. Version discipline:
+0.2.0 + unique per-build number (git commit count); About shows version.
+Riverpod KEPT (ruling upheld — all 4 diagnoses confirmed correct usage; the bug
+was missing-invalidate, not the tool). make verify green (734 pass, 1 skip).
+Retro: (1) BIGGEST LESSON — same versionCode across builds meant fixes never
+reached the device; a real tester loop REQUIRES a monotonic build number from
+day one. (2) unit tests with fakes read a provider directly and never proved the
+real UI updates — the real DownloadManager→real-screen test caught what fakes
+hid. (3) full-widget E2E can't pump the cross-isolate engine to a reply under
+flutter_test — decompose: real-UI proves the state/visibility chain, real-engine
+unit test proves the reply; device proves on-device inference. (4) OPEN: does
+on-device arm64 inference reply? — awaiting human retest of 0.2.0+21.
