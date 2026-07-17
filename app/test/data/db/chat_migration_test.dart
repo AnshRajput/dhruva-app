@@ -77,7 +77,7 @@ void main() {
       // v2->v3, and v3->v4 branches in one jump (see database.dart's
       // migration doc).
       final v2 = AppDatabase(NativeDatabase(dbFile));
-      expect(v2.schemaVersion, 4);
+      expect(v2.schemaVersion, 5);
 
       final installedRows = await v2.select(v2.installedModels).get();
       expect(installedRows, hasLength(1));
@@ -122,7 +122,7 @@ void main() {
 
   test('a fresh database creates all five tables directly', () async {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 4);
+    expect(db.schemaVersion, 5);
     expect(
       db.allTables.map((t) => t.actualTableName),
       containsAll(<String>[

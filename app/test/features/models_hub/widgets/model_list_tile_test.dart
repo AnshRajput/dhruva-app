@@ -73,7 +73,9 @@ void main() {
       find.byType(CircularProgressIndicator),
     );
     expect(ring.value, closeTo(0.5, 0.001));
-    expect(find.byTooltip('Cancel download'), findsOneWidget);
+    // The ring shows the live percentage and taps-to-cancel.
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.byTooltip('Tap to cancel'), findsOneWidget);
     expect(find.byTooltip('Download'), findsNothing);
   });
 

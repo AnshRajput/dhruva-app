@@ -3095,6 +3095,597 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   }
 }
 
+class $GeneratedImagesTable extends GeneratedImages
+    with TableInfo<$GeneratedImagesTable, GeneratedImage> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GeneratedImagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _promptMeta = const VerificationMeta('prompt');
+  @override
+  late final GeneratedColumn<String> prompt = GeneratedColumn<String>(
+    'prompt',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _negativePromptMeta = const VerificationMeta(
+    'negativePrompt',
+  );
+  @override
+  late final GeneratedColumn<String> negativePrompt = GeneratedColumn<String>(
+    'negative_prompt',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
+  @override
+  late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
+    'file_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _widthMeta = const VerificationMeta('width');
+  @override
+  late final GeneratedColumn<int> width = GeneratedColumn<int>(
+    'width',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _heightMeta = const VerificationMeta('height');
+  @override
+  late final GeneratedColumn<int> height = GeneratedColumn<int>(
+    'height',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stepsMeta = const VerificationMeta('steps');
+  @override
+  late final GeneratedColumn<int> steps = GeneratedColumn<int>(
+    'steps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _seedMeta = const VerificationMeta('seed');
+  @override
+  late final GeneratedColumn<int> seed = GeneratedColumn<int>(
+    'seed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cfgScaleMeta = const VerificationMeta(
+    'cfgScale',
+  );
+  @override
+  late final GeneratedColumn<double> cfgScale = GeneratedColumn<double>(
+    'cfg_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    prompt,
+    negativePrompt,
+    filePath,
+    width,
+    height,
+    steps,
+    seed,
+    cfgScale,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'generated_images';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GeneratedImage> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('prompt')) {
+      context.handle(
+        _promptMeta,
+        prompt.isAcceptableOrUnknown(data['prompt']!, _promptMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_promptMeta);
+    }
+    if (data.containsKey('negative_prompt')) {
+      context.handle(
+        _negativePromptMeta,
+        negativePrompt.isAcceptableOrUnknown(
+          data['negative_prompt']!,
+          _negativePromptMeta,
+        ),
+      );
+    }
+    if (data.containsKey('file_path')) {
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['file_path']!, _filePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filePathMeta);
+    }
+    if (data.containsKey('width')) {
+      context.handle(
+        _widthMeta,
+        width.isAcceptableOrUnknown(data['width']!, _widthMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_widthMeta);
+    }
+    if (data.containsKey('height')) {
+      context.handle(
+        _heightMeta,
+        height.isAcceptableOrUnknown(data['height']!, _heightMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_heightMeta);
+    }
+    if (data.containsKey('steps')) {
+      context.handle(
+        _stepsMeta,
+        steps.isAcceptableOrUnknown(data['steps']!, _stepsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stepsMeta);
+    }
+    if (data.containsKey('seed')) {
+      context.handle(
+        _seedMeta,
+        seed.isAcceptableOrUnknown(data['seed']!, _seedMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_seedMeta);
+    }
+    if (data.containsKey('cfg_scale')) {
+      context.handle(
+        _cfgScaleMeta,
+        cfgScale.isAcceptableOrUnknown(data['cfg_scale']!, _cfgScaleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cfgScaleMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GeneratedImage map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GeneratedImage(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      prompt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prompt'],
+      )!,
+      negativePrompt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}negative_prompt'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_path'],
+      )!,
+      width: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}width'],
+      )!,
+      height: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}height'],
+      )!,
+      steps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}steps'],
+      )!,
+      seed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}seed'],
+      )!,
+      cfgScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cfg_scale'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GeneratedImagesTable createAlias(String alias) {
+    return $GeneratedImagesTable(attachedDatabase, alias);
+  }
+}
+
+class GeneratedImage extends DataClass implements Insertable<GeneratedImage> {
+  final int id;
+  final String prompt;
+  final String negativePrompt;
+  final String filePath;
+  final int width;
+  final int height;
+  final int steps;
+  final int seed;
+  final double cfgScale;
+  final DateTime createdAt;
+  const GeneratedImage({
+    required this.id,
+    required this.prompt,
+    required this.negativePrompt,
+    required this.filePath,
+    required this.width,
+    required this.height,
+    required this.steps,
+    required this.seed,
+    required this.cfgScale,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['prompt'] = Variable<String>(prompt);
+    map['negative_prompt'] = Variable<String>(negativePrompt);
+    map['file_path'] = Variable<String>(filePath);
+    map['width'] = Variable<int>(width);
+    map['height'] = Variable<int>(height);
+    map['steps'] = Variable<int>(steps);
+    map['seed'] = Variable<int>(seed);
+    map['cfg_scale'] = Variable<double>(cfgScale);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  GeneratedImagesCompanion toCompanion(bool nullToAbsent) {
+    return GeneratedImagesCompanion(
+      id: Value(id),
+      prompt: Value(prompt),
+      negativePrompt: Value(negativePrompt),
+      filePath: Value(filePath),
+      width: Value(width),
+      height: Value(height),
+      steps: Value(steps),
+      seed: Value(seed),
+      cfgScale: Value(cfgScale),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory GeneratedImage.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GeneratedImage(
+      id: serializer.fromJson<int>(json['id']),
+      prompt: serializer.fromJson<String>(json['prompt']),
+      negativePrompt: serializer.fromJson<String>(json['negativePrompt']),
+      filePath: serializer.fromJson<String>(json['filePath']),
+      width: serializer.fromJson<int>(json['width']),
+      height: serializer.fromJson<int>(json['height']),
+      steps: serializer.fromJson<int>(json['steps']),
+      seed: serializer.fromJson<int>(json['seed']),
+      cfgScale: serializer.fromJson<double>(json['cfgScale']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'prompt': serializer.toJson<String>(prompt),
+      'negativePrompt': serializer.toJson<String>(negativePrompt),
+      'filePath': serializer.toJson<String>(filePath),
+      'width': serializer.toJson<int>(width),
+      'height': serializer.toJson<int>(height),
+      'steps': serializer.toJson<int>(steps),
+      'seed': serializer.toJson<int>(seed),
+      'cfgScale': serializer.toJson<double>(cfgScale),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  GeneratedImage copyWith({
+    int? id,
+    String? prompt,
+    String? negativePrompt,
+    String? filePath,
+    int? width,
+    int? height,
+    int? steps,
+    int? seed,
+    double? cfgScale,
+    DateTime? createdAt,
+  }) => GeneratedImage(
+    id: id ?? this.id,
+    prompt: prompt ?? this.prompt,
+    negativePrompt: negativePrompt ?? this.negativePrompt,
+    filePath: filePath ?? this.filePath,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    steps: steps ?? this.steps,
+    seed: seed ?? this.seed,
+    cfgScale: cfgScale ?? this.cfgScale,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  GeneratedImage copyWithCompanion(GeneratedImagesCompanion data) {
+    return GeneratedImage(
+      id: data.id.present ? data.id.value : this.id,
+      prompt: data.prompt.present ? data.prompt.value : this.prompt,
+      negativePrompt: data.negativePrompt.present
+          ? data.negativePrompt.value
+          : this.negativePrompt,
+      filePath: data.filePath.present ? data.filePath.value : this.filePath,
+      width: data.width.present ? data.width.value : this.width,
+      height: data.height.present ? data.height.value : this.height,
+      steps: data.steps.present ? data.steps.value : this.steps,
+      seed: data.seed.present ? data.seed.value : this.seed,
+      cfgScale: data.cfgScale.present ? data.cfgScale.value : this.cfgScale,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GeneratedImage(')
+          ..write('id: $id, ')
+          ..write('prompt: $prompt, ')
+          ..write('negativePrompt: $negativePrompt, ')
+          ..write('filePath: $filePath, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('steps: $steps, ')
+          ..write('seed: $seed, ')
+          ..write('cfgScale: $cfgScale, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    prompt,
+    negativePrompt,
+    filePath,
+    width,
+    height,
+    steps,
+    seed,
+    cfgScale,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GeneratedImage &&
+          other.id == this.id &&
+          other.prompt == this.prompt &&
+          other.negativePrompt == this.negativePrompt &&
+          other.filePath == this.filePath &&
+          other.width == this.width &&
+          other.height == this.height &&
+          other.steps == this.steps &&
+          other.seed == this.seed &&
+          other.cfgScale == this.cfgScale &&
+          other.createdAt == this.createdAt);
+}
+
+class GeneratedImagesCompanion extends UpdateCompanion<GeneratedImage> {
+  final Value<int> id;
+  final Value<String> prompt;
+  final Value<String> negativePrompt;
+  final Value<String> filePath;
+  final Value<int> width;
+  final Value<int> height;
+  final Value<int> steps;
+  final Value<int> seed;
+  final Value<double> cfgScale;
+  final Value<DateTime> createdAt;
+  const GeneratedImagesCompanion({
+    this.id = const Value.absent(),
+    this.prompt = const Value.absent(),
+    this.negativePrompt = const Value.absent(),
+    this.filePath = const Value.absent(),
+    this.width = const Value.absent(),
+    this.height = const Value.absent(),
+    this.steps = const Value.absent(),
+    this.seed = const Value.absent(),
+    this.cfgScale = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  GeneratedImagesCompanion.insert({
+    this.id = const Value.absent(),
+    required String prompt,
+    this.negativePrompt = const Value.absent(),
+    required String filePath,
+    required int width,
+    required int height,
+    required int steps,
+    required int seed,
+    required double cfgScale,
+    required DateTime createdAt,
+  }) : prompt = Value(prompt),
+       filePath = Value(filePath),
+       width = Value(width),
+       height = Value(height),
+       steps = Value(steps),
+       seed = Value(seed),
+       cfgScale = Value(cfgScale),
+       createdAt = Value(createdAt);
+  static Insertable<GeneratedImage> custom({
+    Expression<int>? id,
+    Expression<String>? prompt,
+    Expression<String>? negativePrompt,
+    Expression<String>? filePath,
+    Expression<int>? width,
+    Expression<int>? height,
+    Expression<int>? steps,
+    Expression<int>? seed,
+    Expression<double>? cfgScale,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (prompt != null) 'prompt': prompt,
+      if (negativePrompt != null) 'negative_prompt': negativePrompt,
+      if (filePath != null) 'file_path': filePath,
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+      if (steps != null) 'steps': steps,
+      if (seed != null) 'seed': seed,
+      if (cfgScale != null) 'cfg_scale': cfgScale,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  GeneratedImagesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? prompt,
+    Value<String>? negativePrompt,
+    Value<String>? filePath,
+    Value<int>? width,
+    Value<int>? height,
+    Value<int>? steps,
+    Value<int>? seed,
+    Value<double>? cfgScale,
+    Value<DateTime>? createdAt,
+  }) {
+    return GeneratedImagesCompanion(
+      id: id ?? this.id,
+      prompt: prompt ?? this.prompt,
+      negativePrompt: negativePrompt ?? this.negativePrompt,
+      filePath: filePath ?? this.filePath,
+      width: width ?? this.width,
+      height: height ?? this.height,
+      steps: steps ?? this.steps,
+      seed: seed ?? this.seed,
+      cfgScale: cfgScale ?? this.cfgScale,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (prompt.present) {
+      map['prompt'] = Variable<String>(prompt.value);
+    }
+    if (negativePrompt.present) {
+      map['negative_prompt'] = Variable<String>(negativePrompt.value);
+    }
+    if (filePath.present) {
+      map['file_path'] = Variable<String>(filePath.value);
+    }
+    if (width.present) {
+      map['width'] = Variable<int>(width.value);
+    }
+    if (height.present) {
+      map['height'] = Variable<int>(height.value);
+    }
+    if (steps.present) {
+      map['steps'] = Variable<int>(steps.value);
+    }
+    if (seed.present) {
+      map['seed'] = Variable<int>(seed.value);
+    }
+    if (cfgScale.present) {
+      map['cfg_scale'] = Variable<double>(cfgScale.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GeneratedImagesCompanion(')
+          ..write('id: $id, ')
+          ..write('prompt: $prompt, ')
+          ..write('negativePrompt: $negativePrompt, ')
+          ..write('filePath: $filePath, ')
+          ..write('width: $width, ')
+          ..write('height: $height, ')
+          ..write('steps: $steps, ')
+          ..write('seed: $seed, ')
+          ..write('cfgScale: $cfgScale, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   late final $InstalledModelsTable installedModels = $InstalledModelsTable(
@@ -3104,6 +3695,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CharactersTable characters = $CharactersTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
+  late final $GeneratedImagesTable generatedImages = $GeneratedImagesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3114,6 +3708,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     characters,
     conversations,
     messages,
+    generatedImages,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([

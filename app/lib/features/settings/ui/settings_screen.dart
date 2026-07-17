@@ -28,6 +28,8 @@ class SettingsScreen extends StatelessWidget {
         children: const [
           _SectionHeader('Storage'),
           _StorageTile(),
+          _SectionHeader('Imagine'),
+          _ImagineTile(),
           _SectionHeader('Data'),
           _ClearHistoryTile(),
           _SectionHeader('About'),
@@ -84,6 +86,26 @@ class _StorageTile extends ConsumerWidget {
       },
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/models'),
+    );
+  }
+}
+
+/// Loop 8 T2 (D1): the discoverable-but-gated entry point into
+/// `features/imagine` — `ImagineScreen` itself does the RAM-floor check
+/// (`/imagine` route, `core/router/app_router.dart`) before showing the
+/// studio, so this tile always navigates; it's the destination that decides
+/// whether the device qualifies.
+class _ImagineTile extends StatelessWidget {
+  const _ImagineTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.auto_awesome_outlined),
+      title: const Text('Imagine'),
+      subtitle: const Text('Generate images on-device with Stable Diffusion'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push('/imagine'),
     );
   }
 }

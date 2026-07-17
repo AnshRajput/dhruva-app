@@ -73,7 +73,7 @@ void main() {
     // Reopen with the real (v4) AppDatabase over the same file — this
     // must trigger the real onUpgrade(3, 4).
     final v4 = AppDatabase(NativeDatabase(dbFile));
-    expect(v4.schemaVersion, 4);
+    expect(v4.schemaVersion, 5);
 
     final rows = await v4.select(v4.installedModels).get();
     expect(rows, hasLength(1));

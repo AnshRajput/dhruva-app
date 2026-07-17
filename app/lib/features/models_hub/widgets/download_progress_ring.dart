@@ -25,30 +25,43 @@ class DownloadProgressRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final clamped = progress.clamp(0.0, 1.0);
     final indeterminate = clamped == 0;
     final pct = (clamped * 100).round();
     return Semantics(
-      label: 'Downloading',
+      button: true,
+      label: 'Cancel download',
       value: indeterminate ? 'in progress' : '$pct%',
-      child: SizedBox(
-        width: 48,
-        height: 48,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CircularProgressIndicator(
-              value: indeterminate ? null : clamped,
-              strokeWidth: 2,
+      child: Tooltip(
+        message: 'Tap to cancel',
+        // The whole 48×48 ring is the cancel target (≥44px). The centre shows
+        // the live percentage so progress is visible on screen, not just to a
+        // screen reader.
+        child: InkWell(
+          onTap: onCancel,
+          customBorder: const CircleBorder(),
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircularProgressIndicator(
+                  value: indeterminate ? null : clamped,
+                  strokeWidth: 3,
+                ),
+                if (!indeterminate)
+                  Text(
+                    '$pct%',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+              ],
             ),
-            // Default IconButton min size is 48×48 (kMinInteractiveDimension) —
-            // do NOT shrink it with zero padding/constraints; that was the bug.
-            IconButton(
-              icon: const Icon(Icons.close, size: 16),
-              tooltip: 'Cancel download',
-              onPressed: onCancel,
-            ),
-          ],
+          ),
         ),
       ),
     );

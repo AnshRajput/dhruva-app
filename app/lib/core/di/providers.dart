@@ -22,6 +22,7 @@ import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
 import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
+import '../../data/imagine/generated_image_repository.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
 import '../../imagine_engine/image_gen_service.dart';
@@ -156,6 +157,34 @@ final modelsDirectoryProvider = FutureProvider<Directory>((ref) async {
   final modelsDir = Directory('${supportDir.path}/models');
   await modelsDir.create(recursive: true);
   return modelsDir;
+});
+
+/// Directory user-imported Stable Diffusion checkpoints live in (Loop 8 T2):
+/// `<application support dir>/models/sd/`. No download/catalog pipeline
+/// exists yet (T1 only built the engine) — `features/imagine`'s "no model"
+/// state has the user import a checkpoint file directly, same `file_selector`
+/// affordance `StorageController.importLocal` already uses for local GGUFs.
+final sdModelsDirectoryProvider = FutureProvider<Directory>((ref) async {
+  final supportDir = await getApplicationSupportDirectory();
+  final sdDir = Directory('${supportDir.path}/models/sd');
+  await sdDir.create(recursive: true);
+  return sdDir;
+});
+
+/// Directory generated PNGs are saved to (Loop 8 T2): `<application support
+/// dir>/generated_images/`. The `GeneratedImages` drift row (see
+/// `generatedImageRepositoryProvider`) points at a file here.
+final generatedImagesDirectoryProvider = FutureProvider<Directory>((ref) async {
+  final supportDir = await getApplicationSupportDirectory();
+  final dir = Directory('${supportDir.path}/generated_images');
+  await dir.create(recursive: true);
+  return dir;
+});
+
+final generatedImageRepositoryProvider = Provider<GeneratedImageRepository>((
+  ref,
+) {
+  return GeneratedImageRepository(db: ref.watch(appDatabaseProvider));
 });
 
 final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {

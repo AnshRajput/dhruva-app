@@ -191,15 +191,41 @@ class Characters extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// One on-device Stable Diffusion generation (Loop 8 T2), saved so the
+/// Imagine gallery survives an app restart. The PNG itself lives on disk
+/// (`filePath`, under the app's `generated_images/` directory — see
+/// `core/di/providers.dart`'s `generatedImagesDirectoryProvider`); this row
+/// is just the metadata + pointer, same "file on disk, row in drift" split
+/// `InstalledModels` uses.
+class GeneratedImages extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get prompt => text()();
+  TextColumn get negativePrompt => text().withDefault(const Constant(''))();
+  TextColumn get filePath => text()();
+  IntColumn get width => integer()();
+  IntColumn get height => integer()();
+  IntColumn get steps => integer()();
+  IntColumn get seed => integer()();
+  RealColumn get cfgScale => real()();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 @DriftDatabase(
-  tables: [InstalledModels, Folders, Conversations, Messages, Characters],
+  tables: [
+    InstalledModels,
+    Folders,
+    Conversations,
+    Messages,
+    Characters,
+    GeneratedImages,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -233,6 +259,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await m.addColumn(installedModels, installedModels.mmprojPath);
         await m.addColumn(installedModels, installedModels.isVision);
+      }
+      // v4 -> v5 (Loop 8): Imagine gallery.
+      if (from < 5) {
+        await m.createTable(generatedImages);
       }
     },
     beforeOpen: (details) async {

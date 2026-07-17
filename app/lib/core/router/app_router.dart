@@ -17,6 +17,7 @@ import '../../features/characters/ui/characters_gallery_screen.dart';
 import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
+import '../../features/imagine/ui/imagine_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
@@ -137,6 +138,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/about',
       builder: (context, state) => const AboutScreen(),
+    ),
+    // Loop 8 T2: discoverable from the Settings tile (see
+    // `settings_screen.dart`), not a 5th bottom-nav tab — pushed as a
+    // sibling of this shell, same as `/settings/about` and
+    // `/voice/handsfree` above.
+    GoRoute(
+      path: '/imagine',
+      builder: (context, state) => const ImagineScreen(),
     ),
     // Loop 6, T2/D3: `HandsFreeScreen` (`features/voice`) never imports
     // `features/chat` (ADR-002) — `ChatThreadScreen._openHandsFree` builds
