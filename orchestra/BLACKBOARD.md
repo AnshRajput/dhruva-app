@@ -1679,3 +1679,26 @@ correctly-built + tested FFI binding flagged needs-on-device-verification and
 keep moving. Gate (full loop, once feasible): image generated on ≥1 platform
 build; flagged OFF below the RAM floor; steps/seed/size controls; enhance-prompt
 via loaded LLM; gallery; designer SIGN-OFF + QA + reviewer; ship.
+
+### [UX-HARDENING] [orchestrator] [STATUS] 2026-07-18T09:00 — ON-DEVICE VERIFIED
+Drove the FULL flow on a real arm64 Android emulator (API 36) with the 0.2.0
+debug build. EVERYTHING the user reported broken WORKS on the new build:
+- App launches; 4-tab nav; Settings→About shows Version 0.2.0 + credit row.
+- Models: device-tiered "Recommended for your device" (both starter models
+  correctly "Not recommended" on the low-RAM emulator), mobile-friendly ranking,
+  download button ON THE LISTING.
+- Tapped download → button became a CIRCULAR PROGRESS RING + cancel; OS
+  notification permission requested (Phase B); download completed to
+  files/models/SmolLM2-135M-Instruct-Q4_K_M.gguf (default-quant auto-picked).
+- Model appeared in Installed WITHOUT restart (A1 fix, real) + "ready — start
+  chatting" snackbar (A5) + delete button on the row.
+- New chat opened with the model LOADED in the app bar (Chat-carries-model).
+- Sent a message → engine loaded → REAL reply STREAMED at ~1.0 tok/s with a
+  live tok/s meter + TTS button. ON-DEVICE INFERENCE CONFIRMED WORKING (R10/R11
+  residual CLOSED for arm64). Slow on emulator CPU (no GPU accel); real phones
+  faster.
+ROOT CAUSE fully confirmed: the user was on the OLD 1.0.0 build the whole time
+(same versionCode blocked reinstall). The 0.2.0 fixes all work.
+BUG found during the drive (minor, real): chat app bar overflows by 3px
+("RenderFlex OVERFLOWED BY 3") when the tok/s meter shows next to the model
+chip — cosmetic, fix next.
