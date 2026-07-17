@@ -482,3 +482,83 @@ emailed). Honest notes state the engine .so isn't wired on Android yet (R8) —
 this build validates the pipeline, not on-device inference. PR #4 lands the
 script. Loop 13 remainder: signed release keystore + CI token (H3), tag-
 triggered CI lane, iOS ad-hoc (H4).
+
+### [LOOP-04] [flutter-core → qa-tester] [HANDOFF] 2026-07-17T15:20
+T4 (chat feature UI) complete on branch loop/04-chat, commit c5b86e2. Built
+against T1-T3's surface only (no data/, engine_bindings/, or core/theme
+internals touched): `features/chat/state/` (ChatController — one
+AsyncNotifier per `ChatRouteArgs{conversationId, initialModelId}`, owns the
+stream subscription, a `Timer.periodic(100ms)` flush loop batching
+`EngineToken` deltas into `ChatRepository.updateStreamingMessage`, live
+trailing-1s-window tok/s, model load via `EngineService`+`StorageManager`
+with `touchLastUsed`; ConversationListController; `think_tag_parser.dart`
+— pure `splitThinkContent`/`safeThinkPrefix`, an 8-char holdback so a
+`</think>` split across two token deltas at a flush boundary is never
+misclassified, tolerant of a never-closing `<think>`), `features/chat/ui/`
+(ConversationListScreen, ChatThreadScreen, sampling settings sheet, model
+picker sheet), `features/chat/widgets/` (MessageBubble, Composer,
+ReasoningBlock, ChatErrorCard, brand-motif star painter for the trust
+mark/typing indicator/empty states, ModelChip+tok/s ticker).
+Routes: `/chat` (list, now app home) and `/chat/:id` (thread, `:id` may be
+literal `new` for a draft — no db row until the first message, resolved
+`ChatRouteArgs.conversationId` inside `sendMessage` without remounting the
+controller mid-stream); `/models` moved to the second tab. `core/router/
+app_router.dart` now a `StatefulShellRoute.indexedStack` behind
+`AppShell` (`core/router/app_shell.dart`, `NavigationBar` Chat/Models) —
+chat-spec.md names no nav shell, so this is the Loop-4 brief's documented
+fallback, flagging per "flag anything the spec left ambiguous."
+Markdown: `flutter_markdown_plus` (BSD-3, active fork of the now-
+discontinued flutter_markdown) over `gpt_markdown`/`markdown_widget` —
+its `MarkdownStyleSheet` maps 1:1 onto chat-spec.md §2.2's per-element
+TextTheme table and its `builders` map lets `pre` be swapped for the
+spec's own code block (language label + copy-to-checkmark). Export:
+`share_plus` (first-party federated plugin). Deviation flagged: Phosphor
+icons named throughout the spec were NOT added — `phosphor_flutter` fails
+static analysis outright at this Dart/Flutter version (`PhosphorIconData
+extends IconData`, now a `final class`); the maintained fork
+(`phosphoricons_flutter`) is 55 days old with 9 likes, a materially
+riskier dependency than Material Icons for a UI-polish concern. Used
+Material Icons throughout, and a hand-painted `DhruvaStar` CustomPainter
+(4-point motif) for the brand-critical spots (trust mark, typing
+indicator, empty states, model-picker selection) where a generic icon
+would violate `iconography.avoid`.
+Think-tag handling: raw streamed text is buffered per-turn; each flush
+recomputes `splitThinkContent` over a holdback-safe prefix of the buffer
+(never mid-tag) and pushes only the incremental delta since the last
+push (append-only, matches `updateStreamingMessage`'s SQL semantics). An
+unclosed `<think>` is tolerated per the Loop-4 brief's explicit fallback
+(chat-spec.md doesn't cover it): the rest of the message is reasoning
+until either the tag closes or generation ends, no duration is ever
+recorded for it, and `reasoningOpen` stays true.
+MVP smoke (real engine, real SmolLM2, this machine):
+`test/features/chat/state/chat_controller_real_engine_test.dart` (skips
+without `.dev-native/`, ran here) — user asked "What is the capital of
+France? Answer in one short sentence.", model answered "The capital of
+France is Paris, with its iconic Eiffel Tower and world-famous Louvre
+Museum." through the real `ChatController`+`LlamaEngineService`, not
+`FakeEngineService`.
+Tests: 41 new files' worth folded into the suite — controller unit tests
+over `FakeEngineService` (stream→batch→finalize incl. proof of >1
+intermediate flush, cancel mid-stream, all seven `EngineFailure` types →
+typed `errorKind`+status, think-tag incl. unclosed and a tag split
+mid-flush, regenerate/edit lineage, model switch), widget tests for
+every screen/empty/error state, the sampling sheet's commit-time
+validation, and the conversation-tile menu actions. 412/412 green,
+floor-scope coverage 78% (>=70%), `flutter analyze --fatal-infos` and
+`dart format --set-exit-if-changed` both clean.
+debug_chat deleted: `features/debug_chat/`, its `/debug-chat` route, its
+CI coverage exclusion (`.github/workflows/ci.yml`), the app-bar button
+that opened it, and every stale doc-comment reference (`main.dart`,
+`core/di/providers.dart`, `models_hub_screen.dart`) — grepped clean.
+Spec deviations beyond Phosphor (both documented in-file): (1) editing a
+draft conversation's first message doesn't rewrite the browser-visible
+`/chat/new` URL to `/chat/:id` after persisting — remounting the screen
+under the real id would orphan the in-flight stream subscription; the
+conversation is still correctly persisted and reachable from the list.
+(2) the composer's search-debounce and the flush-cadence constant are
+literals, not `DhruvaTokens.motion.*` lookups — chat-spec.md §6.2/§3.2
+explicitly say to reuse the number for both (a debounce and a budget,
+not an animation).
+Request: adversarial pass — hostile paste into the composer, rapid
+send-during-load races, folder/search edge cases, sampling-sheet
+out-of-range typed entry, regenerate/edit under a mid-flight generation.
