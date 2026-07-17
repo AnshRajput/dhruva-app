@@ -119,6 +119,17 @@ void main() {
         throwsA(isA<NetworkUnknownFailure>()),
       );
     });
+
+    test('empty results array parses to an empty list, no crash', () async {
+      final client = HfApiClient(
+        client: MockClient((request) async => http.Response('[]', 200)),
+      );
+
+      final result = await client.searchGgufModels(query: 'no-such-model-xyz');
+
+      expect(result.items, isEmpty);
+      expect(result.nextCursor, isNull);
+    });
   });
 
   group('HfApiClient.getRepoFiles', () {
@@ -191,6 +202,48 @@ void main() {
         ),
       );
     });
+
+    test(
+      'an lfs.oid of the wrong length is treated as absent, not misread as sha256 '
+      '(attack #7: hostile tree entries)',
+      () async {
+        final client = HfApiClient(
+          client: MockClient(
+            (request) async => http.Response(
+              jsonEncode([
+                {
+                  'type': 'file',
+                  'path': 'weird-Q4_K_M.gguf',
+                  'size': 100,
+                  'lfs': {'oid': 'not-a-real-sha256'},
+                },
+              ]),
+              200,
+            ),
+          ),
+        );
+        final files = await client.getRepoFiles('x/y');
+        expect(files.single.sha256, isNull);
+      },
+    );
+
+    test(
+      'a tree entry missing "path" entirely does not crash the walk',
+      () async {
+        final client = HfApiClient(
+          client: MockClient(
+            (request) async => http.Response(
+              jsonEncode([
+                {'type': 'file', 'size': 100},
+              ]),
+              200,
+            ),
+          ),
+        );
+        final files = await client.getRepoFiles('x/y');
+        expect(files.single.path, '');
+      },
+    );
   });
 
   group('HfApiClient.getModelLicenseInfo', () {
@@ -257,6 +310,45 @@ void main() {
         'https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/'
         'Qwen2.5-1.5B-Instruct-Q4_K_M.gguf',
       );
+    });
+
+    test(
+      'a file path with URL-hostile characters (spaces, unicode) round-trips '
+      'through percent-encoding (attack #7)',
+      () {
+        final client = HfApiClient();
+        final url = client.resolveDownloadUrl(
+          'org/repo name',
+          'sub dir/模型 Q4_K_M.gguf',
+        );
+        // The encoded URL must be parseable and must decode back to the
+        // exact same path segments — no silent corruption/truncation.
+        final rebuilt = Uri.parse(url.toString());
+        expect(rebuilt.pathSegments, [
+          'org',
+          'repo name',
+          'resolve',
+          'main',
+          'sub dir',
+          '模型 Q4_K_M.gguf',
+        ]);
+      },
+    );
+
+    test('a normal org/repo id with its expected single slash is preserved as '
+        'two path segments, not collapsed or double-encoded', () {
+      final client = HfApiClient();
+      final url = client.resolveDownloadUrl(
+        'meta-llama/Llama-3.2-1B',
+        'model.gguf',
+      );
+      expect(Uri.parse(url.toString()).pathSegments, [
+        'meta-llama',
+        'Llama-3.2-1B',
+        'resolve',
+        'main',
+        'model.gguf',
+      ]);
     });
   });
 

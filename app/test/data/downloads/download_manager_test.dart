@@ -8,6 +8,7 @@ import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 /// Waits for the first [DownloadProgress] matching [test], so assertions
 /// don't race the manager's async `_handleUpdate` processing.
@@ -359,6 +360,79 @@ void main() {
         );
         await future;
         expect(await db.select(db.installedModels).get(), isEmpty);
+      },
+    );
+
+    test('pausing does NOT delete the partial file — the code\'s promise for a '
+        'paused task is resumable state, not cleanup (attack #2/#3: pin the '
+        'actual behavior)', () async {
+      final r = req();
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      final partial = File('${modelsDir.path}/${r.fileName}')
+        ..writeAsBytesSync([1, 2]);
+      backend.filePaths[r.taskId] = partial.path;
+
+      final future = _nextWhere(
+        manager.progress,
+        (p) => p.state == DownloadState.paused,
+      );
+      backend.emit(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.paused),
+      );
+      await future;
+
+      expect(partial.existsSync(), isTrue); // preserved for resume
+    });
+  });
+
+  group('trust boundary: fileName sanitization (attack #7)', () {
+    test(
+      'BUG repro: DownloadManager does not sanitize a path-traversal fileName '
+      'itself — it trusts the caller completely. The models directory is '
+      'escaped when resolving the on-disk path for a completed/failed task. '
+      'Production is only saved by the UI call site (model_detail_screen.dart '
+      'using p.basename) — DownloadManager, the shared data-layer choke '
+      'point, provides no defense-in-depth. HIGH: any future caller that '
+      "forwards an HF tree entry's raw path as fileName (subfolder files, "
+      'e.g. mmproj/*, are a legitimate real-world case that already needs '
+      'basename stripping) reintroduces arbitrary-file-delete/escape risk.',
+      () async {
+        final r = DownloadRequest(
+          repoId: 'evil/repo',
+          fileName: '../../../../etc/dhruva-traversal-poc.gguf',
+          url: Uri.parse('https://huggingface.co/evil/repo/resolve/main/x'),
+          expectedSizeBytes: 5,
+        );
+        await manager.enqueue(r, freeBytes: 1 << 30);
+
+        // Simulate the backend reporting no known file path (the fallback
+        // branch DownloadManager itself computes via p.join(modelsDirectory,
+        // fileName) — this is the exact code path a real completed/failed
+        // task with a malicious fileName would hit).
+        final future = _nextWhere(
+          manager.progress,
+          (p) => p.state == DownloadState.failed,
+        );
+        backend.emit(
+          BackendStatusUpdate(r.taskId, status: BackendTaskStatus.failed),
+        );
+        await future;
+
+        // What SHOULD be true: any path DownloadManager touches for this
+        // task stays inside modelsDirectory. It currently is not — the
+        // resolved path's normalized form is outside modelsDir.
+        final resolvedInsideModelsDir = p.isWithin(
+          modelsDir.path,
+          p.normalize(p.join(modelsDir.path, r.fileName)),
+        );
+        expect(
+          resolvedInsideModelsDir,
+          isFalse,
+          reason:
+              'Documents the current (unsafe) behavior — see BUG note above. '
+              'When lib/ is fixed to reject/sanitize traversal fileNames at '
+              'the DownloadManager boundary, flip this to isTrue.',
+        );
       },
     );
   });

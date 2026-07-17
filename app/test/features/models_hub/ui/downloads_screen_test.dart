@@ -145,4 +145,50 @@ void main() {
     expect(find.text(request.fileName), findsNothing);
     expect(find.text('No active downloads.'), findsOneWidget);
   });
+
+  testWidgets(
+    'GAP (attack #2): a failed download offers no retry affordance, only a '
+    'Cancel/dismiss button — tapping it just drops the row, it does not '
+    're-enqueue. The Loop 3 gate asks for a retry affordance on a failed '
+    'download; the only way to actually retry today is to navigate back to '
+    'the model detail screen and press Download again, which is not exposed '
+    'from here. Not gate-blocking (offline-mid-download IS handled: typed '
+    'failed state, partial file cleanup, error message shown) but the UX '
+    'promise of "retry affordance" is not met by this screen — file as a '
+    'MEDIUM finding.',
+    (tester) async {
+      await pump(tester);
+      await settleAfter(
+        tester,
+        () => manager.enqueue(request, freeBytes: 1 << 30),
+      );
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(
+          request.taskId,
+          status: BackendTaskStatus.failed,
+          errorMessage: 'connection lost',
+        ),
+      );
+
+      expect(find.text(request.fileName), findsOneWidget);
+      expect(find.textContaining('failed'), findsOneWidget);
+      expect(find.text('connection lost'), findsOneWidget);
+
+      // No retry affordance anywhere on the failed row.
+      expect(find.text('Retry'), findsNothing);
+      expect(find.byIcon(Icons.refresh), findsNothing);
+      // The only action offered is Cancel, and pause/resume icons are both
+      // absent for a terminal `failed` state.
+      expect(find.byTooltip('Cancel'), findsOneWidget);
+      expect(find.byTooltip('Pause'), findsNothing);
+      expect(find.byTooltip('Resume'), findsNothing);
+
+      // Tapping the only available action (Cancel) just dismisses the row —
+      // it does not re-enqueue the download.
+      await settleAfter(tester, () => tester.tap(find.byTooltip('Cancel')));
+      expect(find.text(request.fileName), findsNothing);
+      expect(backend.enqueuedRequests, hasLength(1)); // no re-enqueue happened
+    },
+  );
 }

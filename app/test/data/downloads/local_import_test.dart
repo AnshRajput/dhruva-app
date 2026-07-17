@@ -111,6 +111,32 @@ void main() {
     );
   });
 
+  test(
+    'importing the same file twice upserts in place — no crash, no duplicate row '
+    '(attack #8: defined upsert behavior)',
+    () async {
+      final source = ggufFile('Repeated-Q4_K_M.gguf');
+
+      final first = await importLocalGguf(
+        sourceFile: source,
+        modelsDirectory: modelsDir,
+        db: db,
+        repoId: 'local/Repeated-Q4_K_M',
+      );
+      final second = await importLocalGguf(
+        sourceFile: source,
+        modelsDirectory: modelsDir,
+        db: db,
+        repoId: 'local/Repeated-Q4_K_M',
+      );
+
+      expect(second.sizeBytes, first.sizeBytes);
+      final rows = await db.select(db.installedModels).get();
+      expect(rows, hasLength(1)); // not duplicated
+      expect(File(second.localPath).existsSync(), isTrue);
+    },
+  );
+
   test('creates the models directory if it does not exist yet', () async {
     final freshDir = Directory('${modelsDir.path}/nested/models');
     final source = ggufFile('m.gguf');
