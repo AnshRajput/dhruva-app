@@ -172,3 +172,10 @@ sanchay@eazyapp.tech was wrongly added as a tester (session context misreported
 it as the human's email) and has been REMOVED from the Firebase project. The
 human's actual email is rithiksingh92119211@gmail.com — the only seed tester.
 Standing rule: never use sanchay@eazyapp.tech for this human anywhere.
+
+## FLUTTER VERSION PIN (2026-07-17, Loop 4 gate)
+Context: CI ran "channel: stable" (3.44.6) while local dev is 3.41.2; newer
+Flutter removed CupertinoPageTransitionsBuilder → all three CI jobs red on a
+diff that is fully green locally.
+Decision: CI pins flutter-version 3.41.2 (== local). Flutter upgrades are
+their own deliberate PR (bump local + CI together, fix API churn there).
