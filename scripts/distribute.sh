@@ -30,7 +30,7 @@ NOTES="${1:-Dev build from $BRANCH @ $SHA — $(git log -1 --pretty=%s)}"
 # cleanly reinstall over the installed APK, so the tester keeps running the OLD
 # binary — the real reason a shipped fix "still fails on device".
 BUILD_NUMBER="$(git rev-list --count HEAD)"
-BUILD_NAME="$(grep -m1 '^version:' app/pubspec.yaml | sed 's/version: *//; s/+.*//')"
+BUILD_NAME="$(grep -m1 '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"
 echo "==> version $BUILD_NAME+$BUILD_NUMBER — flutter build apk --release --target-platform android-arm64 ($BRANCH @ $SHA)"
 flutter build apk --release --target-platform android-arm64 \
   --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER"
