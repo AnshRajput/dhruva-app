@@ -1721,3 +1721,8 @@ txt2img on macOS proven end-to-end through the abstraction; RAM gate + one-model
 -at-a-time (unload LLM). Then T2 flutter-core: Imagine studio UI (prompt, steps/
 seed/size, enhance-prompt via loaded LLM, gallery, save/share), gated OFF below
 RAM floor. Designer BLOCKING gate as always.
+
+### [LOOP-08] [orchestrator] [STATUS] 2026-07-18T11:00
+Branch cleanup done: loop/08-imagine now = image engine (T1) + v0.2.1 +
+UI-align + rail fix, merged + green (829 tests). Stale branches deleted, extra
+worktree removed. Proceeding to T2: Imagine studio UI.
