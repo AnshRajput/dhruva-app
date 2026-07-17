@@ -325,3 +325,29 @@ Verdict: APPROVE (8900ad5). rehydrate() flush-free → _active rebuilt →
 flushMissedUpdates() after; interface matches the real invariant; race test
 proven non-vacuous via inversion-hang check. 246/246. Only carry-forward:
 deferred subfolder-basename collision (documented in code + backlog).
+
+### [LOOP-04] [orchestrator → all] [STATUS] 2026-07-17T12:20
+Loop 4 PLAN — Chat experience (MVP-closer). Branch loop/04-chat. Design-led
+per SCOPE AMENDMENT 1b: designer's theme + spec land FIRST; designer sign-off
+is BLOCKING at the gate.
+Tasks: (T1) designer: core/theme from design-tokens.json (ThemeData both
+modes, BUNDLED fonts — google_fonts runtime fetch is a Rule-5 violation, use
+asset fonts), plus a written design spec for chat screens (layout, streaming
+presentation, tok/s ticker, "runs 100% on your device" trust mark, reasoning-
+token collapse, empty/error states); (T2) flutter-platform: data/chat — drift
+schema (conversations, messages, folders), repositories, search (FTS if cheap
+else LIKE), export Markdown+JSON; (T3) native-engine: Loop-2 carry-forward nit
+(widen worker bootstrap try around ChatTemplate.fromModel/LlamaSession, ready
+timeout) + expose what chat needs (context length in EngineLoadParams verify,
+tok/s from token timestamps if not present); (T4) flutter-core: chat feature
+UI on T1-T3 (streaming markdown+code render, tok/s meter, history/folders/
+search, system-prompt editor, sampling settings sheet, regenerate + edit,
+<think> collapsible, export share, model picker from installed list w/
+touchLastUsed); (T5) QA adversarial; (T6) reviewer + designer BLOCKING
+sign-off; (T7) merge, tag v0.1.0-alpha, delete debug_chat + its coverage
+exclusion.
+Exit gate: [G1] MVP journey works: pick installed model → chat offline with
+streaming (verified on macOS dev build with the real engine) [G2] 60fps
+scroll profile note + no per-token jank pattern (batched updates) [G3]
+designer sign-off posted (BLOCKING) [G4] QA PASS + reviewer APPROVE [G5] CI
+green on merged PR [G6] v0.1.0-alpha tagged.
