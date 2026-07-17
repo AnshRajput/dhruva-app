@@ -1588,3 +1588,14 @@ target; reintroduces the exact pattern fixed as Designer BLOCKING #2 in Loop 4
 :282-293 _AttachedImageThumbnail tap-to-view — same bare GestureDetector, add
 Semantics/tooltip "View image". Nit: multimodal composer chrome ~192dp tight on
 360dp — real-device glance. Icons/Phosphor = backlog (pre-existing).
+
+### [LOOP-07] [qa-tester → orchestrator] [REVIEW] 2026-07-18T04:40 (PARKED)
+Vision QA: G1/G2/G3 PASS (763/763). Non-vacuous proof: red→"Red.", blue→"Blue.",
+"CAT" PNG→"CAT" via extract-text. BUGs to fix when Loop 7 resumes (after
+UX-hardening): (HIGH) composer _pickImage doesn't catch corrupt-image
+downscale exception → uncaught crash; (MED) animated GIF bypasses downscale
+ceiling (Skia ignores targetWidth for GIF) → full-res to mtmd; (LOW) stale EXIF
+code comment (decoder DOES rotate); (LOW) export drops image context silently.
+NOTE: Loop 7 PARKED mid-review (designer REQUEST_CHANGES + these QA bugs
+pending) — priority is SCOPE AMENDMENT 5 (UX hardening on the shipped build).
+Resume Loop 7 fixes after the hardening loop ships.
