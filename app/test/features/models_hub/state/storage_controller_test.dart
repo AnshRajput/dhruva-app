@@ -79,6 +79,48 @@ void main() {
     expect(state.actionError, isNull);
   });
 
+  test('G2 picker-pollution guard: a sherpa-voice/ row never appears in the '
+      'GGUF storage list or its totalBytes (this tab is GGUF-only by '
+      'design — the Voice tab and Settings\' separate storage summary are '
+      'where voice-model bytes are accounted for)', () async {
+    await db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'r/a',
+            fileName: 'a.gguf',
+            sizeBytes: 100,
+            localPath: '${tempDir.path}/a.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+    await db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'sherpa-voice/whisper-tiny',
+            fileName: 'sherpa-onnx-whisper-tiny.tar.bz2',
+            sizeBytes: 111000000,
+            localPath: '${tempDir.path}/whisper.tar.bz2',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+
+    final state = await container.read(storageControllerProvider.future);
+
+    expect(state.installed, hasLength(1));
+    expect(state.installed.single.repoId, 'r/a');
+    expect(
+      state.installed.any((m) => m.repoId.startsWith('sherpa-voice/')),
+      isFalse,
+    );
+    expect(
+      state.totalBytes,
+      100,
+      reason: 'total is derived from the already-filtered list',
+    );
+  });
+
   test('delete() removes the row and clears from the list', () async {
     final file = File('${tempDir.path}/a.gguf')..writeAsBytesSync([1, 2, 3]);
     final id = await db

@@ -96,7 +96,9 @@ void main() {
     expect(state.activeMessageId, isNull);
   });
 
-  test('playing a second message stops the first', () async {
+  test('playing a second message stops the first (pinned: sequential, not '
+      'concurrent — a second tap always cuts the first before starting '
+      'the new one)', () async {
     installAllVoiceModels(tmp);
     final notifier = container.read(voicePlaybackControllerProvider.notifier);
     await notifier.toggle(1, 'first message');
@@ -109,5 +111,28 @@ void main() {
     final state = container.read(voicePlaybackControllerProvider);
     expect(state.isPlaying(2), isTrue);
     expect(state.isPlaying(1), isFalse);
+    // Only one message is ever "active" at a time in the state model —
+    // there is no concurrent-playback representation.
+    expect(state.activeMessageId, 2);
   });
+
+  test(
+    'a very long message synthesizes + plays without truncation or crash',
+    () async {
+      installAllVoiceModels(tmp);
+      final notifier = container.read(voicePlaybackControllerProvider.notifier);
+      final longText = List.filled(2000, 'word').join(' '); // ~10k chars
+      await notifier.toggle(1, longText);
+      await pump();
+
+      expect(voice.synthesizeCount, 1);
+      expect(voice.lastSynthesizedText, longText);
+      expect(voice.lastSynthesizedText!.length, longText.length);
+      expect(sink.playCount, 1);
+      expect(
+        container.read(voicePlaybackControllerProvider).isPlaying(1),
+        isTrue,
+      );
+    },
+  );
 }

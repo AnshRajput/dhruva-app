@@ -123,4 +123,81 @@ void main() {
       VoiceInputPhase.idle,
     );
   });
+
+  test('release before any speech -> empty transcript, no crash', () async {
+    installAllVoiceModels(tmp);
+    final notifier = container.read(voiceInputControllerProvider.notifier);
+    await notifier.startHold();
+
+    // Release immediately — no audio pushed at all.
+    final finalText = await notifier.endHold();
+
+    expect(finalText, isEmpty);
+    expect(mic.stopCount, 1);
+    expect(
+      container.read(voiceInputControllerProvider).phase,
+      VoiceInputPhase.idle,
+    );
+  });
+
+  test('very long hold: many segments accumulate into liveText without '
+      'truncation or crash', () async {
+    installAllVoiceModels(tmp);
+    final notifier = container.read(voiceInputControllerProvider.notifier);
+    await notifier.startHold();
+
+    for (var i = 0; i < 25; i++) {
+      mic.pushSpeech();
+      mic.pushSilence();
+      await pump(10);
+    }
+    await pump();
+
+    final finalText = await notifier.endHold();
+    final expected = List.filled(25, 'hello world').join(' ');
+    expect(finalText, expected);
+    expect(
+      container.read(voiceInputControllerProvider).phase,
+      VoiceInputPhase.idle,
+    );
+  });
+
+  test(
+    'BUG (QA loop 6, severity: high — privacy/resource leak): disposing '
+    'the controller mid-hold (e.g. the composer is navigated away from '
+    'while the mic button is still pressed — `voiceInputControllerProvider` '
+    'is `.autoDispose`, so this happens on ordinary back-navigation, not '
+    'just a crash) never stops the mic. `VoiceInputController.build()`\'s '
+    '`ref.onDispose` (voice_input_controller.dart) only cancels `_sub` '
+    '(the transcribeStream subscription) — unlike '
+    '`HandsFreeController.build()`, which keeps `_activeMic` and calls '
+    '`_activeMic?.stop()` on dispose, this controller keeps no such '
+    'reference and never calls `MicSource.stop()` except from `endHold()`. '
+    'Cancelling the downstream subscription does not stop the upstream '
+    '`record` package capture (a real OS mic session) — only `stop()` '
+    'does that. Net effect: navigating away while holding the mic button '
+    'leaves the microphone recording indefinitely with no UI affordance '
+    'left to stop it. This test currently FAILS (red) — that IS the filed '
+    'bug; fix by mirroring HandsFreeController\'s `_activeMic` pattern.',
+    () async {
+      installAllVoiceModels(tmp);
+      final notifier = container.read(voiceInputControllerProvider.notifier);
+      await notifier.startHold();
+      expect(mic.startCount, 1);
+      mic.pushSpeech(); // mid-utterance, nowhere near endHold()
+
+      // Simulate the widget (and its `ref.watch`) disappearing — the
+      // autoDispose provider is torn down with no explicit endHold().
+      container.dispose();
+      await pump();
+
+      expect(
+        mic.stopCount,
+        1,
+        reason:
+            'the mic must be stopped on teardown, not just the Dart-side '
+            'stream subscription',
+      );
+    },
+  );
 }
