@@ -999,3 +999,31 @@ checked; CRC32 correct/pinned), migration correct + tested both jump paths,
 persona snapshot at creation is the right call, privacy clean, ADR-002 held.
 One nit being closed pre-merge: iTXt zlib inflate unbounded (zlib bomb OOM on
 import) — capping. ponytail-deferred CRC-skip agreed non-blocking.
+
+### [LOOP-06] [orchestrator → all] [STATUS] 2026-07-17T22:50
+Loop 6 PLAN — Voice. Branch loop/06-voice. Designer gate BLOCKING.
+Package check (orchestrator-verified): sherpa_onnx 1.13.4 (pub, 2026-07-07) —
+STT + TTS + Silero VAD in ONE package. Chosen as the voice backbone (covers
+the orchestration story per Loop 0 research: voice differentiator is VAD/turn-
+taking/interruption, not raw STT/TTS). whisper_ggml 2.4.0 exists as an STT
+fallback if sherpa ASR quality disappoints — do NOT add both unless needed.
+Goal: hold-to-talk STT (auto lang incl. Hindi/Hinglish), TTS with per-character
+voice, hands-free conversation mode (VAD turn-taking + barge-in interruption).
+Tasks: (T1) native-engine/platform: engine/voice via sherpa_onnx — VoiceService
+abstraction (transcribe(stream)→partial+final, synthesize(text,voice)→audio,
+VAD segmenter); mic capture (record pkg) + playback (audioplayers/just_audio);
+voice models flow through the EXISTING Model Manager (add a voice-model catalog
+entry type: ASR + TTS + VAD model bundles from sherpa's HF releases). (T2)
+flutter-core: voice UI — hold-to-talk button in composer (partial transcript
+live), TTS playback on assistant messages (per-character voice from Loop 5
+default), hands-free mode screen (listening/thinking/speaking states, barge-in
+cancels TTS + starts listening). (T3) starter voice models in catalog +
+device-tier guidance. (T4) QA: recorded/synthetic-audio integration test of the
+STT→chat→TTS loop; VAD turn-taking; interruption; offline proof. (T5) designer
+BLOCKING + reviewer. (T6) merge + ship.
+Exit gate: [G1] voice loop works in an integration test (audio in → transcript
+→ chat → TTS out) [G2] voice models downloadable via Model Manager [G3] hands-
+free turn-taking + barge-in demonstrated in test [G4] designer SIGN-OFF + QA
+PASS + reviewer APPROVE [G5] CI green [G6] shipped. RISK: real mic/audio can't
+be device-verified here → integration test uses injected audio buffers; log
+on-device voice as needs-verification (folds into R1/R9).
