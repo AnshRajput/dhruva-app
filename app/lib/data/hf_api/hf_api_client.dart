@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io' show SocketException;
 
 import 'package:http/http.dart' as http;
@@ -203,10 +204,20 @@ final class HfApiClient {
     }
   }
 
+  /// Ceiling for any single metadata request. Without it, a hung connection
+  /// (misconfigured network, captive portal, missing permission) spins the UI
+  /// forever instead of reaching the typed error state.
+  static const requestTimeout = Duration(seconds: 15);
+
   Future<http.Response> _get(Uri uri) async {
     final http.Response response;
     try {
-      response = await _client.get(uri);
+      response = await _client.get(uri).timeout(requestTimeout);
+    } on TimeoutException catch (e) {
+      throw NetworkOfflineFailure(
+        'request timed out after ${requestTimeout.inSeconds}s',
+        cause: e,
+      );
     } on SocketException catch (e) {
       throw NetworkOfflineFailure('no network connection', cause: e);
     } on http.ClientException catch (e) {
