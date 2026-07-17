@@ -66,6 +66,13 @@ dependencies:
   freezed_annotation: ^3.1.0
   go_router: ^17.3.0
   http: ^1.6.0
+  # Loop 7 (vision): gallery + camera capture for the chat attach button.
+  # First-party (flutter/packages federated plugin), BSD-3 — same license
+  # family as share_plus/path_provider/url_launcher already in this file.
+  # `features/vision/image_attach_source.dart` is the only file that imports
+  # it (ADR-002: `features/chat` depends on the `ImageAttacher` interface,
+  # same discipline as `voice/mic_audio_source.dart`'s `MicSource`).
+  image_picker: ^1.2.3
   json_annotation: ^4.9.0
   # Inference engine (ADR-001). PINNED to an exact commit — the pub.dev
   # release (0.2.2) is stale and must NOT be used. See orchestra/DECISIONS.md

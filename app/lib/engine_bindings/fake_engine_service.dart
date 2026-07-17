@@ -49,6 +49,12 @@ final class FakeEngineService implements EngineService {
   /// Test hook: number of successful [load] calls.
   int loadCount = 0;
 
+  /// Test hook: the `params` passed to the most recent [load] call — Loop 7
+  /// gate, lets a test assert `mmprojPath` actually reached the engine
+  /// (`ChatController.ensureModelLoaded`'s load path), not just that the
+  /// controller's own state object carries it.
+  EngineLoadParams? lastLoadParams;
+
   /// Test hook: number of [unload] calls.
   int unloadCount = 0;
 
@@ -76,6 +82,7 @@ final class FakeEngineService implements EngineService {
     String modelPath, {
     EngineLoadParams params = const EngineLoadParams(),
   }) async {
+    lastLoadParams = params;
     if (_disposed) {
       throw const EngineDisposedFailure('engine has been disposed');
     }

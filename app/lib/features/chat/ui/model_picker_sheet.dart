@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
@@ -80,6 +81,32 @@ class _ModelPickerSheet extends ConsumerWidget {
                 child: Center(child: CircularProgressIndicator()),
               ),
             },
+            // Loop 7: "no vision model installed but the user wants vision"
+            // (LOOP-07 PLAN) — a discoverable path to the model library,
+            // where vision quants are browsable/downloadable (`features/
+            // models_hub`'s catalog, Loop-7 T2), not a dedicated vision rail
+            // built in `features/chat`'s own scope.
+            if (modelsAsync case AsyncData(
+              :final value,
+            ) when value.every((m) => !m.isVision))
+              Padding(
+                padding: EdgeInsets.only(top: tokens.spacing.xs),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    context.push('/models');
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+                    child: Text(
+                      'Want to chat about photos? Browse vision models →',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.secondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

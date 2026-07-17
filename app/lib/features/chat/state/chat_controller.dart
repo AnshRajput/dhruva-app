@@ -19,6 +19,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
@@ -104,6 +105,22 @@ final class ChatThreadState {
   final bool modelLoading;
   final EngineFailure? modelLoadError;
 
+  /// True once the engine confirms the loaded model's projector initialised
+  /// (`EngineService.isMultimodal`, Loop 7 gate G3) — drives the composer's
+  /// attach-button gate. False before the first successful [ensureModelLoaded]
+  /// and for any text-only model.
+  final bool isMultimodal;
+
+  /// Image bytes attached to a user turn, keyed by that message's id — same
+  /// "not persisted, session-only" precedent as [reasoningDurationMs]: no
+  /// `Messages` schema column carries image data this loop, so a message's
+  /// attached image is lost across an app restart (upgrade path: a drift
+  /// migration adding an image column, if a future loop needs it to
+  /// survive). Populated by [sendMessage], read by `chat_thread_screen.dart`
+  /// to render the thumbnail in [MessageBubble] and by [_historyTurns] to
+  /// carry the image into the engine's [ChatTurn].
+  final Map<int, Uint8List> attachedImages;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -122,6 +139,8 @@ final class ChatThreadState {
     this.reasoningDurationMs = const {},
     this.modelLoading = false,
     this.modelLoadError,
+    this.isMultimodal = false,
+    this.attachedImages = const {},
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -158,6 +177,8 @@ final class ChatThreadState {
     bool? modelLoading,
     EngineFailure? modelLoadError,
     bool clearModelLoadError = false,
+    bool? isMultimodal,
+    Map<int, Uint8List>? attachedImages,
   }) {
     return ChatThreadState(
       conversationId: conversationId ?? this.conversationId,
@@ -181,6 +202,8 @@ final class ChatThreadState {
       modelLoadError: clearModelLoadError
           ? null
           : (modelLoadError ?? this.modelLoadError),
+      isMultimodal: isMultimodal ?? this.isMultimodal,
+      attachedImages: attachedImages ?? this.attachedImages,
     );
   }
 }
@@ -371,6 +394,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     }
     final engine = ref.read(engineServiceProvider);
     if (ref.read(loadedModelIdProvider) == current.modelId && engine.isLoaded) {
+      // Already the loaded model (e.g. a second thread reusing it) — still
+      // sync this controller's own isMultimodal flag, since a fresh
+      // ChatController.build() never touched the engine to learn it.
+      if (current.isMultimodal != engine.isMultimodal) {
+        state = AsyncData(current.copyWith(isMultimodal: engine.isMultimodal));
+      }
       return;
     }
     state = AsyncData(
@@ -397,6 +426,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         model.localPath,
         params: EngineLoadParams(
           contextSize: current.samplingParams.contextLength,
+          // Loop 7 T1 HANDOFF: a vision model's row carries the paired
+          // mmproj projector's path once downloaded (null for a text-only
+          // model, or a vision model whose projector hasn't landed yet —
+          // `InstalledModelInfo.needsProjector`). Passing it here is what
+          // flips `EngineService.isMultimodal` on after a successful load.
+          mmprojPath: model.mmprojPath,
         ),
       );
       await ref.read(storageManagerProvider).touchLastUsed(model.id);
@@ -405,12 +440,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         state.value!.copyWith(
           modelLoading: false,
           model: model,
+          isMultimodal: engine.isMultimodal,
           clearModelLoadError: true,
         ),
       );
     } on EngineFailure catch (e) {
       state = AsyncData(
-        state.value!.copyWith(modelLoading: false, modelLoadError: e),
+        state.value!.copyWith(
+          modelLoading: false,
+          modelLoadError: e,
+          isMultimodal: false,
+        ),
       );
     }
   }
@@ -436,6 +476,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         modelId: model.id,
         model: model,
         clearModelLoadError: true,
+        // Placeholder until ensureModelLoaded confirms the new model's real
+        // capability — avoids a one-frame stale "attach button visible" flash
+        // carried over from the previous model.
+        isMultimodal: false,
       ),
     );
     await ensureModelLoaded();
@@ -468,9 +512,20 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   // ---- Sending / regenerating / editing -----------------------------------
 
-  Future<void> sendMessage(String text) async {
+  /// [imageBytes] (Loop 7): an already-downscaled image attached to this
+  /// turn (`composer.dart` does the downscale before calling this). Allowed
+  /// alongside empty [text] — "just a photo" is a valid send. The image is
+  /// always recorded (so it still renders in the bubble even in an odd edge
+  /// case), but [_runAssistantTurn] only forwards it to the engine when
+  /// `isMultimodal` is confirmed true AFTER that turn's own
+  /// [ensureModelLoaded] call — never based on this stale pre-load state,
+  /// which is why the guard doesn't live here: the composer's attach button
+  /// being gated on `isMultimodal` should already prevent an image reaching
+  /// a text-only model, but a stale in-flight image from a just-swapped
+  /// model must not get sent to the engine either.
+  Future<void> sendMessage(String text, {Uint8List? imageBytes}) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty && imageBytes == null) return;
     final current = state.value;
     if (current == null || current.isGenerating) return;
 
@@ -502,6 +557,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       state.value!.copyWith(
         title: refreshedTitle,
         messages: [...state.value!.messages, userMsg],
+        attachedImages: imageBytes == null
+            ? state.value!.attachedImages
+            : {...state.value!.attachedImages, userMsgId: imageBytes},
       ),
     );
 
@@ -658,7 +716,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _reasoningStartedAt = null;
     _tokenArrivals.clear();
 
-    final turns = _historyTurns(historyMessages, current.systemPrompt);
+    // Guard: only forward images to the engine once THIS turn's own
+    // ensureModelLoaded confirms isMultimodal — never based on stale state
+    // from before the load (the composer's attach button being gated on
+    // isMultimodal should already prevent this, but a stale in-flight image
+    // from a just-swapped model must not reach a text-only engine).
+    final turns = _historyTurns(
+      historyMessages,
+      current.systemPrompt,
+      current.isMultimodal ? current.attachedImages : const {},
+    );
     final samplingParams = current.samplingParams;
     final engineParams = EngineGenerateParams(
       maxTokens: samplingParams.maxTokens,
@@ -908,16 +975,26 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     return convo?.title ?? fallback;
   }
 
+  /// [attachedImages]: Loop 7's session-only image map (see
+  /// [ChatThreadState.attachedImages]) — a user turn whose message id has an
+  /// entry gets that image attached to its [ChatTurn], the only way an image
+  /// reaches the engine (`EngineService.generate`'s `ChatTurn.images`).
   List<ChatTurn> _historyTurns(
     List<MessageInfo> messages,
     String systemPrompt,
+    Map<int, Uint8List> attachedImages,
   ) {
     return [
       if (systemPrompt.trim().isNotEmpty) ChatTurn.system(systemPrompt),
       for (final m in messages)
         if (m.status != MessageStatus.error)
           switch (m.role) {
-            MessageRole.user => ChatTurn.user(m.content),
+            MessageRole.user => ChatTurn.user(
+              m.content,
+              images: attachedImages[m.id] == null
+                  ? const []
+                  : [attachedImages[m.id]!],
+            ),
             MessageRole.assistant => ChatTurn.assistant(m.content),
             MessageRole.system => ChatTurn.system(m.content),
           },

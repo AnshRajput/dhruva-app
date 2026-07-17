@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../vision/widgets/image_lightbox.dart';
 import '../../voice/widgets/tts_button.dart';
 import '../state/message_info_x.dart';
 import 'reasoning_block.dart';
@@ -26,6 +27,15 @@ class MessageBubble extends StatelessWidget {
   final bool isStreaming;
   final int? reasoningDurationMs;
   final bool reasoningOpen;
+
+  /// Loop 7: the image attached to this turn (`ChatThreadState.
+  /// attachedImages`), rendered as a thumbnail above the bubble's text —
+  /// tap opens it full-size (`image_lightbox.dart`).
+  final Uint8List? attachedImage;
+
+  /// Loop 7 D3: true when this assistant message answered the "Extract
+  /// text" preset — shows a one-tap copy-to-clipboard affordance.
+  final bool isExtractResult;
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
 
@@ -35,6 +45,8 @@ class MessageBubble extends StatelessWidget {
     this.isStreaming = false,
     this.reasoningDurationMs,
     this.reasoningOpen = false,
+    this.attachedImage,
+    this.isExtractResult = false,
     this.onRegenerate,
     this.onEdit,
   });
@@ -85,6 +97,10 @@ class MessageBubble extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (attachedImage != null) ...[
+                    _AttachedImageThumbnail(imageBytes: attachedImage!),
+                    SizedBox(height: tokens.spacing.sm),
+                  ],
                   if ((message.reasoningContent ?? '').isNotEmpty)
                     ReasoningBlock(
                       reasoning: message.reasoningContent!,
@@ -118,7 +134,11 @@ class MessageBubble extends StatelessWidget {
             ),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
-              _MetadataRow(message: message, onRegenerate: onRegenerate),
+              _MetadataRow(
+                message: message,
+                onRegenerate: onRegenerate,
+                showCopy: isExtractResult && message.content.isNotEmpty,
+              ),
             ],
             if (isUser && onEdit != null) ...[
               SizedBox(height: tokens.spacing.xs),
@@ -166,13 +186,38 @@ class _SystemBanner extends StatelessWidget {
   }
 }
 
-class _MetadataRow extends StatelessWidget {
+class _MetadataRow extends StatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
-  const _MetadataRow({required this.message, this.onRegenerate});
+
+  /// Loop 7 D3: shows the "Extract text" preset's copy-to-clipboard button.
+  final bool showCopy;
+
+  const _MetadataRow({
+    required this.message,
+    this.onRegenerate,
+    this.showCopy = false,
+  });
+
+  @override
+  State<_MetadataRow> createState() => _MetadataRowState();
+}
+
+class _MetadataRowState extends State<_MetadataRow> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.message.content));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (mounted) setState(() => _copied = false);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final message = widget.message;
+    final onRegenerate = widget.onRegenerate;
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final color = theme.colorScheme.onSurfaceVariant;
@@ -190,6 +235,21 @@ class _MetadataRow extends StatelessWidget {
           SizedBox(width: tokens.spacing.xs),
           TtsButton(messageId: message.id, text: message.content),
         ],
+        if (widget.showCopy) ...[
+          SizedBox(width: tokens.spacing.xs),
+          IconButton(
+            onPressed: _copy,
+            tooltip: _copied ? 'Copied' : 'Copy text',
+            icon: Icon(
+              _copied ? Icons.check : Icons.copy,
+              size: 16,
+              color: _copied ? tokens.success : color,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
         if (onRegenerate != null) ...[
           SizedBox(width: tokens.spacing.xs),
           // Designer BLOCKING #2: a bare InkWell+Icon here was a ~16px hit
@@ -206,6 +266,29 @@ class _MetadataRow extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Loop 7: the image attached to a turn, rendered as a bounded thumbnail —
+/// tap opens it full-size via [showImageLightbox].
+class _AttachedImageThumbnail extends StatelessWidget {
+  final Uint8List imageBytes;
+  const _AttachedImageThumbnail({required this.imageBytes});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    return GestureDetector(
+      key: const Key('attached-image-thumbnail'),
+      onTap: () => showImageLightbox(context, imageBytes),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(tokens.radius.sm),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 200, maxWidth: 240),
+          child: Image.memory(imageBytes, fit: BoxFit.cover),
+        ),
+      ),
     );
   }
 }

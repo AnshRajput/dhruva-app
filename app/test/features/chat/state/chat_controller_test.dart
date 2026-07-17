@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
@@ -39,6 +40,28 @@ void main() {
             sizeBytes: 100,
             localPath: '/tmp/dhruva-test-model.gguf',
             downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+  }
+
+  // Loop 7: a vision-capable installed row — mmprojPath set, same shape
+  // Loop-7 T2's pairing flow leaves on `installed_models` once a projector
+  // has landed (`InstalledModelInfo.needsProjector` == false).
+  Future<int> insertVisionModel({
+    String repoId = 'ggml-org/Some-Vision-Model-GGUF',
+    String mmprojPath = '/tmp/dhruva-test-mmproj.gguf',
+  }) {
+    return db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: repoId,
+            fileName: 'vision-model.gguf',
+            sizeBytes: 100,
+            localPath: '/tmp/dhruva-test-vision-model.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+            mmprojPath: Value(mmprojPath),
+            isVision: const Value(true),
           ),
         );
   }
@@ -941,5 +964,150 @@ void main() {
             'creation) but is worth pinning explicitly.',
       );
     });
+  });
+
+  group('Loop 7: vision', () {
+    test(
+      'load path carries the projector: mmprojPath reaches EngineLoadParams, '
+      'isMultimodal state flips on once the engine confirms it (G3 wiring)',
+      () async {
+        final modelId = await insertVisionModel(
+          mmprojPath: '/tmp/dhruva-test-mmproj.gguf',
+        );
+        final engine = FakeEngineService(multimodal: true);
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+        await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        await notifier.ensureModelLoaded();
+
+        expect(
+          engine.lastLoadParams?.mmprojPath,
+          '/tmp/dhruva-test-mmproj.gguf',
+        );
+        final state = container.read(chatControllerProvider(args)).value!;
+        expect(state.isMultimodal, isTrue);
+      },
+    );
+
+    test(
+      'a text-only model never sets mmprojPath, isMultimodal stays false',
+      () async {
+        final modelId = await insertModel();
+        final engine = FakeEngineService();
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+        await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        await notifier.ensureModelLoaded();
+
+        expect(engine.lastLoadParams?.mmprojPath, isNull);
+        final state = container.read(chatControllerProvider(args)).value!;
+        expect(state.isMultimodal, isFalse);
+      },
+    );
+
+    test('D2: sendMessage with imageBytes builds a ChatTurn carrying the '
+        "image, and the engine's grounded vision answer lands as the "
+        'assistant reply', () async {
+      final modelId = await insertVisionModel();
+      final engine = FakeEngineService(
+        multimodal: true,
+        visionTokens: const ['I ', 'see ', 'red', '.'],
+      );
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      final imageBytes = Uint8List.fromList([1, 2, 3, 4]);
+      await notifier.sendMessage('What color is this?', imageBytes: imageBytes);
+
+      expect(engine.lastImageCount, 1);
+      final userTurn = engine.lastMessages!.firstWhere(
+        (t) => t.role == EngineRole.user,
+      );
+      expect(userTurn.images, [imageBytes]);
+
+      final state = container.read(chatControllerProvider(args)).value!;
+      final assistant = state.messages.last;
+      expect(assistant.content, 'I see red.');
+      expect(state.attachedImages[state.messages.first.id], imageBytes);
+    });
+
+    test('sending with only an image (no text) is a valid turn', () async {
+      final modelId = await insertVisionModel();
+      final engine = FakeEngineService(multimodal: true);
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      await notifier.sendMessage('', imageBytes: Uint8List.fromList([9]));
+
+      final state = container.read(chatControllerProvider(args)).value!;
+      expect(state.messages, hasLength(2));
+      expect(state.messages.first.content, isEmpty);
+    });
+
+    test('guard: an image attached against a non-multimodal (text-only) model '
+        "never reaches the engine's generate() call — dropped there, even "
+        'though the bubble still has it to render (composer.dart hiding the '
+        'attach button for this case is the primary defense; this is the '
+        'belt-and-suspenders backstop)', () async {
+      final modelId = await insertModel(); // text-only, no mmprojPath
+      final engine = FakeEngineService(); // multimodal: false (default)
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      await notifier.sendMessage(
+        'describe this',
+        imageBytes: Uint8List.fromList([1, 2, 3]),
+      );
+
+      expect(engine.lastImageCount, 0);
+      final sentMessages = engine.lastMessages!;
+      expect(sentMessages.every((t) => t.images.isEmpty), isTrue);
+    });
+
+    test(
+      "regenerate keeps the original turn's image attached (attachedImages "
+      'is keyed by message id, not overwritten by the new assistant turn)',
+      () async {
+        final modelId = await insertVisionModel();
+        final engine = FakeEngineService(multimodal: true);
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+        await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        final imageBytes = Uint8List.fromList([5, 5, 5]);
+        await notifier.sendMessage('what is this', imageBytes: imageBytes);
+        final assistantId = container
+            .read(chatControllerProvider(args))
+            .value!
+            .messages
+            .last
+            .id;
+
+        await notifier.regenerate(assistantId);
+
+        expect(engine.lastImageCount, 1);
+        final userTurn = engine.lastMessages!.firstWhere(
+          (t) => t.role == EngineRole.user,
+        );
+        expect(userTurn.images, [imageBytes]);
+      },
+    );
   });
 }

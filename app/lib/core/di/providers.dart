@@ -24,6 +24,7 @@ import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
+import '../../vision/image_attach_source.dart';
 import '../../voice/mic_audio_source.dart';
 import '../../voice/sherpa_voice_service.dart';
 import '../../voice/voice_model_catalog.dart';
@@ -74,6 +75,13 @@ final audioSinkProvider = Provider<AudioSink>((ref) {
   final sink = VoicePlayer();
   ref.onDispose(() => unawaited(sink.dispose()));
   return sink;
+});
+
+/// Photo library + camera capture for the chat attach button (Loop 7):
+/// `SystemImageAttacher` in production; override with `FakeImageAttacher` in
+/// tests/previews (same seam as [micSourceProvider]).
+final imageAttacherProvider = Provider<ImageAttacher>((ref) {
+  return SystemImageAttacher();
 });
 
 /// Resolves + extracts downloaded voice-model bundles under `models/voice/`.

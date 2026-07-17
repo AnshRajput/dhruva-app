@@ -15,6 +15,7 @@ import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/message_info_x.dart';
+import '../state/vision_presets.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
@@ -228,12 +229,16 @@ class _ThreadScaffold extends ConsumerWidget {
                             (state.modelLoadError != null ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i < visible.length) {
-                            final message = visible[i];
                             return Padding(
                               padding: EdgeInsets.only(
                                 bottom: tokens.spacing.xs,
                               ),
-                              child: _buildMessageItem(context, ref, message),
+                              child: _buildMessageItem(
+                                context,
+                                ref,
+                                visible,
+                                i,
+                              ),
                             );
                           }
                           var index = i - visible.length;
@@ -301,9 +306,10 @@ class _ThreadScaffold extends ConsumerWidget {
           if (state.model != null)
             Composer(
               isGenerating: state.isGenerating,
-              onSend: (text) {
+              isMultimodal: state.isMultimodal,
+              onSend: (text, imageBytes) {
                 onScrollToBottom();
-                controller.sendMessage(text);
+                controller.sendMessage(text, imageBytes: imageBytes);
               },
               onCancel: controller.cancel,
               onOpenSettings: () => showSamplingSettingsSheet(context, args),
@@ -316,8 +322,10 @@ class _ThreadScaffold extends ConsumerWidget {
   Widget _buildMessageItem(
     BuildContext context,
     WidgetRef ref,
-    MessageInfo message,
+    List<MessageInfo> visible,
+    int index,
   ) {
+    final message = visible[index];
     if (message.role == MessageRole.assistant &&
         message.status == MessageStatus.error) {
       return ChatErrorCard(
@@ -333,6 +341,17 @@ class _ThreadScaffold extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final canAct = !state.isGenerating;
+    // Loop 7 D3: the "Extract text" quick action's reply gets a copy button
+    // — detected structurally (the preceding user turn used the exact
+    // preset prompt with an image attached) rather than a separate persisted
+    // flag, since `attachedImages` (ChatThreadState doc) is already the
+    // session-only source of truth for "this turn had an image".
+    final precedingUser = index > 0 ? visible[index - 1] : null;
+    final isExtractResult =
+        message.role == MessageRole.assistant &&
+        precedingUser != null &&
+        precedingUser.content == extractTextPrompt &&
+        state.attachedImages.containsKey(precedingUser.id);
     return MessageBubble(
       message: message,
       isStreaming: isStreamingMessage,
@@ -340,6 +359,8 @@ class _ThreadScaffold extends ConsumerWidget {
       reasoningOpen:
           isStreamingMessage &&
           !state.reasoningDurationMs.containsKey(message.id),
+      attachedImage: state.attachedImages[message.id],
+      isExtractResult: isExtractResult,
       onRegenerate: message.role == MessageRole.assistant && canAct
           ? () => controller.regenerate(message.id)
           : null,
