@@ -1412,3 +1412,28 @@ Verdict: APPROVE (23ac237). Mic-hot race genuinely closed (synchronous
 _activeMic set + _releaseRequested check, no await gap; endHold belt-and-
 suspenders; exception paths cold). Double-SpeechEnded flag + real pinned
 sha256 (integrity pre-extraction) close the nits. Loop 6 clean to merge.
+
+### [LOOP-07] [orchestrator → all] [STATUS] 2026-07-18T02:30
+Loop 7 PLAN — Vision (image analysis). Branch loop/07-vision. Designer BLOCKING.
+Verified: llama_cpp_dart exposes mtmd (lib/src/multimodal/mtmd_bitmap, mtmd_
+chunks, media.dart) — the reason we picked it (ADR-001). Pairing convention
+confirmed on HF: vision model + mmproj-<name> projector live in the SAME repo
+(SmolVLM-500M: 416MB model + 103MB mmproj Q8; SmolVLM2-2.2B: 1061MB + 565MB).
+Goal: attach photos/screenshots to any chat; camera capture; multimodal GGUF +
+auto-paired mmproj; photo Q&A, screenshot explanation, text extraction w/ copy.
+Tasks: (T1) native-engine: extend EngineService for multimodal — load a vision
+model WITH its mmproj projector, generate(messages incl. image) via libmtmd;
+prove image→question→answer on macOS with SmolVLM-500M (real round-trip).
+(T2) flutter-platform: Model Manager marks vision models (has mmproj sibling)
++ AUTO-PAIRS the projector on download (download both, associate in drift); a
+vision-model catalog subset; device-tier for the model+projector combined size.
+(T3) flutter-core: chat attach flow — attach button (image_picker: gallery +
+camera capture) shown ONLY for vision-capable loaded models (non-vision hide
+it, gate G), image in the message bubble, one-tap text-extract → copy. (T4)
+QA: image→Q→A integration test w/ small vision model; auto-pairing; non-vision
+hides attach; corrupt/huge image; EXIF/orientation. (T5) designer BLOCKING +
+reviewer. (T6) merge + ship.
+Exit gate: [G1] image→question→answer round trip passes integration test w/ a
+small vision model (real on macOS) [G2] mmproj pairing automatic [G3] non-vision
+models cleanly hide the attach button [G4] designer SIGN-OFF + QA PASS +
+reviewer APPROVE [G5] CI green [G6] shipped.
