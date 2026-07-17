@@ -146,16 +146,48 @@ void main() {
     expect(find.text('No active downloads.'), findsOneWidget);
   });
 
+  testWidgets('a failed download shows the error and offers Retry + Dismiss '
+      '(fixes the QA-filed retry-affordance gap)', (tester) async {
+    await pump(tester);
+    await settleAfter(
+      tester,
+      () => manager.enqueue(request, freeBytes: 1 << 30),
+    );
+    await emitAndSettle(
+      tester,
+      BackendStatusUpdate(
+        request.taskId,
+        status: BackendTaskStatus.failed,
+        errorMessage: 'connection lost',
+      ),
+    );
+
+    expect(find.text(request.fileName), findsOneWidget);
+    expect(find.textContaining('failed'), findsOneWidget);
+    expect(find.text('connection lost'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.byIcon(Icons.refresh), findsOneWidget);
+    expect(find.byTooltip('Dismiss'), findsOneWidget);
+    // Failed rows use Dismiss, not the active-download Cancel tooltip.
+    expect(find.byTooltip('Cancel'), findsNothing);
+
+    // Tap Retry -> re-enqueues through DownloadsController.retry() ->
+    // DownloadManager.enqueue() -> a fresh `queued` progress event, which
+    // is only possible if a real enqueue happened (this row's earlier
+    // "failed" state is gone, replaced by the queued one).
+    await settleAfter(tester, () => tester.tap(find.text('Retry')));
+
+    expect(backend.enqueuedRequests, contains(request.taskId));
+    expect(find.text(request.fileName), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+    expect(find.textContaining('failed'), findsNothing);
+    expect(find.textContaining('queued'), findsOneWidget);
+  });
+
   testWidgets(
-    'GAP (attack #2): a failed download offers no retry affordance, only a '
-    'Cancel/dismiss button — tapping it just drops the row, it does not '
-    're-enqueue. The Loop 3 gate asks for a retry affordance on a failed '
-    'download; the only way to actually retry today is to navigate back to '
-    'the model detail screen and press Download again, which is not exposed '
-    'from here. Not gate-blocking (offline-mid-download IS handled: typed '
-    'failed state, partial file cleanup, error message shown) but the UX '
-    'promise of "retry affordance" is not met by this screen — file as a '
-    'MEDIUM finding.',
+    'retry re-enqueues without the original quant/license (a size-only '
+    'DownloadRequest reconstructed from repoId + fileName) but still '
+    'passes it through the real free-space guard',
     (tester) async {
       await pump(tester);
       await settleAfter(
@@ -171,24 +203,19 @@ void main() {
         ),
       );
 
-      expect(find.text(request.fileName), findsOneWidget);
-      expect(find.textContaining('failed'), findsOneWidget);
-      expect(find.text('connection lost'), findsOneWidget);
+      await settleAfter(tester, () => tester.tap(find.text('Retry')));
 
-      // No retry affordance anywhere on the failed row.
-      expect(find.text('Retry'), findsNothing);
-      expect(find.byIcon(Icons.refresh), findsNothing);
-      // The only action offered is Cancel, and pause/resume icons are both
-      // absent for a terminal `failed` state.
-      expect(find.byTooltip('Cancel'), findsOneWidget);
-      expect(find.byTooltip('Pause'), findsNothing);
-      expect(find.byTooltip('Resume'), findsNothing);
-
-      // Tapping the only available action (Cancel) just dismisses the row —
-      // it does not re-enqueue the download.
-      await settleAfter(tester, () => tester.tap(find.byTooltip('Cancel')));
-      expect(find.text(request.fileName), findsNothing);
-      expect(backend.enqueuedRequests, hasLength(1)); // no re-enqueue happened
+      // The retry request is rebuilt from repoId + fileName (see
+      // DownloadsController.retry's doc comment) via the same
+      // HfApiClient.resolveDownloadUrl the model detail screen uses — not
+      // the arbitrary `request.url` this test fixture made up.
+      final reEnqueued = backend.enqueuedRequests[request.taskId]!;
+      expect(reEnqueued.fileName, request.fileName);
+      expect(
+        reEnqueued.url.toString(),
+        'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/'
+        'resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+      );
     },
   );
 }

@@ -66,26 +66,86 @@ class _ActiveSection extends ConsumerWidget {
       );
     }
     return Column(
-      children: active
-          .map(
-            (p) => DownloadProgressTile(
-              progress: p,
-              onPause: p.state == DownloadState.running
-                  ? () => ref
-                        .read(downloadsControllerProvider.notifier)
-                        .pause(p.taskId)
-                  : null,
-              onResume: p.state == DownloadState.paused
-                  ? () => ref
-                        .read(downloadsControllerProvider.notifier)
-                        .resume(p.taskId)
-                  : null,
-              onCancel: () => ref
-                  .read(downloadsControllerProvider.notifier)
-                  .cancel(p.taskId),
-            ),
-          )
-          .toList(),
+      children: active.map((p) {
+        if (p.state == DownloadState.failed) {
+          return _FailedDownloadTile(
+            progress: p,
+            onRetry: () =>
+                ref.read(downloadsControllerProvider.notifier).retry(p.taskId),
+            onDismiss: () =>
+                ref.read(downloadsControllerProvider.notifier).cancel(p.taskId),
+          );
+        }
+        return DownloadProgressTile(
+          progress: p,
+          onPause: p.state == DownloadState.running
+              ? () => ref
+                    .read(downloadsControllerProvider.notifier)
+                    .pause(p.taskId)
+              : null,
+          onResume: p.state == DownloadState.paused
+              ? () => ref
+                    .read(downloadsControllerProvider.notifier)
+                    .resume(p.taskId)
+              : null,
+          onCancel: () =>
+              ref.read(downloadsControllerProvider.notifier).cancel(p.taskId),
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// A failed download's row: file name, failure message, Retry (re-enqueue
+/// via `DownloadsController.retry`) and Dismiss (drop the row — same as
+/// `cancel`, safe on an already-inactive task).
+class _FailedDownloadTile extends StatelessWidget {
+  final DownloadProgress progress;
+  final VoidCallback onRetry;
+  final VoidCallback onDismiss;
+
+  const _FailedDownloadTile({
+    required this.progress,
+    required this.onRetry,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(progress.fileName, overflow: TextOverflow.ellipsis),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${progress.repoId} · failed'),
+            if (progress.errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  progress.errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Dismiss',
+            onPressed: onDismiss,
+          ),
+        ],
+      ),
     );
   }
 }

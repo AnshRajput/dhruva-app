@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
 
 final downloadsControllerProvider =
@@ -47,5 +48,51 @@ class DownloadsController extends AsyncNotifier<Map<String, DownloadProgress>> {
     final next = Map<String, DownloadProgress>.from(state.value ?? const {})
       ..remove(taskId);
     state = AsyncData(next);
+  }
+
+  /// Re-enqueues a failed row's download. `DownloadProgress` (this
+  /// controller's only source of truth — see the class doc) doesn't carry
+  /// the original `DownloadRequest` — no `Uri`, checksum, quant, or license
+  /// — so the request is rebuilt from what a failed row *does* know
+  /// (repoId, fileName, and the last known `totalBytes`, which
+  /// `DownloadManager._emit` always backfills from the original
+  /// `expectedSizeBytes`). The resolve URL is a pure `repoId`+`fileName`
+  /// builder, so that part reconstructs exactly; checksum/quant/license are
+  /// lost on a retry started from this screen (size-only integrity check
+  /// still applies) — retrying from the model detail screen keeps full
+  /// metadata.
+  Future<void> retry(String taskId) async {
+    final progress = state.value?[taskId];
+    if (progress == null) return;
+    final manager = await ref.read(downloadManagerProvider.future);
+    final request = DownloadRequest(
+      repoId: progress.repoId,
+      fileName: progress.fileName,
+      url: ref
+          .read(hfApiClientProvider)
+          .resolveDownloadUrl(progress.repoId, progress.fileName),
+      expectedSizeBytes: progress.totalBytes ?? 0,
+    );
+    try {
+      final freeBytes =
+          (await ref.read(deviceInfoServiceProvider).getStorageInfo())
+              .freeBytes;
+      await manager.enqueue(request, freeBytes: freeBytes);
+      // Success: the manager's own progress stream emits a fresh `queued`
+      // update for this taskId, applied by the subscription in `build()`.
+    } on AppFailure catch (e) {
+      final next = Map<String, DownloadProgress>.from(state.value ?? const {});
+      next[taskId] = DownloadProgress(
+        taskId: progress.taskId,
+        repoId: progress.repoId,
+        fileName: progress.fileName,
+        state: DownloadState.failed,
+        downloadedBytes: 0,
+        totalBytes: progress.totalBytes,
+        errorMessage: e.message,
+        failure: e,
+      );
+      state = AsyncData(next);
+    }
   }
 }
