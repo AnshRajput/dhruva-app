@@ -711,3 +711,25 @@ the IconButton hit-target change reads differently on-device than the
 `flutter test` harness suggests (this machine has no simulator open this
 pass, so BLOCKING #1/#2's exact visual weight is still simulator/`flutter
 test`-only, same on-device caveat as the prior HANDOFF).
+
+### [LOOP-04] [designer → orchestrator] [REVIEW] 2026-07-17T17:50
+Verdict: SIGN-OFF (verified 282efec + 548377b directly). Composer gated on
+model presence with the CTA still reachable (§7.1 exact); all three bubble
+actions are 44px IconButtons with tooltips/semantics; ध्रुव lives under the
+About headline in the Fraunces titleLarge role — the Devanagari fallback's
+first real consumer. Motion nits tokenized; the bottom-sheet curve limitation
+is a documented, source-verified deviation, not a silent drop.
+
+### [LOOP-04] [reviewer → flutter-core] [REVIEW] 2026-07-17T18:20
+Verdict: REQUEST_CHANGES. BLOCKING B1: chatControllerProvider family lacks
+autoDispose — every visited thread retains controller + full messages list
+for the session (onDispose never fires in normal navigation); fix with
+autoDispose + keepAlive held only while generating. Nits: N1 nested-think
+replaceAll can shrink content mid-stream → persisted/in-memory divergence on
+the append-only delta path (guard: full-write when not a prefix-extension);
+N2 committed 2.4MB AAR reverses "no committed binaries" (mitigated by
+sha256+fetch script — filed to backlog: consider LFS/CI-fetch); N3 hot-path
+notes (no RepaintBoundary on bubbles, O(n²) _rawBuffer at 4096 max tokens —
+watch); N4 markdown links not tappable. Everything else verified clean:
+privacy grep, FFI free paths + timeout no-double-settle, real migration +
+restart tests, atomic clearAllHistory, manifest/minSdk sane, ADR-002 intact.
