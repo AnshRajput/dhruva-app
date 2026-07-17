@@ -12,6 +12,8 @@
 /// deliberately do NOT wrap that in a second isolate.
 library;
 
+import 'dart:typed_data';
+
 /// Where generation stopped.
 enum EngineStopReason {
   /// The model emitted an end-of-generation token.
@@ -28,13 +30,24 @@ enum EngineStopReason {
 enum EngineRole { system, user, assistant }
 
 /// One turn in a chat prompt.
+///
+/// [images] carries encoded image bytes (PNG/JPEG/… — mtmd auto-detects the
+/// format) attached to this turn. Only meaningful on a `user` turn fed to a
+/// multimodal model (see [EngineService.isMultimodal]); the engine prepends
+/// one media marker per image to the rendered prompt. Empty for text turns.
 final class ChatTurn {
   final EngineRole role;
   final String content;
-  const ChatTurn(this.role, this.content);
-  const ChatTurn.system(this.content) : role = EngineRole.system;
-  const ChatTurn.user(this.content) : role = EngineRole.user;
-  const ChatTurn.assistant(this.content) : role = EngineRole.assistant;
+  final List<Uint8List> images;
+  const ChatTurn(this.role, this.content, {this.images = const []});
+  const ChatTurn.system(this.content)
+    : role = EngineRole.system,
+      images = const [];
+  const ChatTurn.user(this.content, {this.images = const []})
+    : role = EngineRole.user;
+  const ChatTurn.assistant(this.content)
+    : role = EngineRole.assistant,
+      images = const [];
 }
 
 /// One event in a generation stream.
@@ -90,11 +103,24 @@ final class EngineLoadParams {
   /// 256 — higher values fail fast at context creation.
   final int maxSequences;
 
+  /// Absolute path to the multimodal projector (`mmproj-*.gguf`) that pairs
+  /// with a vision model. When set, the model loads in multimodal mode and
+  /// [EngineService.isMultimodal] becomes true; [generate] can then accept
+  /// image input on a [ChatTurn]. When null the model loads text-only.
+  ///
+  /// A path that doesn't exist or fails to initialise raises a typed
+  /// [EngineLoadFailure] ("vision projector …"). Loading a vision GGUF
+  /// *without* this projector is allowed — it simply runs text-only
+  /// (`isMultimodal == false`), since the engine can't decode images without
+  /// a projector to point at.
+  final String? mmprojPath;
+
   const EngineLoadParams({
     this.contextSize = 4096,
     this.gpuLayers = 99,
     this.batchSize = 512,
     this.maxSequences = 1,
+    this.mmprojPath,
   });
 }
 
@@ -208,6 +234,12 @@ EngineFailure? checkGenerateArgs(String? prompt, List<ChatTurn>? messages) {
 abstract interface class EngineService {
   /// True between a successful [load] and the next [unload]/[dispose].
   bool get isLoaded;
+
+  /// True when the currently-loaded model has a multimodal projector attached
+  /// (an [EngineLoadParams.mmprojPath] that initialised and supports vision),
+  /// so [generate] can accept image input on a [ChatTurn]. False when nothing
+  /// is loaded or the model is text-only. Drives the UI attach-image gate.
+  bool get isMultimodal;
 
   /// Load a GGUF model + context. Throws [EngineLoadFailure] /
   /// [EngineOutOfMemoryFailure] on failure. Calling [load] while a model is
