@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show NullsOrder, OrderingTerm, Value;
+
 import '../../core/device_info/device_info_service.dart';
 import '../../core/failures/app_failure.dart';
 import '../db/database.dart';
@@ -49,9 +51,37 @@ final class StorageManager {
   }) : _db = db,
        _deviceInfo = deviceInfo;
 
+  /// Most-recently-used first (nulls — never loaded — sort last), then by
+  /// file name — the Loop-4 model picker's default read order.
   Future<List<InstalledModelInfo>> listInstalledModels() async {
-    final rows = await _db.select(_db.installedModels).get();
+    final query = _db.select(_db.installedModels)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.lastUsedAt, nulls: NullsOrder.last),
+        (t) => OrderingTerm.asc(t.fileName),
+      ]);
+    final rows = await query.get();
     return rows.map(_toInfo).toList(growable: false);
+  }
+
+  /// A single installed model by drift row id, or null if it isn't
+  /// installed (already deleted, or never was).
+  Future<InstalledModelInfo?> getInstalledModel(int id) async {
+    final row = await (_db.select(
+      _db.installedModels,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _toInfo(row);
+  }
+
+  /// Stamps `lastUsedAt` to now — call when a model is loaded through
+  /// `EngineService`, so [listInstalledModels]'s ordering reflects recency.
+  /// Throws [StorageNotFoundFailure] if [id] isn't installed.
+  Future<void> touchLastUsed(int id) async {
+    final updated =
+        await (_db.update(_db.installedModels)..where((t) => t.id.equals(id)))
+            .write(InstalledModelsCompanion(lastUsedAt: Value(DateTime.now())));
+    if (updated == 0) {
+      throw StorageNotFoundFailure('no installed model with id $id');
+    }
   }
 
   Future<int> totalUsageBytes() async {

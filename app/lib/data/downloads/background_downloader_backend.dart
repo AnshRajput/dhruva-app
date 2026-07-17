@@ -29,6 +29,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
       baseDirectory: bg.BaseDirectory.root,
       allowPause: request.allowPause,
       updates: bg.Updates.statusAndProgress,
+      metaData: request.metaData,
     );
     _tasks[request.taskId] = task;
     return _downloader.enqueue(task);
@@ -56,6 +57,37 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
     final task = _tasks[taskId];
     if (task == null) return null;
     return task.filePath();
+  }
+
+  @override
+  Future<List<RehydratedTask>> rehydrate() async {
+    // `trackTasks` activates the plugin's own SQLite-backed task-tracking
+    // database (persists across app restarts); `resumeFromBackground` wakes
+    // it up and flushes any status/progress updates that happened while
+    // this Dart object graph didn't exist (app killed/backgrounded) onto
+    // `updates` — that's the actual "late completion" delivery mechanism.
+    // Both must run after `updates` is being listened to, which
+    // `DownloadManager`'s constructor already does before `init()` (the
+    // only caller of `rehydrate`) runs.
+    await _downloader.trackTasks(markDownloadedComplete: true);
+    await _downloader.resumeFromBackground();
+
+    final records = await _downloader.database.allRecords();
+    final rehydrated = <RehydratedTask>[];
+    for (final record in records) {
+      // Repopulate the taskId -> DownloadTask map too, or pause/resume/
+      // filePathFor on a rehydrated task would fail post-restart even
+      // though the task itself is still tracked. `record.task` is the base
+      // `Task` type; every task this backend ever enqueues is a
+      // `DownloadTask` (see `enqueue` above), but guard the cast rather than
+      // assume it for whatever the plugin's database happens to hold.
+      final task = record.task;
+      if (task is bg.DownloadTask) _tasks[task.taskId] = task;
+      rehydrated.add(
+        RehydratedTask(taskId: task.taskId, metaData: task.metaData),
+      );
+    }
+    return rehydrated;
   }
 
   BackendUpdate? _toBackendUpdate(bg.TaskUpdate update) {

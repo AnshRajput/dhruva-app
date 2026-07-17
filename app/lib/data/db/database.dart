@@ -9,12 +9,16 @@ part 'database.g.dart';
 /// installed quants is three rows.
 ///
 /// Deviation from the T4 brief: no separate `download_tasks` table.
-/// `background_downloader`'s own `FileDownloader().trackTasks()` +
-/// SQLite-backed persistent storage already survives app restarts and
-/// tracks in-flight task state; duplicating that into drift would be two
-/// sources of truth for the same in-flight bookkeeping. `installed_models`
-/// only gets a row once a download/import completes and passes integrity
-/// checks.
+/// `background_downloader`'s own persistent SQLite task-tracking database
+/// (activated via `FileDownloader().trackTasks()`, read back via
+/// `FileDownloader().database.allRecords()`) survives app restarts and is
+/// what `DownloadManager.init()` actually rehydrates in-flight/late-
+/// completed tasks from — see `download_backend.dart`'s `rehydrate()` and
+/// `download_manager.dart`'s `init()`/`DownloadRequest._encodeMetaData`.
+/// Duplicating that tracking into drift would be two sources of truth for
+/// the same in-flight bookkeeping. `installed_models` only gets a row once
+/// a download/import completes and passes integrity checks — including a
+/// completion that arrives after an app restart.
 class InstalledModels extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get repoId => text()();

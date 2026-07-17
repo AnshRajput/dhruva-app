@@ -26,6 +26,17 @@ import '../../core/failures/app_failure.dart';
 /// the separator itself, e.g. `"/"`, which `p.join` then treats as an
 /// absolute-path override and escapes `modelsDirectory` entirely) still
 /// contains a separator — i.e. not a name that can identify a real file.
+///
+/// KNOWN GAP (reviewer-flagged, deferred): flattening to a basename means
+/// two different subfolder files that happen to share a basename — e.g.
+/// `"vision/model.gguf"` and `"text/model.gguf"` in the same repo — collide
+/// on the same on-disk name and the same `installed_models.(repoId,
+/// fileName)` uniqueKey, so the second one silently overwrites the first's
+/// drift row (and, if the second download lands while the first's file
+/// handle is still open, the file itself). No verified starter/vision repo
+/// in orchestra/research/hf-api.md actually has this shape today. Fix when
+/// a real repo needs it: encode the subfolder into the on-disk name (e.g.
+/// join with `_`) instead of dropping it.
 String? sanitizeLocalFileName(String fileName) {
   final base = p.basename(fileName);
   if (base.isEmpty || base == '.' || base == '..') return null;

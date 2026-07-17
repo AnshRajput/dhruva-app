@@ -277,6 +277,13 @@ class _LocalHttpDownloadBackend implements DownloadBackend {
   @override
   Future<String?> filePathFor(String taskId) async => _paths[taskId];
 
+  // This backend has no persistent state (it's a fresh in-memory stand-in
+  // per test, not the real plugin's on-disk task database) — restart
+  // rehydration isn't what this file tests (see download_manager_test.dart
+  // for that), so there's nothing to return.
+  @override
+  Future<List<RehydratedTask>> rehydrate() async => const [];
+
   Future<void> dispose() async {
     for (final sub in _subs.values) {
       await sub.cancel();

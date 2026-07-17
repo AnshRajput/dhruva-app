@@ -486,4 +486,197 @@ void main() {
       expect(backend.enqueuedRequests, isEmpty);
     });
   });
+
+  group('app-restart rehydration (reviewer-blocking fix)', () {
+    test('a task that completes AFTER the enqueuing manager is disposed is '
+        'still integrity-checked and registered in drift, once a fresh '
+        'manager rehydrates from the same backend-persisted state', () async {
+      // Manager A enqueues, then "the app dies" — disposed without ever
+      // seeing a completion. `db` and `modelsDir` (from the outer setUp)
+      // stand in for what genuinely survives a real restart (the on-disk
+      // sqlite file and the downloaded bytes); `backend.persistentState`
+      // stands in for background_downloader's own on-disk task-tracking
+      // database, which is the thing that actually survives in
+      // production — a fresh `FakeDownloadBackend` sharing it is exactly
+      // what `BackgroundDownloaderBackend.rehydrate()` reads back via
+      // `FileDownloader().database.allRecords()` after a real restart.
+      final r = req(
+        sha256:
+            '74f81fe167d99b4cb41d6d0ccda82278caee9f3e2f25d5e5a3936ff3dcec60d0',
+      );
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      expect(
+        backend.persistentState.metaDataByTaskId,
+        contains(r.taskId),
+        reason: 'enqueue must persist rehydration metadata',
+      );
+      await manager.dispose(); // "app killed" — no completion ever seen
+
+      // The downloaded bytes are on disk, exactly as a real background
+      // download that finished while the app was dead would leave them.
+      File('${modelsDir.path}/${r.fileName}').writeAsBytesSync([1, 2, 3, 4, 5]);
+
+      final backendB = FakeDownloadBackend(
+        persistentState: backend.persistentState,
+      );
+      final managerB = DownloadManager(
+        backend: backendB,
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(managerB.dispose);
+
+      await managerB.init();
+
+      final completeFuture = _nextWhere(
+        managerB.progress,
+        (p) => p.state == DownloadState.complete,
+      );
+      backendB.emit(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+      );
+      final progress = await completeFuture;
+
+      expect(progress.downloadedBytes, 5);
+      final rows = await db.select(db.installedModels).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.repoId, r.repoId);
+      expect(rows.single.sizeBytes, 5);
+      expect(rows.single.sha256, r.expectedSha256);
+    });
+
+    test('a task that FAILS after restart is also handled (not just complete) '
+        '— cleanup + a typed failure, not a silently dropped taskId', () async {
+      final r = req();
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      await manager.dispose();
+
+      final partial = File('${modelsDir.path}/${r.fileName}')
+        ..writeAsBytesSync([1, 2]);
+
+      final backendB = FakeDownloadBackend(
+        persistentState: backend.persistentState,
+      );
+      // The real BackgroundDownloaderBackend's `rehydrate()` repopulates its
+      // own taskId->Task map from the plugin's database records (so
+      // filePathFor keeps working post-restart) — mirror that here.
+      backendB.filePaths[r.taskId] = partial.path;
+      final managerB = DownloadManager(
+        backend: backendB,
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(managerB.dispose);
+      await managerB.init();
+
+      final failedFuture = _nextWhere(
+        managerB.progress,
+        (p) => p.state == DownloadState.failed,
+      );
+      backendB.emit(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.failed),
+      );
+      final progress = await failedFuture;
+
+      expect(progress.failure, isA<NetworkUnknownFailure>());
+      expect(partial.existsSync(), isFalse);
+    });
+
+    test(
+      'init() with no persisted tasks leaves _active empty (no crash)',
+      () async {
+        final events = <DownloadProgress>[];
+        final sub = manager.progress.listen(events.add);
+        await manager.init();
+        backend.emit(
+          const BackendStatusUpdate(
+            'some-unrelated-task',
+            status: BackendTaskStatus.complete,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        await sub.cancel();
+        expect(events, isEmpty);
+      },
+    );
+
+    test(
+      'init() skips a rehydrated task whose metaData is corrupt/foreign '
+      'rather than crashing — same "unrecognized taskId" drop as today',
+      () async {
+        backend.persistentState.metaDataByTaskId['some/repo::weird.gguf'] =
+            'not valid json';
+        await manager.init();
+
+        final events = <DownloadProgress>[];
+        final sub = manager.progress.listen(events.add);
+        backend.emit(
+          const BackendStatusUpdate(
+            'some/repo::weird.gguf',
+            status: BackendTaskStatus.complete,
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        await sub.cancel();
+        expect(events, isEmpty);
+      },
+    );
+
+    test(
+      'enqueue persists metaData that decodes back to an equivalent request',
+      () async {
+        final r = req(sha256: 'a' * 64);
+        await manager.enqueue(r, freeBytes: 1 << 30);
+
+        final rehydrated = await backend.rehydrate();
+        expect(rehydrated, hasLength(1));
+        expect(rehydrated.single.taskId, r.taskId);
+
+        // Round-trip through a second manager's init() rather than reaching
+        // into DownloadRequest's private decoder directly.
+        final backendB = FakeDownloadBackend(
+          persistentState: backend.persistentState,
+        );
+        final managerB = DownloadManager(
+          backend: backendB,
+          db: db,
+          modelsDirectory: modelsDir,
+        );
+        addTearDown(managerB.dispose);
+        await managerB.init();
+
+        final file = File('${modelsDir.path}/${r.fileName}')
+          ..writeAsBytesSync(List.filled(5, 0xAB));
+        final future = _nextWhere(
+          managerB.progress,
+          (p) => p.state == DownloadState.failed,
+        );
+        backendB.emit(
+          BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+        );
+        final progress = await future;
+        // Wrong checksum (not the real sha256 of the bytes above) proves
+        // expectedSha256 rehydrated correctly — a request with no sha256
+        // would have passed size-only verification instead.
+        expect(progress.errorMessage, contains('checksum mismatch'));
+        // The manager itself deletes the file on integrity failure — no
+        // manual cleanup needed (and it's already gone).
+        expect(file.existsSync(), isFalse);
+      },
+    );
+  });
+
+  group('streamingSha256 error path', () {
+    test('throws StorageIoFailure (not a raw FileSystemException) for a '
+        'file that cannot be read', () async {
+      final missing = File(
+        '${Directory.systemTemp.path}/dhruva-does-not-exist-'
+        '${DateTime.now().microsecondsSinceEpoch}.gguf',
+      );
+      await expectLater(
+        () => streamingSha256(missing),
+        throwsA(isA<StorageIoFailure>()),
+      );
+    });
+  });
 }

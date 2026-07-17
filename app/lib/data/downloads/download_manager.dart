@@ -59,7 +59,14 @@ final class DownloadProgress {
 final class DownloadRequest {
   final String repoId;
   final String fileName;
-  final Uri url;
+
+  /// The remote resolve URL. Only used to tell the backend where to fetch
+  /// from at [DownloadManager.enqueue] time — null for a [DownloadRequest]
+  /// rehydrated from [DownloadBackend.rehydrate] after an app restart,
+  /// which never goes through `enqueue` again (the OS-level task is already
+  /// running/finished; rehydration only needs enough to verify + register
+  /// it, see [_encodeMetaData]/[_decodeMetaData]).
+  final Uri? url;
   final int expectedSizeBytes;
   final String? expectedSha256;
   final String? quant;
@@ -80,6 +87,44 @@ final class DownloadRequest {
   /// Stable per repo+file — re-enqueuing the same file reuses the id so a
   /// retry/resume finds the same backend task.
   String get taskId => '$repoId::$fileName';
+
+  /// Serialized into the backend task's opaque `metaData` string at enqueue
+  /// time, so [DownloadManager.init] can reconstruct this request after an
+  /// app restart from [DownloadBackend.rehydrate] — `url` is deliberately
+  /// omitted (see its doc comment); everything `_completeDownload` and the
+  /// drift row need is here.
+  String _encodeMetaData() => jsonEncode({
+    'repoId': repoId,
+    'fileName': fileName,
+    'expectedSizeBytes': expectedSizeBytes,
+    if (expectedSha256 != null) 'sha256': expectedSha256,
+    if (quant != null) 'quant': quant,
+    if (license != null) 'license': license,
+    'gated': gated,
+  });
+
+  /// The inverse of [_encodeMetaData]. Returns null (skip this rehydrated
+  /// task) rather than throwing on metaData that doesn't parse — e.g. an
+  /// empty string from a task this backend didn't create, or a future
+  /// format change; a task DownloadManager can't reconstruct falls back to
+  /// the existing "unrecognized taskId" drop, same as today.
+  static DownloadRequest? _decodeMetaData(String metaData) {
+    try {
+      final json = jsonDecode(metaData) as Map<String, dynamic>;
+      return DownloadRequest(
+        repoId: json['repoId'] as String,
+        fileName: json['fileName'] as String,
+        url: null,
+        expectedSizeBytes: json['expectedSizeBytes'] as int,
+        expectedSha256: json['sha256'] as String?,
+        quant: json['quant'] as String?,
+        license: json['license'] as String?,
+        gated: json['gated'] as bool? ?? false,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 /// Orchestrates downloads over a [DownloadBackend] (real:
@@ -110,6 +155,26 @@ final class DownloadManager {
 
   Stream<DownloadProgress> get progress => _controller.stream;
 
+  /// Rebuilds in-memory active-task tracking from the backend's own
+  /// persisted state. `_active` normally only gains an entry inside
+  /// `enqueue`, so a task that finished (or is still running) from a
+  /// *previous* app process — the plugin's own persistent tracking survives
+  /// that even though this Dart object graph doesn't — would otherwise
+  /// arrive on `updates` with a taskId `_handleUpdate` doesn't recognize and
+  /// get silently dropped: an orphan file on disk, never integrity-checked,
+  /// never registered in drift, invisible to the Loop-4 model picker.
+  ///
+  /// Call once, right after constructing this manager and before any
+  /// `enqueue` — `downloadManagerProvider` does this.
+  Future<void> init() async {
+    final rehydrated = await _backend.rehydrate();
+    for (final task in rehydrated) {
+      final request = DownloadRequest._decodeMetaData(task.metaData);
+      if (request == null) continue;
+      _active[task.taskId] = request;
+    }
+  }
+
   /// Enqueues [request]. Throws [ValidationFailure] if `request.fileName`
   /// doesn't sanitize to a usable local file name (see
   /// `sanitizeLocalFileName` — this is the trust boundary: a subfolder HF
@@ -121,6 +186,17 @@ final class DownloadManager {
     DownloadRequest request, {
     required int freeBytes,
   }) async {
+    final url = request.url;
+    if (url == null) {
+      // Only a rehydrated (post-restart) DownloadRequest has a null url,
+      // and those never go through enqueue — the OS-level task already
+      // exists. A caller passing one here is a programming error, not a
+      // runtime condition to recover from.
+      throw ValidationFailure(
+        'DownloadRequest.url is null — this looks like a rehydrated '
+        'request being re-enqueued instead of left for init() to track',
+      );
+    }
     final safeFileName = sanitizeLocalFileName(request.fileName);
     if (safeFileName == null) {
       throw ValidationFailure(
@@ -135,7 +211,7 @@ final class DownloadManager {
         : DownloadRequest(
             repoId: request.repoId,
             fileName: safeFileName,
-            url: request.url,
+            url: url,
             expectedSizeBytes: request.expectedSizeBytes,
             expectedSha256: request.expectedSha256,
             quant: request.quant,
@@ -153,9 +229,10 @@ final class DownloadManager {
     final enqueued = await _backend.enqueue(
       BackendDownloadRequest(
         taskId: safeRequest.taskId,
-        url: safeRequest.url,
+        url: url,
         fileName: safeRequest.fileName,
         directoryPath: modelsDirectory.path,
+        metaData: safeRequest._encodeMetaData(),
       ),
     );
     if (!enqueued) {
@@ -267,9 +344,23 @@ final class DownloadManager {
     }
 
     final actualSize = file.lengthSync();
-    final actualSha256 = request.expectedSha256 != null
-        ? await streamingSha256(file)
-        : null;
+    String? actualSha256;
+    if (request.expectedSha256 != null) {
+      try {
+        actualSha256 = await streamingSha256(file);
+      } on StorageIoFailure catch (readFailure) {
+        await _safeDelete(file);
+        _active.remove(request.taskId);
+        _emit(
+          request,
+          DownloadState.failed,
+          downloadedBytes: 0,
+          errorMessage: readFailure.message,
+          failure: readFailure,
+        );
+        return;
+      }
+    }
     final integrityFailure = verifyIntegrity(
       expectedSizeBytes: request.expectedSizeBytes,
       actualSizeBytes: actualSize,
@@ -359,15 +450,27 @@ final class DownloadManager {
 /// multi-gigabyte GGUF fully into memory — this app's own device floor
 /// (DECISIONS.md) starts at 4GB total RAM, so a whole-file read here would
 /// risk OOMing the exact devices it needs to run on.
+///
+/// Throws [StorageIoFailure] (not a raw [FileSystemException]) if the file
+/// can't be read partway through — a corrupted/permission-denied file
+/// mid-stream, not just at open time.
 Future<String> streamingSha256(File file) async {
   Digest? digest;
   final sink = ChunkedConversionSink<Digest>.withCallback(
     (digests) => digest = digests.single,
   );
   final input = sha256.startChunkedConversion(sink);
-  await for (final chunk in file.openRead()) {
-    input.add(chunk);
+  try {
+    await for (final chunk in file.openRead()) {
+      input.add(chunk);
+    }
+  } on FileSystemException catch (e) {
+    throw StorageIoFailure(
+      'failed to read ${file.path} while computing checksum',
+      cause: e,
+    );
+  } finally {
+    input.close();
   }
-  input.close();
   return digest!.toString();
 }

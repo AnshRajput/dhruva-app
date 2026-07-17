@@ -67,6 +67,10 @@ final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
     db: ref.watch(appDatabaseProvider),
     modelsDirectory: modelsDir,
   );
+  // Rebuilds in-flight/late-completed tasks from the backend's own
+  // persistent tracking before this manager is handed out — see
+  // DownloadManager.init's doc comment (app-restart rehydration).
+  await manager.init();
   ref.onDispose(() => unawaited(manager.dispose()));
   return manager;
 });

@@ -4,6 +4,7 @@ import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/storage_manager.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,7 +36,11 @@ void main() {
     ),
   );
 
-  Future<int> insertRow({required String path, int sizeBytes = 100}) {
+  Future<int> insertRow({
+    required String path,
+    int sizeBytes = 100,
+    DateTime? lastUsedAt,
+  }) {
     File(path).writeAsBytesSync(List.filled(sizeBytes, 0));
     return db
         .into(db.installedModels)
@@ -46,6 +51,7 @@ void main() {
             sizeBytes: sizeBytes,
             localPath: path,
             downloadedAt: DateTime.utc(2026, 7, 17),
+            lastUsedAt: Value(lastUsedAt),
           ),
         );
   }
@@ -109,6 +115,96 @@ void main() {
       await expectLater(
         () => manager(freeBytes: 1000).guardFreeSpace(1024 * 1024 * 1024),
         throwsA(isA<StorageInsufficientSpaceFailure>()),
+      );
+    });
+  });
+
+  group('listInstalledModels ordering (Loop-4 read model)', () {
+    test('most-recently-used first, nulls (never loaded) sort last', () async {
+      await insertRow(
+        path: '${tempDir.path}/never-used.gguf',
+        lastUsedAt: null,
+      );
+      await insertRow(
+        path: '${tempDir.path}/used-earlier.gguf',
+        lastUsedAt: DateTime.utc(2026, 1, 1),
+      );
+      await insertRow(
+        path: '${tempDir.path}/used-recently.gguf',
+        lastUsedAt: DateTime.utc(2026, 7, 1),
+      );
+
+      final list = await manager(freeBytes: 1 << 30).listInstalledModels();
+      expect(list.map((m) => m.fileName).toList(), [
+        'used-recently.gguf',
+        'used-earlier.gguf',
+        'never-used.gguf', // null lastUsedAt — last, not first
+      ]);
+    });
+
+    test('ties (including all-null) break by file name ascending', () async {
+      await insertRow(path: '${tempDir.path}/charlie.gguf');
+      await insertRow(path: '${tempDir.path}/alpha.gguf');
+      await insertRow(path: '${tempDir.path}/bravo.gguf');
+
+      final list = await manager(freeBytes: 1 << 30).listInstalledModels();
+      expect(list.map((m) => m.fileName).toList(), [
+        'alpha.gguf',
+        'bravo.gguf',
+        'charlie.gguf',
+      ]);
+    });
+  });
+
+  group('getInstalledModel', () {
+    test('returns the row for a known id', () async {
+      final id = await insertRow(path: '${tempDir.path}/a.gguf');
+      final model = await manager(freeBytes: 1 << 30).getInstalledModel(id);
+      expect(model, isNotNull);
+      expect(model!.id, id);
+    });
+
+    test('returns null for an unknown id', () async {
+      final model = await manager(freeBytes: 1 << 30).getInstalledModel(999);
+      expect(model, isNull);
+    });
+  });
+
+  group('touchLastUsed', () {
+    test('stamps lastUsedAt to now', () async {
+      final id = await insertRow(path: '${tempDir.path}/a.gguf');
+      final before = DateTime.now();
+
+      await manager(freeBytes: 1 << 30).touchLastUsed(id);
+
+      final model = await manager(freeBytes: 1 << 30).getInstalledModel(id);
+      expect(model!.lastUsedAt, isNotNull);
+      expect(
+        model.lastUsedAt!.isAfter(before.subtract(const Duration(seconds: 5))),
+        isTrue,
+      );
+    });
+
+    test('changes listInstalledModels ordering', () async {
+      final oldId = await insertRow(
+        path: '${tempDir.path}/old.gguf',
+        lastUsedAt: DateTime.utc(2020, 1, 1),
+      );
+      await insertRow(
+        path: '${tempDir.path}/newer.gguf',
+        lastUsedAt: DateTime.utc(2026, 1, 1),
+      );
+
+      await manager(freeBytes: 1 << 30).touchLastUsed(oldId);
+
+      final list = await manager(freeBytes: 1 << 30).listInstalledModels();
+      expect(list.first.fileName, 'old.gguf');
+    });
+
+    test('throws StorageNotFoundFailure for an unknown id', () async {
+      await expectLater(
+        () => manager(freeBytes: 1 << 30).touchLastUsed(999),
+        throwsA(isA<StorageNotFoundFailure>()),
       );
     });
   });
