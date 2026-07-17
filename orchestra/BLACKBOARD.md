@@ -777,3 +777,29 @@ Tests: net +12 across the two commits. Full suite 463/463 green, `make
 verify` clean, coverage 80.7% (floor 70%). Not pushed.
 Request: this was flagged as the last blocker before v0.1.0-alpha — over
 to you for the re-verify.
+
+### [LOOP-05] [orchestrator → all] [STATUS] 2026-07-17T19:40
+Loop 5 PLAN — Characters. Branch loop/05-characters. Designer gate BLOCKING.
+Goal: create/edit/chat AI characters; starter pack of 10; import/export
+community character cards.
+Tasks: (T1) data/characters: drift schema (character: id, name, avatarPath/
+emoji, personaSystemPrompt, greeting, exampleDialogues JSON, defaultModelId
+nullable, samplingParams JSON, createdAt) + repository CRUD; chat integration
+(a conversation may reference a characterId → its persona is the system
+prompt, its greeting seeds the thread, its model+sampling default). Character
+card interop: parse/emit the community TavernAI/CharacterCard v2 JSON (and
+PNG-embedded tEXt 'chara' base64 — read+write) — flutter-platform.
+(T2) starter pack: 10 well-written built-in characters (coach, study buddy,
+storyteller, Hinglish dost, code reviewer, therapist-lite, chef, travel
+planner, debate partner, kids' tutor) as an asset JSON — docs-writer drafts
+personas, flutter-core wires. (T3) features/characters UI: gallery (grid,
+starter + user), create/edit form (all fields, avatar pick/emoji, live
+validation), character detail, "chat with" entry that starts a conversation,
+import (file → card parse → preview → save), export (card JSON + PNG) —
+flutter-core, to chat-spec design language. (T4) QA: CRUD, card round-trip
+(import our export, import a real external card fixture), persona actually
+reaches the engine system prompt, chat works. (T5) designer BLOCKING sign-off
++ reviewer. (T6) merge, ship (FAD + web unaffected).
+Exit gate: [G1] character CRUD + chat works (real engine: persona changes
+behavior) [G2] cards round-trip import/export (JSON + PNG) [G3] 10 starters
+[G4] designer SIGN-OFF + QA PASS + reviewer APPROVE [G5] CI green [G6] shipped.
