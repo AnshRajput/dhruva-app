@@ -14,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../../support/mock_hf_client.dart';
+
 String _fixture(String name) =>
     File('test/data/hf_api/fixtures/$name').readAsStringSync();
 
@@ -39,8 +41,8 @@ void main() {
   testWidgets(
     'search happy path renders results from the real response shape',
     (tester) async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async => http.Response(_fixture('search_gguf.json'), 200),
         ),
       );
@@ -56,8 +58,8 @@ void main() {
   );
 
   testWidgets('offline search shows the typed offline message', (tester) async {
-    final client = HfApiClient(
-      client: MockClient((request) async {
+    final client = mockHfClient(
+      MockClient((request) async {
         throw const SocketException('no route to host');
       }),
     );
@@ -76,8 +78,8 @@ void main() {
     'the recommended rail is visible with an empty query and disappears '
     'once the user submits a search query',
     (tester) async {
-      final client = HfApiClient(
-        client: MockClient(
+      final client = mockHfClient(
+        MockClient(
           (request) async => http.Response(_fixture('search_gguf.json'), 200),
         ),
       );
