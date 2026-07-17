@@ -284,6 +284,9 @@ class _LocalHttpDownloadBackend implements DownloadBackend {
   @override
   Future<List<RehydratedTask>> rehydrate() async => const [];
 
+  @override
+  Future<void> flushMissedUpdates() async {}
+
   Future<void> dispose() async {
     for (final sub in _subs.values) {
       await sub.cancel();

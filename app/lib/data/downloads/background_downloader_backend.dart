@@ -62,15 +62,11 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   @override
   Future<List<RehydratedTask>> rehydrate() async {
     // `trackTasks` activates the plugin's own SQLite-backed task-tracking
-    // database (persists across app restarts); `resumeFromBackground` wakes
-    // it up and flushes any status/progress updates that happened while
-    // this Dart object graph didn't exist (app killed/backgrounded) onto
-    // `updates` — that's the actual "late completion" delivery mechanism.
-    // Both must run after `updates` is being listened to, which
-    // `DownloadManager`'s constructor already does before `init()` (the
-    // only caller of `rehydrate`) runs.
+    // database (persists across app restarts) and reads it back — no flush
+    // onto `updates` happens here. `updates` is already being listened to
+    // (DownloadManager's constructor does that before `init` — the only
+    // caller of `rehydrate` — runs).
     await _downloader.trackTasks(markDownloadedComplete: true);
-    await _downloader.resumeFromBackground();
 
     final records = await _downloader.database.allRecords();
     final rehydrated = <RehydratedTask>[];
@@ -88,6 +84,16 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
       );
     }
     return rehydrated;
+  }
+
+  @override
+  Future<void> flushMissedUpdates() async {
+    // The actual "late completion" delivery mechanism: wakes the plugin up
+    // and flushes any status/progress updates that happened while this
+    // Dart object graph didn't exist onto `updates`. Must run AFTER the
+    // caller has rebuilt its active-task map from `rehydrate()`'s result —
+    // see that method's doc comment.
+    await _downloader.resumeFromBackground();
   }
 
   BackendUpdate? _toBackendUpdate(bg.TaskUpdate update) {

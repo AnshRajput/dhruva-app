@@ -164,6 +164,15 @@ final class DownloadManager {
   /// get silently dropped: an orphan file on disk, never integrity-checked,
   /// never registered in drift, invisible to the Loop-4 model picker.
   ///
+  /// Ordering matters here: `_active` is fully rebuilt from
+  /// `_backend.rehydrate()` BEFORE `_backend.flushMissedUpdates()` runs.
+  /// `flushMissedUpdates` is what actually delivers a missed completion
+  /// onto `updates`; calling it before `_active` is populated reintroduces
+  /// the exact bug this method exists to fix, just as a race instead of a
+  /// guarantee (rehydrate's own `await database.allRecords()` yields to the
+  /// event loop, so a flush-then-rebuild ordering can let a flushed update
+  /// reach `_handleUpdate` while `_active` is still empty).
+  ///
   /// Call once, right after constructing this manager and before any
   /// `enqueue` — `downloadManagerProvider` does this.
   Future<void> init() async {
@@ -173,6 +182,7 @@ final class DownloadManager {
       if (request == null) continue;
       _active[task.taskId] = request;
     }
+    await _backend.flushMissedUpdates();
   }
 
   /// Enqueues [request]. Throws [ValidationFailure] if `request.fileName`

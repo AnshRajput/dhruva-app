@@ -98,11 +98,22 @@ abstract interface class DownloadBackend {
 
   /// Activates the backend's own persistent task tracking (survives app
   /// restart) and returns every task it already knows about — running,
-  /// paused, or finished while nothing was listening. Must be called once,
-  /// after `updates` is being listened to and before any `enqueue`
-  /// (`DownloadManager.init`, called by the DI provider, does this) so a
-  /// completion that arrives on `updates` as a side effect of this call
-  /// lands on an already-rebuilt active-task map instead of being dropped
-  /// as an unrecognized taskId.
+  /// paused, or finished while nothing was listening. Does NOT deliver any
+  /// missed updates onto [updates] — see [flushMissedUpdates] for that.
+  ///
+  /// Call once, before [flushMissedUpdates] and before any `enqueue`.
+  /// `DownloadManager.init` (called by the DI provider) does this and
+  /// rebuilds its active-task map from the result *before* calling
+  /// [flushMissedUpdates] — that ordering is the whole point of splitting
+  /// these two steps: a missed completion flushed onto [updates] has to
+  /// find an already-rebuilt map, or it's dropped as an unrecognized
+  /// taskId (the original app-restart bug, reintroduced as a race if these
+  /// were combined into one call with the flush first).
   Future<List<RehydratedTask>> rehydrate();
+
+  /// Delivers status/progress updates that happened while nothing was
+  /// listening (app killed/backgrounded) onto [updates]. Call only after
+  /// [rehydrate]'s result has been used to rebuild the caller's active-task
+  /// map — see [rehydrate]'s doc comment for why the order matters.
+  Future<void> flushMissedUpdates();
 }

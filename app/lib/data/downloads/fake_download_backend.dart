@@ -10,6 +10,12 @@ import 'download_backend.dart';
 /// from the same on-disk state manager A's plugin would have written."
 final class FakeBackendPersistentState {
   final Map<String, String> metaDataByTaskId = {};
+
+  /// Updates that "happened while nothing was listening" — queued by a
+  /// test before a fresh manager's `init()` runs, delivered by
+  /// [FakeDownloadBackend.flushMissedUpdates] the same way the real
+  /// backend's `resumeFromBackground` would. Cleared once flushed.
+  final List<BackendUpdate> missedUpdates = [];
 }
 
 /// In-memory [DownloadBackend] for tests. Tracks calls and lets the test
@@ -67,6 +73,15 @@ final class FakeDownloadBackend implements DownloadBackend {
     return persistentState.metaDataByTaskId.entries
         .map((e) => RehydratedTask(taskId: e.key, metaData: e.value))
         .toList();
+  }
+
+  @override
+  Future<void> flushMissedUpdates() async {
+    final missed = persistentState.missedUpdates.toList();
+    persistentState.missedUpdates.clear();
+    for (final update in missed) {
+      _controller.add(update);
+    }
   }
 
   /// Test-only: push a synthetic update onto [updates], as the real plugin

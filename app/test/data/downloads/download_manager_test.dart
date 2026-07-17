@@ -545,6 +545,51 @@ void main() {
       expect(rows.single.sha256, r.expectedSha256);
     });
 
+    test('ORDERING: a completion flushed during init() (i.e. delivered by '
+        'flushMissedUpdates, not manually emitted by the test after) lands on '
+        'an already-rebuilt _active and is integrity-checked + written to '
+        'drift — proves rehydrate() populates _active BEFORE '
+        'flushMissedUpdates() runs, not after (the race the reviewer '
+        "flagged: database.allRecords()'s own await yields to the event "
+        'loop, so a flush-then-rebuild order can let a flushed update reach '
+        '_handleUpdate while _active is still empty and get silently '
+        'dropped)', () async {
+      final r = req();
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      await manager.dispose(); // "app killed"
+
+      File('${modelsDir.path}/${r.fileName}').writeAsBytesSync([1, 2, 3, 4, 5]);
+
+      final backendB = FakeDownloadBackend(
+        persistentState: backend.persistentState,
+      );
+      // The completion "already happened while nothing was listening" —
+      // queued for flushMissedUpdates to deliver, exactly like a real
+      // resumeFromBackground() replaying a missed update. Nothing calls
+      // backendB.emit directly in this test.
+      backend.persistentState.missedUpdates.add(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+      );
+      final managerB = DownloadManager(
+        backend: backendB,
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(managerB.dispose);
+
+      final completeFuture = _nextWhere(
+        managerB.progress,
+        (p) => p.state == DownloadState.complete,
+      );
+      await managerB.init(); // rehydrate() then flushMissedUpdates()
+      final progress = await completeFuture;
+
+      expect(progress.downloadedBytes, 5);
+      final rows = await db.select(db.installedModels).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.repoId, r.repoId);
+    });
+
     test('a task that FAILS after restart is also handled (not just complete) '
         '— cleanup + a typed failure, not a silently dropped taskId', () async {
       final r = req();
