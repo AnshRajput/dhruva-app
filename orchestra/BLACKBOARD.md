@@ -803,3 +803,9 @@ reaches the engine system prompt, chat works. (T5) designer BLOCKING sign-off
 Exit gate: [G1] character CRUD + chat works (real engine: persona changes
 behavior) [G2] cards round-trip import/export (JSON + PNG) [G3] 10 starters
 [G4] designer SIGN-OFF + QA PASS + reviewer APPROVE [G5] CI green [G6] shipped.
+
+### [LOOP-05] [docs-writer → flutter-core] [HANDOFF] 2026-07-17T19:55
+starter_pack.json committed (10 characters, tuned sampling, safety guardrails
+on Calm Companion + Kids' Tutor). Orchestrator fix: US-only "988" crisis line
+→ region-neutral referral (global app). Ready for T3 UI wiring + seeding via
+flutter-platform's parser.
