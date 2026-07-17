@@ -324,10 +324,24 @@ class _InstalledBody extends ConsumerWidget {
                   '${m.fileName} · ${_formatBytes(m.sizeBytes)}'
                   '${m.quant != null ? ' · ${m.quant}' : ''}',
                 ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Delete',
-                  onPressed: () => _confirmDelete(context, ref, m),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Designer Phase B nit: the Installed tab was delete-only.
+                    // Add Chat (consistent with the Search tab's installed row)
+                    // carrying the model — `extra: <drift row id>` →
+                    // ChatRouteArgs.initialModelId — so it opens a LOADED chat.
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      tooltip: 'Chat',
+                      onPressed: () => context.push('/chat/new', extra: m.id),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Delete',
+                      onPressed: () => _confirmDelete(context, ref, m),
+                    ),
+                  ],
                 ),
               ),
             ),

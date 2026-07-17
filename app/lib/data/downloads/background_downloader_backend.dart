@@ -1,6 +1,7 @@
 import 'package:background_downloader/background_downloader.dart' as bg;
 
 import 'download_backend.dart';
+import 'download_notifications.dart';
 
 /// Thin adapter over the `background_downloader` plugin. No decision logic
 /// lives here — see `download_backend.dart`'s doc comment for why. Needs
@@ -12,6 +13,31 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
 
   BackgroundDownloaderBackend({bg.FileDownloader? downloader})
     : _downloader = downloader ?? bg.FileDownloader();
+
+  /// Registers the global download notification (D4) and asks for the
+  /// Android-13+ POST_NOTIFICATIONS permission. Call once at startup, before
+  /// any `enqueue`. Platform-channel only — a no-op on desktop and safe to
+  /// call regardless (a denied/skipped permission just means no notification
+  /// shows, not a crash). Not covered by `flutter test` (needs the plugin's
+  /// native side); the config values it applies are asserted in
+  /// `download_notifications_test.dart`.
+  Future<void> configureNotifications() async {
+    final c = dhruvaDownloadNotificationConfig;
+    _downloader.configureNotification(
+      running: c.running,
+      complete: c.complete,
+      error: c.error,
+      paused: c.paused,
+      progressBar: c.progressBar,
+      tapOpensFile: c.tapOpensFile,
+    );
+    final status = await _downloader.permissions.status(
+      bg.PermissionType.notifications,
+    );
+    if (status != bg.PermissionStatus.granted) {
+      await _downloader.permissions.request(bg.PermissionType.notifications);
+    }
+  }
 
   @override
   Stream<BackendUpdate> get updates => _downloader.updates

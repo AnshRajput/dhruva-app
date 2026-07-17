@@ -52,7 +52,13 @@ class _ConversationListScreenState
   Future<void> _startNewChat() async {
     final models = await ref.read(installedModelsProvider.future);
     if (models.isEmpty) {
-      if (mounted) unawaited(context.push('/models'));
+      // UX-hardening A4: don't silently bounce to /models — tell the user why
+      // first, then route with intent.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download a model to start chatting.')),
+      );
+      unawaited(context.push('/models'));
       return;
     }
     int modelId;
@@ -73,7 +79,10 @@ class _ConversationListScreenState
     final tokens = theme.extension<DhruvaTokens>()!;
     final state = ref.watch(conversationListControllerProvider);
     final modelsAsync = ref.watch(installedModelsProvider);
-    final hasAnyModel = modelsAsync.value?.isNotEmpty ?? true;
+    // UX-hardening A4: default false while loading so the honest "No model
+    // installed → Browse models" empty state shows on a fresh install, instead
+    // of a "New chat" CTA whose FAB immediately bounces to /models.
+    final hasAnyModel = modelsAsync.value?.isNotEmpty ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chats')),

@@ -155,14 +155,14 @@ class _ClearHistoryTile extends ConsumerWidget {
     if (secondConfirm != true || !context.mounted) return;
 
     await ref.read(chatRepositoryProvider).clearAllHistory();
+    // UX-hardening A2: refresh the kept-alive Chat list immediately (no more
+    // "pull to refresh" instruction) via the shared revision signal — settings
+    // can't import `features/chat`'s controller (ADR-002).
+    ref.read(conversationListRevisionProvider.notifier).bump();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Chat history cleared. Pull to refresh the Chat tab to see it.',
-        ),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Chat history cleared.')));
   }
 }
 

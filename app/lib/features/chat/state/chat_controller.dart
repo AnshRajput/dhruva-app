@@ -327,6 +327,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       systemPrompt: chatContext.systemPrompt,
       samplingParams: samplingParams,
     );
+    _signalConversationListChanged();
 
     var messages = const <MessageInfo>[];
     final greeting = chatContext.greeting?.trim();
@@ -466,6 +467,25 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     state = AsyncData(current.copyWith(samplingParams: params));
   }
 
+  /// UX-hardening A2/BUG3: a conversation row was just created here — nudge
+  /// the kept-alive `conversationListControllerProvider` (via the shared
+  /// revision signal, ADR-002-safe) so the new chat shows up without a
+  /// pull-to-refresh. Deferred with a microtask because `_buildFromCharacter`
+  /// creates its row during `build()`, and Riverpod forbids mutating another
+  /// provider mid-build.
+  void _signalConversationListChanged() {
+    unawaited(
+      Future<void>.microtask(() {
+        try {
+          ref.read(conversationListRevisionProvider.notifier).bump();
+        } catch (_) {
+          // ponytail: controller disposed before the microtask ran (autoDispose
+          // race) — the list re-reads from the DB on its next build anyway.
+        }
+      }),
+    );
+  }
+
   // ---- Sending / regenerating / editing -----------------------------------
 
   Future<void> sendMessage(String text) async {
@@ -482,6 +502,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         samplingParams: current.samplingParams,
       );
       state = AsyncData(state.value!.copyWith(conversationId: conversationId));
+      _signalConversationListChanged();
     }
 
     final userMsgId = await _repo.appendMessage(

@@ -2,6 +2,10 @@
     <!-- Dhruva's ONLY network use: Hugging Face model browsing + downloads
          (user-initiated). Zero telemetry — see orchestra/PROTOCOL rule 5. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ (API 33): required for background_downloader to show a
+         download-progress notification. Requested at runtime on first
+         download setup (BackgroundDownloaderBackend.configureNotifications). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Dhruva AI"
         android:name="${applicationName}"

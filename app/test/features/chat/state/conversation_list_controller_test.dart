@@ -147,4 +147,49 @@ void main() {
     final state = container.read(conversationListControllerProvider).value!;
     expect(state.folders.map((f) => f.name), contains('Ideas'));
   });
+
+  // UX-hardening A2: mutations that happen OUTSIDE this kept-alive controller
+  // (settings clear-all, ChatController's lazy row creation) bump the shared
+  // conversationListRevisionProvider; the list must refresh itself with no
+  // pull-to-refresh and no restart.
+  group('A2: revision signal refreshes the kept-alive list', () {
+    test('clear-all: bumping the revision empties the list in place', () async {
+      await repo.createConversation(title: 'Old chat');
+      // Prime + hold the (non-autoDispose) controller alive, like the Chat tab.
+      final before = await container.read(
+        conversationListControllerProvider.future,
+      );
+      container.listen(conversationListControllerProvider, (_, _) {});
+      expect(before.conversations, hasLength(1));
+
+      // Simulate settings' clear-all: wipe rows, then signal.
+      await repo.clearAllHistory();
+      container.read(conversationListRevisionProvider.notifier).bump();
+      await pumpEventQueue();
+
+      final after = container.read(conversationListControllerProvider).value!;
+      expect(after.conversations, isEmpty);
+    });
+
+    test('external create: bumping the revision surfaces a new row, preserving '
+        'the active folder filter', () async {
+      final folderId = await repo.createFolder('Work');
+      await container.read(conversationListControllerProvider.future);
+      container.listen(conversationListControllerProvider, (_, _) {});
+      await container
+          .read(conversationListControllerProvider.notifier)
+          .selectFolder(folderId);
+
+      // A row created elsewhere (e.g. ChatController.sendMessage) in the
+      // active folder, then the shared signal fires.
+      await repo.createConversation(title: 'New', folderId: folderId);
+      container.read(conversationListRevisionProvider.notifier).bump();
+      await pumpEventQueue();
+
+      final after = container.read(conversationListControllerProvider).value!;
+      expect(after.conversations.map((c) => c.title), ['New']);
+      // refresh() (not a rebuild) — the folder filter survived the signal.
+      expect(after.selectedFolderId, folderId);
+    });
+  });
 }

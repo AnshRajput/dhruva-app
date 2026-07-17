@@ -32,6 +32,9 @@ genuinely pleasant offline chat. Tag v0.1.0-alpha at MVP gate.
 - [x] Roadmap + MVP scope locked (this file)
 
 ## BACKLOG (triaged)
+- Shared IconAction widget + custom_lint rule for ≥44px tap targets +
+  tooltip/Semantics — tap-target miss has recurred 4x across loops; a shared
+  component + lint stops it at authoring time (Loop 11 polish)
 - Voice models stay resident in worker isolate after voice UI closes (bounded
   singleton, not a leak) — add low-RAM unload (reviewer nit, Loop 6)
 - Iconography debt (project-wide, designer nits Loops 3-6): Material Icons +

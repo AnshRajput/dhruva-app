@@ -24,7 +24,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/downloads/download_manager.dart';
+import '../../features/characters/state/installed_models_provider.dart'
+    as char_installed;
+import '../../features/chat/state/installed_models_provider.dart'
+    as chat_installed;
 import '../../features/models_hub/state/downloads_controller.dart';
+import '../../features/models_hub/state/storage_controller.dart';
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -32,6 +37,49 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // UX-hardening A1 + A5. This always-mounted composition root is the one
+    // place allowed to import feature code (see the header + ADR-002). When a
+    // download completes, invalidate EVERY read-only installed-model provider
+    // so a freshly-downloaded model appears without an app restart — the chat
+    // picker/composer, the character default-model picker, the Models
+    // "Installed" tab, and the Downloads "Installed" section all read one of
+    // these three. This is the shipped app's #1 "downloaded a model but still
+    // can't start a convo" bug. Diff prev/next completed-set so it fires once
+    // per NEW completion, not on every later progress tick.
+    ref.listen(downloadsControllerProvider, (prev, next) {
+      final newly = _completedTaskIds(next).difference(_completedTaskIds(prev));
+      if (newly.isEmpty) return;
+      ref.invalidate(chat_installed.installedModelsProvider);
+      ref.invalidate(char_installed.installedModelsProvider);
+      ref.invalidate(storageControllerProvider);
+
+      // A5: an unmissable confirmation that ties the loop back to chatting —
+      // but only for chat-usable GGUF models. Voice bundles ride the same
+      // download pipeline (sherpa-voice/ repoId) yet aren't a chat pick; they
+      // have their own Voice tab, so don't tell the user to "start chatting".
+      DownloadProgress? model;
+      for (final id in newly) {
+        final p = next.value?[id];
+        if (p != null && !p.repoId.startsWith('sherpa-voice/')) {
+          model = p;
+          break;
+        }
+      }
+      if (model != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('${model.fileName} is ready — start chatting.'),
+              action: SnackBarAction(
+                label: 'New chat',
+                onPressed: () => navigationShell.goBranch(0),
+              ),
+            ),
+          );
+      }
+    });
+
     final downloads = ref.watch(downloadsControllerProvider).value ?? const {};
     final hasActiveDownload = downloads.values.any(_isActive);
 
@@ -80,6 +128,13 @@ class AppShell extends ConsumerWidget {
     );
   }
 }
+
+Set<String> _completedTaskIds(
+  AsyncValue<Map<String, DownloadProgress>>? value,
+) => (value?.value ?? const <String, DownloadProgress>{}).entries
+    .where((e) => e.value.state == DownloadState.complete)
+    .map((e) => e.key)
+    .toSet();
 
 bool _isActive(DownloadProgress progress) => switch (progress.state) {
   DownloadState.queued ||

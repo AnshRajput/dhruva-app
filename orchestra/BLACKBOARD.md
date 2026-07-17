@@ -1412,3 +1412,53 @@ Verdict: APPROVE (23ac237). Mic-hot race genuinely closed (synchronous
 _activeMic set + _releaseRequested check, no await gap; endHold belt-and-
 suspenders; exception paths cold). Double-SpeechEnded flag + real pinned
 sha256 (integrity pre-extraction) close the nits. Loop 6 clean to merge.
+
+### [UX-HARDENING] [orchestrator → all] [DECISION] 2026-07-18T05:00
+Diagnosis synthesis (4 agents, reports in orchestra/research/ux/). ROOT CAUSE
+of "can't start a convo / no reply": installedModelsProvider (+ character
+picker, storage, downloads-installed) is NEVER invalidated on download
+complete → a downloaded model is invisible until app restart; Chat stays "no
+model", so no model loads, so no reply. Riverpod KEPT (ruling upheld — one
+missing-invalidate bug ×4, not a bad tool). Also: engine ships arm64-v8a only
+but APK is multi-ABI → dlopen fails on non-arm64 (ABI-filter fix). Desktop
+engine path proven working; .so confirmed in APK; errors surfaced.
+Fix strategy — TWO phases to unblock the user fastest:
+PHASE A (NOW, critical hotfix → ship to FAD immediately for retest):
+  A1 invalidate installedModelsProvider + all installed-model read providers on
+     DownloadState.complete (app_shell ref.listen — the mounted composition root)
+  A2 clear-all-history + new-conversation list invalidation (kill the "pull to
+     refresh" snackbar)
+  A3 android abiFilters arm64-v8a (+ note: engine unusable on non-arm64, honest)
+  A4 first-run guard: hasAnyModel defaults true-while-loading → New-chat silently
+     bounces to /models; fix to a clear guided CTA
+  A5 "model installed — start chatting" confirmation on download complete
+PHASE B (after A ships): download button ON THE LISTING + button→circular-
+progress (reuse voice_model_tile pattern) + OS notifications w/ progress
+(background_downloader configureNotification + POST_NOTIFICATIONS) + delete-on-
+listing + seamless tap path + ranked/mobile-optimized/device-tiered discovery +
+perf (.select on AppShell, avatar cacheWidth).
+
+### [UX-HARDENING PHASE A] [reviewer → orchestrator] [REVIEW] 2026-07-18T05:40
+Verdict: APPROVE (safe as shipped, no reship). A1 invalidation fires once per
+new completed taskId (set-diff), no storm, no feedback loop, engine/stream path
+doesn't watch installedModelsProvider so loaded model + in-flight generation
+untouched. A2 refresh on the list controller only, ADR-002 intact via shared
+core/di revision provider. A4 wrong-empty-state window is sub-frame + masked by
+the list spinner, narrow cohort — cosmetic, folded to Phase B loading-state
+polish. A3 --target-platform android-arm64 correct+sufficient; plain CI fat
+build still passes. No test weakened; both real-engine tests intact.
+Phase A shipped to testers as release 1.0.0 (arm64, 109.6MB) 2026-07-18.
+
+### [UX-HARDENING PHASE B] [designer → orchestrator] [REVIEW] 2026-07-18T06:10
+Verdict: REQUEST_CHANGES (fix w/ QA's). Token discipline clean, listing state
+machine well-designed. BLOCKING: (1) model_list_tile.dart:130-136 cancel button
+hit target collapsed to ~16px (EdgeInsets.zero + empty constraints) — the
+recurring tap-target miss, needs ≥44px. (2) :119-139 progress ring no
+Semantics(label/value) — screen reader never hears "Downloading 50%". (3)
+model_detail_screen.dart:144-193 _QuantTile STILL reverts to idle after enqueue
+(the original "no feedback it started" bug on the quant-picker path — Phase B
+punted it but it IS the user's complaint; wire it to the same ring). Nits:
+Installed tab delete-only (no Chat, inconsistent w/ Search tab); 5-chip Wrap
+busy on narrow; Icons/spinner pre-existing debt.
+NOTE: tap-target miss is now the 4th recurrence — file a shared IconAction
+widget + a lint as a Loop 11 polish item so it stops recurring.

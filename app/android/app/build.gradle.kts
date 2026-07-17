@@ -29,6 +29,25 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // RISK / hard limitation (UX-hardening A3): the llama.cpp inference
+        // engine ships arm64-v8a native libs ONLY (libs/llama-cpp-dart.aar).
+        // libllama.so therefore only ever exists under lib/arm64-v8a/ — on a
+        // device/emulator whose primary ABI resolves to armeabi-v7a or x86_64
+        // `dlopen("libllama.so")` fails → EngineLoadFailure → no reply.
+        //
+        // Dhruva is intentionally an arm64-v8a-only app (every modern, post-2017
+        // Android phone is arm64-v8a). This abiFilters declaration is the
+        // arm64-only intent and is what the Play `appbundle`/App-Bundle delivery
+        // path honors. NOTE: a fat `flutter build apk` does NOT honor it for the
+        // engine/plugin `.so` (Flutter packages every --target-platform ABI
+        // itself), so the RELEASE DISTRIBUTION build in scripts/distribute.sh
+        // additionally passes `--target-platform android-arm64` to ship an
+        // arm64-only Flutter engine. Proper long-term delivery is the App Bundle
+        // so Play sends each device only its own ABI slice.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {

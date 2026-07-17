@@ -11,6 +11,7 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
 import 'package:dhruva/data/hf_api/hf_api_client.dart';
+import 'package:dhruva/features/models_hub/state/downloads_controller.dart';
 import 'package:dhruva/features/models_hub/ui/model_detail_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +28,14 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
 );
 
+/// _QuantTile now watches `downloadsControllerProvider` for the real per-task
+/// progress ring — stub it empty so these tests don't pull the real download
+/// manager (path_provider + background_downloader plugins) into a headless run.
+class _EmptyDownloadsController extends DownloadsController {
+  @override
+  Future<Map<String, DownloadProgress>> build() async => const {};
+}
+
 Future<void> _pump(
   WidgetTester tester, {
   required String repoId,
@@ -40,6 +49,7 @@ Future<void> _pump(
       overrides: [
         hfApiClientProvider.overrideWithValue(client),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+        downloadsControllerProvider.overrideWith(_EmptyDownloadsController.new),
       ],
       child: MaterialApp(home: ModelDetailScreen(repoId: repoId)),
     ),
@@ -155,7 +165,11 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(FilledButton, 'Download'));
-      await tester.pumpAndSettle();
+      // The tile now shows an indeterminate progress ring after enqueue, so
+      // pumpAndSettle would hang — pump a bounded number of frames instead.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       expect(backend.enqueuedRequests, hasLength(1));
       final enqueued = backend.enqueuedRequests.values.single;

@@ -105,6 +105,77 @@ void main() {
   );
 
   testWidgets(
+    // D5: the rail ranks by device tier — models that run best on THIS
+    // device come first. On a 5GB device the 1B-class (Possible) models sort
+    // ahead of the 3B+ (Not recommended) ones.
+    'mid-RAM device: device-appropriate models are ordered first',
+    (tester) async {
+      await _pump(tester, 5 * 1024 * 1024 * 1024);
+
+      final possibleDx = tester
+          .getTopLeft(find.text('Llama 3.2 1B Instruct'))
+          .dx;
+      final notRecommendedDx = tester
+          .getTopLeft(find.text('Llama 3.2 3B Instruct'))
+          .dx;
+      expect(possibleDx, lessThan(notRecommendedDx));
+    },
+  );
+
+  // QA (Phase B attack #4): the exact 3GB-vs-12GB comparison named in the
+  // attack brief. Every starter-catalog entry (770MB-2.4GB) falls in the
+  // same tier bucket on BOTH ends (3GB: below every floor -> all
+  // notRecommended; 12GB: above every comfortable cut -> all comfortable),
+  // so a stable sort over a single-bucket list leaves declaration order
+  // unchanged on both devices — the two orders come out IDENTICAL, not
+  // different. This is correct given the sort's own stability contract (see
+  // recommended_rail.dart's re-rank), not a bug: verifying it explicitly
+  // rather than assuming "device tier differs -> order must differ", which
+  // only holds when a device actually splits the catalog across tiers (see
+  // the existing 5GB "mid-RAM" test above, which does reorder).
+  testWidgets(
+    '3GB vs 12GB device: both tiers are uniform across the whole catalog, '
+    'so declaration order is preserved on both (order is IDENTICAL, not '
+    'different) — the reorder only shows up on a device that actually '
+    'splits the catalog across tiers',
+    (tester) async {
+      Future<List<String>> orderFor(int totalRamBytes) async {
+        await _pump(tester, totalRamBytes);
+        final order =
+            starterModelCatalog
+                .map(
+                  (m) => (
+                    m.displayName,
+                    tester.getTopLeft(find.text(m.displayName)).dx,
+                  ),
+                )
+                .toList()
+              ..sort((a, b) => a.$2.compareTo(b.$2));
+        return order.map((e) => e.$1).toList();
+      }
+
+      final order3gb = await orderFor(3 * 1024 * 1024 * 1024);
+      final order12gb = await orderFor(12 * 1024 * 1024 * 1024);
+
+      expect(
+        order3gb,
+        starterModelCatalog.map((m) => m.displayName).toList(),
+        reason:
+            '3GB: every entry is notRecommended (same bucket) -> stable '
+            'sort keeps declaration order',
+      );
+      expect(
+        order3gb,
+        order12gb,
+        reason:
+            'both devices put the whole catalog in one bucket, so the '
+            'orders match — a genuinely mixed-tier device (see the 5GB test '
+            'above) is what actually reorders the rail',
+      );
+    },
+  );
+
+  testWidgets(
     'tapping a recommended card navigates to its model detail route',
     (tester) async {
       final pushed = <String>[];
