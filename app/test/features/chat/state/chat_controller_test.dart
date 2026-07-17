@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/data/chat/models/sampling_params.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:dhruva/features/chat/state/engine_session.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -686,6 +690,162 @@ void main() {
         // provider is reclaimable like any other idle autoDispose provider.
         await container.pump();
         expect(container.exists(chatControllerProvider(args)), isFalse);
+      },
+    );
+  });
+
+  group('Loop 5: character-bound conversations', () {
+    Future<int> insertCharacter({
+      String name = 'Code Reviewer',
+      required String personaSystemPrompt,
+      String? greeting,
+      int? defaultModelId,
+      SamplingParams? samplingParams,
+    }) {
+      final now = DateTime.now();
+      return db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: name,
+              personaSystemPrompt: personaSystemPrompt,
+              greeting: Value(greeting),
+              defaultModelId: Value(defaultModelId),
+              samplingParamsJson: Value(
+                samplingParams == null
+                    ? null
+                    : jsonEncode(samplingParams.toJson()),
+              ),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    }
+
+    test('a character-bound conversation sends the persona as the system '
+        'prompt to the engine (gate G1)', () async {
+      const persona =
+          'You are a strict senior code reviewer. Be terse and critical.';
+      final modelId = await insertModel();
+      final characterId = await insertCharacter(
+        personaSystemPrompt: persona,
+        greeting: 'Show me the code.',
+      );
+      final engine = FakeEngineService();
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(
+        initialModelId: modelId,
+        characterId: characterId,
+      );
+
+      // Building the controller itself creates the conversation row
+      // eagerly (chat-spec §1's "never a row for an empty draft" rule is
+      // the ordinary-draft case; a character's greeting is content the
+      // user should see before typing anything, so this one seeds
+      // immediately — see ChatController._buildFromCharacter's doc).
+      final state = await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      expect(state.conversationId, isNotNull);
+      expect(state.characterId, characterId);
+      expect(state.systemPrompt, persona);
+      expect(state.messages, hasLength(1));
+      expect(state.messages.single.role, MessageRole.assistant);
+      expect(state.messages.single.content, 'Show me the code.');
+
+      final notifier = container.read(chatControllerProvider(args).notifier);
+      await notifier.sendMessage('Review this: print("hi")');
+
+      // The actual gate: what reached the "engine" (FakeEngineService's
+      // test hook records exactly what generate() was called with) must
+      // include the persona as a system turn — not just that the
+      // controller's own state object carries it.
+      final sentMessages = engine.lastMessages;
+      expect(sentMessages, isNotNull);
+      expect(
+        sentMessages!.first,
+        isA<ChatTurn>()
+            .having((t) => t.role, 'role', EngineRole.system)
+            .having((t) => t.content, 'content', persona),
+      );
+      // The greeting and the new user turn both rode along too.
+      expect(
+        sentMessages.any(
+          (t) =>
+              t.role == EngineRole.assistant &&
+              t.content == 'Show me the code.',
+        ),
+        isTrue,
+      );
+      expect(
+        sentMessages.any(
+          (t) =>
+              t.role == EngineRole.user &&
+              t.content == 'Review this: print("hi")',
+        ),
+        isTrue,
+      );
+    });
+
+    test("a character's default model + sampling override apply when the "
+        'conversation is created', () async {
+      final modelId = await insertModel(repoId: 'bartowski/Character-Model');
+      final characterId = await insertCharacter(
+        personaSystemPrompt: 'Be terse.',
+        defaultModelId: modelId,
+        samplingParams: const SamplingParams(temperature: 0.1),
+      );
+      final container = buildContainer(FakeEngineService());
+      final args = ChatRouteArgs(characterId: characterId);
+
+      final state = await container.read(chatControllerProvider(args).future);
+      expect(state.modelId, modelId);
+      expect(state.samplingParams.temperature, 0.1);
+    });
+
+    test('a deleted character degrades to an ordinary model-only draft '
+        'instead of erroring', () async {
+      final modelId = await insertModel();
+      final container = buildContainer(FakeEngineService());
+      // 999 was never inserted — chatContextFor returns null.
+      final args = ChatRouteArgs(initialModelId: modelId, characterId: 999);
+
+      final state = await container.read(chatControllerProvider(args).future);
+      expect(state.characterId, isNull);
+      expect(state.conversationId, isNull);
+      expect(state.modelId, modelId);
+    });
+
+    test(
+      'regenerating a character-bound turn keeps sending the persona',
+      () async {
+        const persona = 'You are Aria, a sarcastic night-shift barista.';
+        final modelId = await insertModel();
+        final characterId = await insertCharacter(personaSystemPrompt: persona);
+        final engine = FakeEngineService();
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(
+          initialModelId: modelId,
+          characterId: characterId,
+        );
+        await container.read(chatControllerProvider(args).future);
+        container.listen(chatControllerProvider(args), (_, _) {});
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        await notifier.sendMessage('hi');
+        final assistantId = container
+            .read(chatControllerProvider(args))
+            .value!
+            .messages
+            .last
+            .id;
+        await notifier.regenerate(assistantId);
+
+        expect(
+          engine.lastMessages!.first,
+          isA<ChatTurn>()
+              .having((t) => t.role, 'role', EngineRole.system)
+              .having((t) => t.content, 'content', persona),
+        );
       },
     );
   });

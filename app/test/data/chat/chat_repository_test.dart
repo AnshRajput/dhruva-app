@@ -114,6 +114,41 @@ void main() {
     });
 
     test(
+      'createConversation persists and round-trips characterId (Loop 5)',
+      () async {
+        // Conversations.characterId is a real FK (onDelete: setNull) — the
+        // referenced row has to exist under `PRAGMA foreign_keys = ON`
+        // (set in AppDatabase.beforeOpen), so this inserts a minimal
+        // Characters row directly rather than reaching for
+        // CharacterRepository (a different data-layer file, out of scope
+        // here).
+        final now = DateTime.now();
+        final characterId = await db
+            .into(db.characters)
+            .insert(
+              CharactersCompanion.insert(
+                name: 'Coach',
+                personaSystemPrompt: 'Be encouraging.',
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+        final id = await repo.createConversation(characterId: characterId);
+        final convo = await repo.getConversation(id);
+        expect(convo!.characterId, characterId);
+      },
+    );
+
+    test(
+      'createConversation defaults characterId to null for an ordinary chat',
+      () async {
+        final id = await repo.createConversation();
+        final convo = await repo.getConversation(id);
+        expect(convo!.characterId, isNull);
+      },
+    );
+
+    test(
       'deleteConversation removes the row and cascades its messages',
       () async {
         final id = await repo.createConversation(title: 'gone');

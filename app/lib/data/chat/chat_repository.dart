@@ -28,6 +28,12 @@ final class ConversationSummary {
   final String title;
   final int? folderId;
   final int? modelId;
+
+  /// The character (if any) this thread was started with — see
+  /// `data/characters/character_repository.dart`'s `chatContextFor`. Null
+  /// for an ordinary conversation, or once the character is deleted
+  /// (`Conversations.characterId` FKs `onDelete: KeyAction.setNull`).
+  final int? characterId;
   final String systemPrompt;
   final SamplingParams samplingParams;
   final DateTime createdAt;
@@ -39,6 +45,7 @@ final class ConversationSummary {
     required this.title,
     this.folderId,
     this.modelId,
+    this.characterId,
     required this.systemPrompt,
     required this.samplingParams,
     required this.createdAt,
@@ -158,6 +165,7 @@ final class ChatRepository {
     String title = '',
     int? folderId,
     int? modelId,
+    int? characterId,
     String systemPrompt = '',
     SamplingParams? samplingParams,
   }) {
@@ -170,6 +178,7 @@ final class ChatRepository {
             title: Value(title),
             folderId: Value(folderId),
             modelId: Value(modelId),
+            characterId: Value(characterId),
             systemPrompt: Value(systemPrompt),
             samplingParamsJson: Value(
               samplingParams == null
@@ -560,6 +569,7 @@ final class ChatRepository {
     title: row.title,
     folderId: row.folderId,
     modelId: row.modelId,
+    characterId: row.characterId,
     systemPrompt: row.systemPrompt,
     samplingParams: row.samplingParamsJson == null
         ? const SamplingParams()

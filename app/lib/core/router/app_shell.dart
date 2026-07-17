@@ -1,8 +1,9 @@
-/// Bottom-nav shell for the three top-level destinations (Loop 4 + Amendment
-/// 4b). Not specified by chat-spec.md (it only covers the chat screens
-/// themselves) — per the Loop-4 brief's fallback, a plain `NavigationBar`.
-/// `/chat` is app home per chat-spec.md §1; models hub and settings are the
-/// second/third destinations. Detail routes (`/chat/:id`, `/models/repo/:id`,
+/// Bottom-nav shell for the four top-level destinations (Loop 4 + Amendment
+/// 4b + Loop 5). Not specified by chat-spec.md (it only covers the chat
+/// screens themselves) — per the Loop-4 brief's fallback, a plain
+/// `NavigationBar`. `/chat` is app home per chat-spec.md §1; characters,
+/// models hub, and settings are the second/third/fourth destinations. Detail
+/// routes (`/chat/:id`, `/characters/:id`, `/models/repo/:id`,
 /// `/models/downloads`) are pushed as siblings of this shell (see
 /// `app_router.dart`), so they cover the nav bar full-screen rather than
 /// nesting inside it.
@@ -47,6 +48,11 @@ class AppShell extends ConsumerWidget {
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chat',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.theater_comedy_outlined),
+            selectedIcon: Icon(Icons.theater_comedy),
+            label: 'Characters',
           ),
           NavigationDestination(
             icon: Badge(
