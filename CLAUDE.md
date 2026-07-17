@@ -51,9 +51,11 @@ Conventional commits. CI green before merge, no exceptions.
 
 ## Current status
 
-**v0.1.0-alpha SHIPPED** (2026-07-17). Loops 0-6 closed (0 research · 1 skeleton · 2 engine · 3 model-hub · 4 chat/MVP
-· 5 characters · 6 voice). Website live (Vercel dhruvaai.vercel.app + Pages).
-Per Amendment 4a every loop ships app→FAD + web→Vercel/Pages. Next: Loop 7
-(vision). Remaining: 7 vision · 8 imagine · 9 docs-RAG · 10 toolbox ·
-10.5 playground+AI-news · 11 polish+arena · 12 website-gate · 13 distribution-CI
-(H3/H4) · 14 hardening+handover. CI pins Flutter 3.41.2 (upgrades = own PR).
+**v0.1.0-alpha SHIPPED** (2026-07-17). Loops 0-7 closed (0 research · 1 skeleton · 2 engine · 3 model-hub · 4 chat/MVP
+· 5 characters · 6 voice · 7 vision). Plus a UX-HARDENING loop (v0.2.0) fixing
+the on-device regressions the human found (invisible-model, version discipline,
+download UX, discovery). Website live (Vercel + Pages). Every loop ships
+app→FAD + web. Next: Loop 8 (image generation, stable-diffusion.cpp). Remaining:
+8 imagine · 9 docs-RAG · 10 toolbox · 10.5 playground+AI-news · 11 polish+arena
+· 12 website-gate · 13 distribution-CI (H3/H4) · 14 hardening+handover. CI pins
+Flutter 3.41.2. OPEN: human retest of v0.2.0 on-device (does chat reply?).

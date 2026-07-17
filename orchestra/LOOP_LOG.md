@@ -201,3 +201,22 @@ hid. (3) full-widget E2E can't pump the cross-isolate engine to a reply under
 flutter_test — decompose: real-UI proves the state/visibility chain, real-engine
 unit test proves the reply; device proves on-device inference. (4) OPEN: does
 on-device arm64 inference reply? — awaiting human retest of 0.2.0+21.
+
+## LOOP 7 — Vision (2026-07-18) — integrated onto v0.2.0
+Goal: attach photos/screenshots to chat; on-device image Q&A; auto mmproj pairing.
+Exit gate (all met): image→Q→A round trip (real SmolVLM: red→"Red.", blue→
+"Blue.", "CAT"→"CAT") ✅ · mmproj pairing automatic ✅ · non-vision hides attach ✅
+· designer SIGN-OFF ✅ · QA PASS ✅ · reviewer APPROVE ✅ · CI green ✅
+Shipped: llama.cpp libmtmd via llama_cpp_dart (EngineLoadParams.mmprojPath,
+ChatTurn.images, isMultimodal), drift v4 mmproj pairing + combined-size tier,
+attach flow (gallery+camera, downscale, lightbox, extract-text), corrupt-image
++ GIF hardening. Merged cleanly with v0.2.0 hardening (both features intact).
+819 tests. Parked mid-loop for the UX-hardening emergency, then integrated onto
+the advanced main + all QA/designer fixes applied in one pass.
+Retro: (1) Parking a mid-review loop to handle a critical user regression, then
+integrating it onto the advanced main, worked — the merge was only 4 conflict
+files and a clean schema v3→v4 stack; keep loops small enough that a later
+rebase stays tractable. (2) Reviewer's merge-correctness focus (vs re-reviewing
+the whole feature) was the right proportionate gate for an integration. (3)
+Real vision test surviving the merge (re-run, not assumed) is what proved the
+integration didn't silently break the feature.
