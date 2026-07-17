@@ -624,6 +624,42 @@ void main() {
       },
     );
   });
+
+  group('clearAllHistory', () {
+    test('deletes every conversation and cascades to its messages', () async {
+      final modelId = await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'r/m',
+              fileName: 'x.gguf',
+              sizeBytes: 1,
+              localPath: '/models/x.gguf',
+              downloadedAt: DateTime.utc(2026, 7, 17),
+            ),
+          );
+      final a = await repo.createConversation(modelId: modelId);
+      final b = await repo.createConversation();
+      await repo.appendMessage(
+        conversationId: a,
+        role: MessageRole.user,
+        content: 'hi',
+      );
+      await repo.appendMessage(
+        conversationId: b,
+        role: MessageRole.user,
+        content: 'hey',
+      );
+
+      await repo.clearAllHistory();
+
+      expect(await repo.listConversations(), isEmpty);
+      expect(await db.select(db.messages).get(), isEmpty);
+      // Installed models are untouched — only conversations/messages are in
+      // scope for this action.
+      expect(await db.select(db.installedModels).get(), hasLength(1));
+    });
+  });
 }
 
 /// Test-only direct write, bypassing the repository's `DateTime.now()` —

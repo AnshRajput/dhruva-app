@@ -16,6 +16,8 @@ import '../../features/chat/ui/conversation_list_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
+import '../../features/settings/ui/about_screen.dart';
+import '../../features/settings/ui/settings_screen.dart';
 import 'app_shell.dart';
 
 final appRouter = GoRouter(
@@ -38,6 +40,14 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/models',
               builder: (context, state) => const ModelsHubScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/settings',
+              builder: (context, state) => const SettingsScreen(),
             ),
           ],
         ),
@@ -67,6 +77,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/models/downloads',
       builder: (context, state) => const DownloadsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/about',
+      builder: (context, state) => const AboutScreen(),
     ),
   ],
 );

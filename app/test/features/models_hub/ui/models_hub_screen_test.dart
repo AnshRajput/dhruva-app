@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/hf_api/hf_api_client.dart';
 import 'package:dhruva/features/models_hub/ui/models_hub_screen.dart';
 import 'package:flutter/material.dart';
@@ -28,7 +29,7 @@ Future<void> _pump(WidgetTester tester, HfApiClient client) async {
         hfApiClientProvider.overrideWithValue(client),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
       ],
-      child: const MaterialApp(home: ModelsHubScreen()),
+      child: MaterialApp(theme: AppTheme.dark, home: const ModelsHubScreen()),
     ),
   );
   await tester.pumpAndSettle();

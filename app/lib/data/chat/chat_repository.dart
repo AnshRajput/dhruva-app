@@ -407,6 +407,14 @@ final class ChatRepository {
     return rows.map(_toMessageInfo).toList(growable: false);
   }
 
+  /// Deletes every conversation — and, via the `Messages.conversationId`
+  /// FK's `onDelete: KeyAction.cascade` (SQLite-enforced, see
+  /// `database.dart`), every message with it. Installed models and
+  /// downloaded files are untouched — this is the Settings screen's "Clear
+  /// all chat history" action (Amendment 4b), and that boundary is exactly
+  /// what its confirmation copy promises.
+  Future<void> clearAllHistory() => _db.delete(_db.conversations).go();
+
   // ---- Search ---------------------------------------------------------
 
   /// See the class doc for why this is `LIKE`, not FTS5.
