@@ -107,3 +107,28 @@ worked) and template deployment targets drifting from recorded decisions
 applied to build config the day they're made. (4) Carry into Loop 4: chat
 consumes storageManager's ordered installed list + touchLastUsed; use
 DownloadProgress.failure (typed) not errorMessage; designer gate is BLOCKING.
+
+## LOOP 4 — Chat experience / MVP (2026-07-17) — v0.1.0-alpha SHIPPED
+Goal: pick installed model → genuinely pleasant offline streaming chat. The MVP.
+Exit gate (all met): MVP journey works on real engine (restart-persistence
+proven) ✅ · designer SIGN-OFF (blocking) ✅ · QA PASS ✅ · reviewer APPROVE ✅ ·
+CI green ✅ · v0.1.0-alpha tagged + distributed to internal-testers ✅
+Shipped: full chat (streaming markdown/code, tok/s, reasoning collapse,
+regenerate/edit, sampling sheet, folders/search, export), token-derived theme
++ bundled OFL fonts, Settings (clear-all + About page with ध्रुव + credit),
+global download badge, recommended-for-device rail, Android AAR (chat-capable
+APKs), engine multi-turn/seed/timeout. 463 tests, coverage 80.7%.
+Beyond-scope this loop (human amendments 1-4): premium website live on Vercel
++ Pages, App Distribution pipeline proven, credit bar, continuous-ship rule.
+Retro: (1) BIGGEST LESSON — three real-device/CI-only failures escaped 460+
+green local tests: release-manifest INTERNET permission, Flutter version skew
+(CI stable ran ahead of local, removed CupertinoPageTransitionsBuilder), iOS
+deploy target. Local green != device/CI green. Actions: CI now pins Flutter to
+local; distribute.sh exists; ADD to Loop 11 a "release-config audit" (manifest
+perms, deploy targets, signing) and consider a smoke-install job. (2) The
+human tester found the network bug in minutes — real-device distribution from
+day one (amendment 4a) is worth its weight; keep shipping every loop.
+(3) autoDispose on family providers is not optional on a memory-tiered app —
+add to the architecture checklist so it's caught at BUILD not REVIEW.
+(4) Six review/QA rounds (QA→fix→designer→fix→reviewer→fix) all found real
+issues — the adversarial chain earns its cost on the flagship feature.

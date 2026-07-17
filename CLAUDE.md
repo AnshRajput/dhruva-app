@@ -51,12 +51,10 @@ Conventional commits. CI green before merge, no exceptions.
 
 ## Current status
 
-Loops 0–3 CLOSED: engine online (EngineService over pinned llama_cpp_dart,
-proven free paths), model manager + HF hub shipped (browse/verdicts/resumable
-verified downloads/import). Real site live at anshrajput.github.io/
-dhruva-website (Loop 12 build-ahead). Firebase project dhruvaai-68a00 staged.
-SCOPE AMENDMENT 1: Loop 10.5 (model playground + opt-in AI news), designer
-gate BLOCKING from Loop 4. Loop 4 IN PROGRESS: chat experience (MVP-closer) —
-markdown+code rendering, streaming with tok/s, drift history, folders/search,
-system-prompt editor, sampling settings, regenerate/edit, export, reasoning-
-token transparency. iOS floor 14.0 (build config matches DECISIONS).
+**v0.1.0-alpha SHIPPED** (2026-07-17) — MVP live, distributed to testers via
+Firebase App Distribution, chat-capable on Android. Loops 0-4 closed. Website
+live (Vercel dhruvaai.vercel.app + GitHub Pages). Per Amendment 4a every loop
+ships app→FAD + web→Vercel/Pages. Next: Loop 5 (characters). Remaining loops:
+5 characters · 6 voice · 7 vision · 8 imagine · 9 docs-RAG · 10 toolbox ·
+10.5 playground+AI-news · 11 polish+arena · 12 website-gate · 13 distribution-CI
+(H3/H4) · 14 hardening+handover. CI pins Flutter 3.41.2 (upgrades = own PR).
