@@ -1244,3 +1244,19 @@ tts/voice tiles — pre-existing pattern; (4) voice_model_tile.dart:45 raw
 TextStyle(color: error) → textTheme role .copyWith; (5) hands-free phase +
 transcript need Semantics(liveRegion:true). Positives: barge-in well-designed,
 mic semantics correct, star motif reads intentional.
+
+### [LOOP-06] [qa-tester → flutter-core] [REVIEW] 2026-07-18T00:50
+Verdict: PASS on G1/G2/G3 (683 tests, 2 fail = the 2 filed bugs). Full voice
+loop proven end-to-end (mic buffer→transcribe→real ChatController→engine→TTS
+synth on the reply text); sherpa real round-trip 5/5 non-vacuous; voice models
+via real DownloadManager; picker-pollution filter verified at all 3 sites +
+the deliberate non-filtered Settings total; barge-in hostility (rapid, races,
+empty SpeechEnded, model-deleted-mid-session, exit cleanup) all covered.
+BUG-1 (MED): truncated .tar.bz2 → untyped RangeError from bzip2 decoder
+escapes VoiceModelsController._finishInstall (only catches VoiceFailure) →
+tile stuck "installing" forever. No sha256 published for voice entries so a
+same-length corrupt transfer reaches this in prod.
+BUG-2 (HIGH, privacy): disposing VoiceInputController mid-hold (back-nav while
+mic pressed, .autoDispose) never stops the mic — onDispose only cancels the
+downstream sub, upstream record capture keeps running. HandsFreeController does
+this right (keeps _activeMic, .stop() on dispose) — mirror it.
