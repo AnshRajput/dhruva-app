@@ -24,6 +24,10 @@ import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
+import '../../voice/sherpa_voice_service.dart';
+import '../../voice/voice_model_catalog.dart';
+import '../../voice/voice_model_installer.dart';
+import '../../voice/voice_service.dart';
 import '../device_info/device_info_service.dart';
 
 /// The on-device inference engine. `LlamaEngineService` in production;
@@ -43,6 +47,42 @@ final engineServiceProvider = Provider<EngineService>((ref) {
   });
   return service;
 });
+
+/// On-device voice (Loop 6): STT + TTS + Silero VAD via sherpa_onnx.
+/// `SherpaVoiceService` in production (native libs resolved from the app
+/// bundle → `libraryDirectory` null); override with `FakeVoiceService` in
+/// tests/previews. The worker isolate spins up lazily on first use.
+final voiceServiceProvider = Provider<VoiceService>((ref) {
+  final service = SherpaVoiceService();
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
+});
+
+/// Resolves + extracts downloaded voice-model bundles under `models/voice/`.
+/// Pairs with the `DownloadManager` (which does the resumable fetch) — see
+/// [voiceModelDownloadRequest].
+final voiceModelInstallerProvider = FutureProvider<VoiceModelInstaller>((
+  ref,
+) async {
+  final modelsDir = await ref.watch(modelsDirectoryProvider.future);
+  return VoiceModelInstaller(modelsDirectory: modelsDir);
+});
+
+/// Bridges a curated [VoiceCatalogEntry] onto the EXISTING download pipeline —
+/// voice models ride the same resumable, integrity-checked, storage-guarded
+/// path as GGUF models (D3). Kept here (not in `voice/`) so the catalog stays
+/// free of the `data/downloads` dependency.
+DownloadRequest voiceModelDownloadRequest(VoiceCatalogEntry entry) {
+  return DownloadRequest(
+    repoId: 'sherpa-voice/${entry.id}',
+    fileName: entry.archiveName,
+    url: entry.url,
+    expectedSizeBytes: entry.downloadSizeBytes,
+    expectedSha256: entry.sha256,
+    quant: null,
+    license: entry.license,
+  );
+}
 
 final deviceInfoServiceProvider = Provider<DeviceInfoService>((ref) {
   return PluginDeviceInfoService();

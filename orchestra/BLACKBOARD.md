@@ -1027,3 +1027,54 @@ free turn-taking + barge-in demonstrated in test [G4] designer SIGN-OFF + QA
 PASS + reviewer APPROVE [G5] CI green [G6] shipped. RISK: real mic/audio can't
 be device-verified here → integration test uses injected audio buffers; log
 on-device voice as needs-verification (folds into R1/R9).
+
+### [LOOP-06] [native-engine → qa-tester] [HANDOFF] 2026-07-17T23:40
+T1 voice service layer online on branch loop/06-voice. D1–D5 all pass.
+
+[D1] REAL sherpa_onnx round-trip VERIFIED on this macOS machine (not just a
+fake): synthesize "hello world" (Piper amy) → transcribe (Whisper tiny int8)
+recovers the words; VAD segments a silence→speech→silence buffer; hands-free
+transcribeStream yields the utterance. 5/5 integration tests green
+(test/voice/sherpa_voice_integration_test.dart). Gated: runs only on macOS with
+the dev dylib + models present, skips on CI/fresh-checkout (like the engine
+native tests). BLOCKER FOUND + WORKED AROUND: sherpa's pub-cache macOS dylib has
+an INVALID arm64 code signature → macOS SIGKILLs (exit 137) on DynamicLibrary
+.open. Fix: ad-hoc re-sign (`codesign -f -s -`); the test's voice_test_config
+self-heals this. Logged R11.
+
+[D2] VoiceService abstraction (lib/voice/voice_service.dart) mirrors
+EngineService: transcribe (buffer + VAD-segmented stream), synthesize, and VAD
+`segment()` as a FIRST-CLASS turn-taking primitive emitting SpeechStarted/
+SpeechEnded. Typed VoiceFailure taxonomy. All native work runs on an owned
+worker isolate (SherpaVoiceService) — whisper decode never touches the root
+isolate, same pattern as LlamaEngineService.
+
+[D3] Voice models flow through the EXISTING Model Manager: voiceModelDownload
+Request() bridges a curated catalog entry onto DownloadManager (resumable +
+integrity + storage-guard + drift row). ASR/TTS bundles are .tar.bz2 →
+VoiceModelInstaller extracts (pure, zip-slip-guarded, off-isolate) into
+models/voice/<id>/; VAD is a single .onnx (no extraction). Catalog
+(lib/voice/voice_model_catalog.dart), all URLs/sizes HTTP-HEAD-verified:
+- silero-vad (VAD)  629 KB   MIT
+- whisper-tiny (ASR, multilingual incl Hindi/Hinglish)  111 MB  MIT (OpenAI)
+- piper-en-amy-low (TTS, English)  64 MB  Piper/mimic3
+- piper-hi-pratham-medium (TTS, Hindi)  64 MB  Piper
+
+[D4] make verify GREEN — 629 tests (was 588), +41 voice tests. analyze
+(--fatal-infos) + format clean. Coverage 80% floor-scope (floor 70%); CI
+exclusion list extended with the sherpa/mic/player native+platform glue (same
+precedent as llama_engine_service.dart — real coverage is the on-device gated
+test). Pure voice logic (catalog 100% / installer 97% / fake 100% /
+audio_conversion 100%) is NOT excluded.
+
+[D5] voiceServiceProvider + voiceModelInstallerProvider + voiceModelDownload
+Request exposed in core/di/providers.dart. Not pushed.
+
+barge-in design: hands-free loop listens for SpeechStarted during TTS playback;
+caller stops VoicePlayer (main-isolate audio) + calls voice.cancel() which
+resets the VAD. Native synth/transcribe are synchronous on the worker and can't
+be interrupted mid-call (whisper-tiny ~1s on a short clip) — documented.
+
+Request: adversarial pass — empty/garbage audio buffers, load failures (bad
+paths), cancel/dispose races, corrupt archive extraction, zip-slip, and confirm
+the integration test skips cleanly where native libs/models are absent.

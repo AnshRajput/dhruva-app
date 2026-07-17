@@ -28,6 +28,13 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  # Loop 6 (voice). Pure-Dart tar.bz2 extraction for sherpa's model bundles
+  # (ASR/TTS ship as .tar.bz2 archives of encoder/decoder/tokens files). MIT.
+  archive: ^4.0.7
+  # Loop 6 (voice). Plays a synthesized WAV file through the OS audio stack.
+  # MIT. Lighter surface than just_audio for "play this file"; used only in
+  # the coverage-excluded VoicePlayer adapter.
+  audioplayers: ^6.5.1
   # Loop 3 foundation (T2-T4, see orchestra/BLACKBOARD.md).
   background_downloader: ^9.5.6
   crypto: ^3.0.6 # sha256 integrity check against HF's lfs.oid. Already a
@@ -74,10 +81,21 @@ dependencies:
   markdown: ^7.3.1
   path: ^1.9.1 # already transitive; used directly for models-dir joins.
   path_provider: ^2.1.6
+  # Loop 6 (voice). Mic capture as a 16kHz mono PCM stream (record.startStream)
+  # for STT + the VAD segmenter. BSD-3-Clause, actively maintained (llfbandit).
+  # T1 uses it only in the thin, coverage-excluded MicAudioSource adapter —
+  # the VoiceService abstraction stays platform-free (audio streams in/out).
+  record: ^6.1.2
   # Loop 4 (chat export, chat-spec.md §9): the OS share sheet. First-party
   # (flutter/packages federated plugin), BSD-3, macOS/iOS/Android supported —
   # the lightest correct way to hand a formatted string to "Share as .md/.json".
   share_plus: ^13.2.1
+  # Loop 6 (voice, ADR-001-style abstraction). STT + TTS + Silero VAD in ONE
+  # Apache-2.0 package with prebuilt native libs for Android/iOS/macOS/Windows/
+  # Linux (macOS arm64 included → real round-trip verifiable on this dev
+  # machine). Pinned to the orchestrator-verified 1.13.4. All FFI stays behind
+  # engine_bindings/voice/ — features depend only on the VoiceService surface.
+  sherpa_onnx: 1.13.4
   # Loop 4 (settings, Amendment 4b/2b): the credit row's outbound link and
   # the About section's GitHub link. First-party (flutter/packages
   # federated plugin), BSD-3 — same license family as share_plus/
