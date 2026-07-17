@@ -1665,3 +1665,19 @@ Quant; schema v4 monotonic; download controllers separate+both present). All
 QA+designer fixes confirmed. Trust/privacy intact (no new network, typed
 failures on bad image/mmproj, 100% local). Real vision tests intact. Loop 7
 APPROVED — QA PASS + designer SIGN-OFF + reviewer APPROVE.
+
+### [UX-CRASH-FIX] [orchestrator → all] [STATUS] 2026-07-18T00:35
+Human video on 0.2.2 (29): app crashed on every download start, no model
+installed, "really really disappointed". Root cause = a 0.2.2 regression I
+shipped: runInForeground foreground service on API 34+ with no FGS permissions
+and no dataSync foregroundServiceType on androidx.work SystemForegroundService
+→ crash. Fixed (perms + tools:node="merge" service-type), shipped with the dio
+migration + recommended-download detail rework already on loop/ux-dio-detail.
+VERIFIED END-TO-END on emulator by orchestrator (browse → recommended download
+→ ring 1→100% → installs → chat replies on-device). Shipped v0.2.3 (33) to
+Firebase for human retest. Full analysis in VIDEO_FIXES.md; retro in LOOP_LOG.
+North-star added to CLAUDE.md: real value, end-to-end, test-on-device before
+every deploy, value made explicit on web + in app. Next loop = UI-PARITY (make
+app match the website mockups) + per-variant benchmark + download ETA +
+in-app Playground/AI-news. Blocked on nothing; human is retesting P0 in
+parallel.

@@ -220,3 +220,33 @@ rebase stays tractable. (2) Reviewer's merge-correctness focus (vs re-reviewing
 the whole feature) was the right proportionate gate for an integration. (3)
 Real vision test surviving the merge (re-run, not assumed) is what proved the
 integration didn't silently break the feature.
+
+## UX-CRASH-FIX loop (v0.2.3, 2026-07-18) — the video regression
+Trigger: human recorded a screen video on build 0.2.2 (29) — app crashed 4–5×,
+every download killed the app, no model ever installed, "really really
+disappointed", "I don't want a dummy project". Analysed the video (52 frames +
+audio transcript) into orchestra/VIDEO_FIXES.md.
+Root cause (a regression I shipped in 0.2.2): the download fix
+(Config.runInForeground = always) starts background_downloader's WorkManager
+foreground service. On API 34+ it starts foreground with type dataSync, but the
+app declared neither the FGS permissions NOR the dataSync foregroundServiceType
+on androidx.work's SystemForegroundService → IllegalArgumentException
+"foregroundServiceType 0x1 is not a subset of 0x0" → crash on every download.
+Fix: add FOREGROUND_SERVICE + FOREGROUND_SERVICE_DATA_SYNC; merge
+android:foregroundServiceType="dataSync" onto SystemForegroundService via
+tools:node="merge". Shipped with the dio migration + model-detail rework
+(recommended-download-first) that were already on loop/ux-dio-detail.
+Verified END-TO-END on emulator (API 36, arm64) BY ME before shipping: browse →
+one Recommended download → ring fills 1→48→100% → installs → chat replies
+on-device at 1.0 tok/s. No crash. Shipped v0.2.3 (33) to Firebase.
+Retro / the lesson that matters: (1) The permission fix ALONE still crashed —
+the dataSync service-type merge was the other half. I only found it because I
+drove the emulator and read the actual crash, not because I reasoned from
+source. On-device verification is now a hard gate in CLAUDE.md, not a nicety.
+(2) The original 0.2.2 bug shipped BECAUSE I uploaded to Firebase without
+installing it and tapping Download once myself. Never again — "test on-device
+before every deploy" is locked into the goal. (3) The human's real ask is
+bigger than any single bug: real value, end-to-end, not a playground. That's
+now the north-star in CLAUDE.md. Remaining video asks (UI-match-website,
+per-variant benchmark, download ETA, in-app Playground+AI-news, value-highlight)
+are queued as the next loop(s).
