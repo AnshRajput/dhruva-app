@@ -64,6 +64,7 @@ dev_dependencies:
   # conflicts with meta 1.17.0 pinned by flutter_test from the Flutter SDK.
   drift_dev: 2.34.0 # exact-pinned: 2.34.1+ requires analyzer ^13, which
   # conflicts with freezed 3.2.5's analyzer <11 constraint.
+  fake_async: ^1.3.1
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
