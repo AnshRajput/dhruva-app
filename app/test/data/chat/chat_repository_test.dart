@@ -148,6 +148,48 @@ void main() {
       },
     );
 
+    test('deleting a character un-sets conversations.characterId (FK setNull) '
+        'but the conversation, its persisted systemPrompt, and its messages '
+        'all survive — attack list #4: chat still works off the persisted '
+        'system prompt in messages, not a live re-fetch of the (now-gone) '
+        'character', () async {
+      final now = DateTime.now();
+      final characterId = await db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: 'Coach',
+              personaSystemPrompt: 'Be an encouraging coach.',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      final conversationId = await repo.createConversation(
+        characterId: characterId,
+        systemPrompt: 'Be an encouraging coach.',
+      );
+      await repo.appendMessage(
+        conversationId: conversationId,
+        role: MessageRole.assistant,
+        content: 'Ready to crush it today?',
+      );
+
+      await (db.delete(
+        db.characters,
+      )..where((t) => t.id.equals(characterId))).go();
+
+      final convo = await repo.getConversation(conversationId);
+      expect(convo, isNotNull);
+      expect(convo!.characterId, isNull);
+      // The persona text itself lives on Conversations.systemPrompt, a
+      // plain column independent of the character row — deleting the
+      // character doesn't touch it.
+      expect(convo.systemPrompt, 'Be an encouraging coach.');
+      final messages = await repo.getMessages(conversationId);
+      expect(messages, hasLength(1));
+      expect(messages.single.content, 'Ready to crush it today?');
+    });
+
     test(
       'deleteConversation removes the row and cascades its messages',
       () async {

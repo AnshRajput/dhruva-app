@@ -273,4 +273,45 @@ void main() {
       expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'attack list #6: a character with no default model (and no fallback '
+    'installed model on this device) still surfaces "Pick a model" — the '
+    'character binding does not strand the conversation with an '
+    'unreachable model picker',
+    (tester) async {
+      // An installed model exists on-device (so the picker itself has
+      // something to offer once opened) but the character has no
+      // defaultModelId and the draft has no fallback initialModelId.
+      await insertModel();
+      final now = DateTime.now();
+      final characterId = await db
+          .into(db.characters)
+          .insert(
+            CharactersCompanion.insert(
+              name: 'Coach',
+              avatarEmoji: const Value('💪'),
+              personaSystemPrompt: 'Be an encouraging coach.',
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
+      await tester.pumpWidget(
+        buildApp(FakeEngineService(), ChatRouteArgs(characterId: characterId)),
+      );
+      await tester.pumpAndSettle();
+
+      // Character identity still shows even with no model resolved.
+      expect(find.text('Coach'), findsOneWidget);
+      expect(find.text('💪'), findsOneWidget);
+      expect(find.text('Pick a model'), findsOneWidget);
+
+      await tester.tap(find.text('Pick a model'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose a model'), findsOneWidget);
+      expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
+    },
+  );
 }

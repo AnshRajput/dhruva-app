@@ -113,6 +113,10 @@ void main() {
   });
 
   group('malformed PNG input', () {
+    test('an empty (0-byte) file throws FormatException, not a crash', () {
+      expect(() => readTextChunk(Uint8List(0), 'chara'), throwsFormatException);
+    });
+
     test('bad signature throws FormatException', () {
       expect(
         () => readTextChunk(Uint8List.fromList([1, 2, 3, 4]), 'chara'),

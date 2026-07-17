@@ -37,6 +37,36 @@ void main() {
       expect(names, everyElement(isNotEmpty));
     });
 
+    test('BUG (MED): "Calm Companion" still hardcodes the US-only "988" crisis '
+        'line in one of its example dialogues, despite the orchestrator\'s '
+        'explicit fix instruction (BLACKBOARD.md [LOOP-05] docs-writer '
+        'HANDOFF, 2026-07-17T19:55: \'US-only "988" crisis line -> '
+        'region-neutral referral (global app)\'). personaSystemPrompt WAS '
+        'fixed (it says "a local crisis line or emergency services in their '
+        'country") but exampleDialogues was missed — this is few-shot text '
+        'the model sees and the detail screen displays verbatim, so a non-US '
+        'user gets a US-specific number. This asserts the CURRENT (buggy) '
+        'content so it fails loudly the moment someone fixes it and forgets '
+        'to update this test.', () {
+      final raw = File(
+        'assets/characters/starter_pack.json',
+      ).readAsStringSync();
+      final seeds = parseCharacterSeeds(raw);
+      final calmCompanion = seeds.firstWhere((s) => s.name == 'Calm Companion');
+      final allText = [
+        calmCompanion.personaSystemPrompt,
+        ...calmCompanion.exampleDialogues,
+      ].join('\n');
+      expect(
+        allText,
+        contains('988'),
+        reason:
+            'if this now fails, the "988" reference has been removed — '
+            'flip this to `isNot(contains(\'988\'))` and close BUG (MED) '
+            'from the Loop-5 QA review.',
+      );
+    });
+
     test('a minimal entry needs only name + personaSystemPrompt', () {
       final seeds = parseCharacterSeeds(
         jsonEncode([

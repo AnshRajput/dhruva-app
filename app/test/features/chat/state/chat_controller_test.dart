@@ -848,5 +848,98 @@ void main() {
         );
       },
     );
+
+    test('attack list #3: a character with an empty/whitespace-only persona '
+        'never sends an empty system turn to the engine (the form/import '
+        'validation that should normally prevent this is a UI/import-layer '
+        'concern, not something ChatController can rely on — see '
+        'character_repository_test.dart\'s INFO note that createCharacter '
+        'itself does not reject a blank persona)', () async {
+      final modelId = await insertModel();
+      final characterId = await insertCharacter(
+        personaSystemPrompt: '   ',
+        greeting: 'Hi!',
+      );
+      final engine = FakeEngineService();
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(
+        initialModelId: modelId,
+        characterId: characterId,
+      );
+      final state = await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      expect(state.systemPrompt.trim(), isEmpty);
+
+      final notifier = container.read(chatControllerProvider(args).notifier);
+      await notifier.sendMessage('hi');
+
+      final sentMessages = engine.lastMessages!;
+      expect(
+        sentMessages.any((t) => t.role == EngineRole.system),
+        isFalse,
+        reason:
+            '_historyTurns only adds a system ChatTurn when '
+            'systemPrompt.trim().isNotEmpty — a blank persona must not '
+            'become an empty system turn',
+      );
+    });
+
+    test('attack list #3: editing a character AFTER a conversation with it has '
+        'started does NOT retroactively change that conversation — the '
+        'persona is snapshotted onto Conversations.systemPrompt at creation '
+        'time, not re-read from the character on every turn. Reopening the '
+        'SAME conversation (fresh ChatController, simulating an app restart) '
+        'still sends the OLD persona.', () async {
+      final modelId = await insertModel();
+      final characterId = await insertCharacter(
+        personaSystemPrompt: 'Persona v1: be terse.',
+      );
+      final engine = FakeEngineService();
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(
+        initialModelId: modelId,
+        characterId: characterId,
+      );
+      final initial = await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final conversationId = initial.conversationId!;
+
+      // Edit the character's persona directly (same thing
+      // CharacterRepository.updateCharacter does under the hood).
+      await (db.update(
+        db.characters,
+      )..where((t) => t.id.equals(characterId))).write(
+        const CharactersCompanion(
+          personaSystemPrompt: Value('Persona v2: be verbose and flowery.'),
+        ),
+      );
+
+      // Reopen the SAME conversation via a brand-new ChatController
+      // (args keyed by conversationId now, like a real re-navigation).
+      final reopenArgs = ChatRouteArgs(conversationId: conversationId);
+      final reopened = await container.read(
+        chatControllerProvider(reopenArgs).future,
+      );
+      container.listen(chatControllerProvider(reopenArgs), (_, _) {});
+      expect(reopened.systemPrompt, 'Persona v1: be terse.');
+
+      final notifier = container.read(
+        chatControllerProvider(reopenArgs).notifier,
+      );
+      await notifier.sendMessage('hi again');
+
+      expect(
+        engine.lastMessages!.first,
+        isA<ChatTurn>()
+            .having((t) => t.role, 'role', EngineRole.system)
+            .having((t) => t.content, 'content', 'Persona v1: be terse.'),
+        reason:
+            'a live/open conversation keeps its persona snapshot; only a '
+            'NEW conversation started with the character would pick up '
+            "the edited persona — this is sane (matches the model's own "
+            'design/greeting/sampling that were also snapshotted at '
+            'creation) but is worth pinning explicitly.',
+      );
+    });
   });
 }

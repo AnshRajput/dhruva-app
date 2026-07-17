@@ -162,6 +162,39 @@ void main() {
       },
     );
 
+    test('creating two user characters with the same name is allowed — no '
+        'uniqueness constraint on Characters.name (dedup only applies to '
+        'built-ins by name, see the class doc)', () async {
+      final firstId = await repo.createCharacter(
+        name: 'Coach',
+        personaSystemPrompt: "Version one's persona.",
+      );
+      final secondId = await repo.createCharacter(
+        name: 'Coach',
+        personaSystemPrompt: "Version two's persona.",
+      );
+      expect(firstId, isNot(secondId));
+      final all = await repo.listCharacters();
+      expect(all.where((c) => c.name == 'Coach'), hasLength(2));
+    });
+
+    test('INFO (LOW): createCharacter does not itself reject an empty/'
+        'whitespace-only personaSystemPrompt — that validation lives only in '
+        'features/characters\' form (live Save-disable) and in card-import\'s '
+        'cardToCharacterFields (throws on an empty composed persona). A '
+        'caller that bypasses both (there is none in this codebase today) '
+        'could persist an empty-persona character; chat_controller_test.dart '
+        '\'s "empty persona" test confirms that even if one exists, chat '
+        'still never sends an empty system turn — so this is defense-in-'
+        'depth-only, not a gate blocker.', () async {
+      final id = await repo.createCharacter(
+        name: 'Blank',
+        personaSystemPrompt: '   ',
+      );
+      final character = await repo.getCharacter(id);
+      expect(character!.personaSystemPrompt, '   ');
+    });
+
     test('listCharacters(builtInsFirst: false) is flat alphabetical', () async {
       await repo.createCharacter(name: 'Zed', personaSystemPrompt: 'p');
       await repo.createCharacter(
