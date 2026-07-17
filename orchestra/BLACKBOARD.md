@@ -1451,3 +1451,52 @@ sibling in same repo), auto-downloads+pairs the projector, associates in drift,
 combined-size device tier. flutter-core — chat image attach (image_picker
 gallery+camera) shown ONLY when loaded model isMultimodal (gate G3), image in
 bubble, one-tap text-extract→copy.
+
+### [LOOP-07] [flutter-platform → flutter-core/reviewer] [HANDOFF] 2026-07-18T04:10
+T2 Model Manager vision support complete (commit 741d231, branch
+loop/07-vision): vision detection + mmproj auto-pairing + combined-size tier,
+all four in `data/hf_api/`, `data/db/`, `data/downloads/`, `features/
+models_hub/state/`.
+Matching rule (`data/hf_api/vision_pairing.dart`): a GGUF is vision-capable
+iff the repo has any `mmproj*.gguf` sibling (subfolder-flattened, same walk
+`getRepoFiles` already does). Per quant: (1) exact quant-label match (Q8_0
+model -> mmproj-*-Q8_0) (2) else smallest F16 projector (3) else smallest
+mmproj overall. `quantVariantsFrom` no longer lists mmproj files as their own
+downloadable quant (behavior change — updated the one existing test that
+asserted the old count).
+Schema v3->v4 (tested, data-preserving): `installed_models` +mmprojPath
+(nullable) +isVision. isVision marks "this row IS a vision model" independent
+of whether the projector landed; `isVision && mmprojPath == null` is the
+"needs projector" half-state — surfaced, not silently dropped or duplicated.
+Pairing flow (`download_actions_controller.dart`'s `enqueueVisionQuant`):
+model enqueues first through the existing DownloadManager; ONLY once it
+completes does the coordinator chain-enqueue the mmproj
+(`registerAsInstalledModel: false` — verified + kept on disk, no row of its
+own) and patch its path onto the model's row (`StorageManager.
+attachProjector`). Sequential by design — no race to patch a row that
+doesn't exist yet. Model-fails -> nothing enqueued, nothing installed.
+Projector-fails-after-model -> row stays `isVision: true, mmprojPath: null`
+(needs-projector), failure surfaced under the model's own taskId (existing
+per-tile error slot). Cancel covers both: the projector never gets a row, so
+canceling it mid-flight just leaves the half-state, no orphan.
+StorageManager.delete removes both files for a vision model + the one row;
+totalUsageBytes stats the projector file too (no 3rd size column — the path
+is already known). classifyModelTier/ModelVerdictChip take an optional
+mmprojSizeBytes for the combined-footprint RAM verdict; wired into
+model_detail_screen's quant tiles + download button (routes vision quants
+through enqueueVisionQuant, plain quants through the existing enqueue).
+Catalog: `vision_model_catalog.dart` — SmolVLM-500M Q8_0 (416MB+103MB) and
+SmolVLM2-2.2B Q4_K_M (1061MB+565MB, ggml-org/SmolVLM2-2.2B-Instruct-GGUF,
+verified repo/sizes from T1's real round-trip + orchestra/research/
+hf-api.md §5), same shape a live HF pairing produces via
+`visionCatalogQuantVariant`.
+50 new tests (SmolVLM-style repo-tree fixture, quant<->mmproj matching incl.
+both fallback rules, v3->v4 migration incl. two pre-existing migration test
+fixtures that needed the same "createTable builds current shape, DROP COLUMN
+the new ones" fix chat/character migration tests already used, paired
+download incl. mmproj-fails-after-model, combined-size tier, storage delete/
+usage-counts-both). 718/718 suite, make verify green, floor-scope coverage
+81%. No push (per instruction).
+Request: flutter-core — build the chat image-attach flow (T3) on this
+surface (isVision on QuantVariant, isVision/mmprojPath on InstalledModelInfo/
+InstalledModels); reviewer — full diff review.
