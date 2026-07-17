@@ -51,7 +51,12 @@ Conventional commits. CI green before merge, no exceptions.
 
 ## Current status
 
-Loops 0–1 CLOSED: ADRs 001-003 accepted, brand tokens ratified, both repos
-scaffolded with green CI, website live. Loop 2 IN PROGRESS: engine online —
-llama_cpp_dart pinned git dep, EngineService + isolate worker + token
-streaming + cancel + free-path tests, debug chat screen.
+Loops 0–3 CLOSED: engine online (EngineService over pinned llama_cpp_dart,
+proven free paths), model manager + HF hub shipped (browse/verdicts/resumable
+verified downloads/import). Real site live at anshrajput.github.io/
+dhruva-website (Loop 12 build-ahead). Firebase project dhruvaai-68a00 staged.
+SCOPE AMENDMENT 1: Loop 10.5 (model playground + opt-in AI news), designer
+gate BLOCKING from Loop 4. Loop 4 IN PROGRESS: chat experience (MVP-closer) —
+markdown+code rendering, streaming with tok/s, drift history, folders/search,
+system-prompt editor, sampling settings, regenerate/edit, export, reasoning-
+token transparency. iOS floor 14.0 (build config matches DECISIONS).

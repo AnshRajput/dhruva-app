@@ -79,3 +79,31 @@ CI (concurrency group) — add paths-ignore for orchestra/** and docs/** in
 Loop 3. (5) Carry into Loop 3: debug_chat's hard-wired concrete service made
 it untestable — Loop 3+ features MUST take EngineService via Riverpod DI from
 the first line.
+
+## LOOP 3 — Model Manager & Hugging Face hub (2026-07-17)
+Goal: browse HF GGUF repos in-app, device-aware verdicts, resumable verified
+downloads, local import, storage manager.
+Exit gate results (attempt 1 logically; 3 CI runs for env/target issues):
+1. E2E download flow — PASS (real-socket localhost E2E over the real manager:
+   search→detail→enqueue→range-resume→integrity→drift)
+2. Offline/resume/corrupt states typed and tested — PASS
+3. make verify + floor-scope coverage ≥70% — PASS (246 tests, 77%)
+4. QA PASS + reviewer APPROVE — PASS (after 2 QA fixes + 2 review fix rounds)
+5. CI green on merged PR — PASS
+Shipped: DI root, device tiering, HfApiClient, drift store, DownloadManager
+(sanitized choke point, restart rehydration with rebuild-before-flush
+invariant, typed failures), storage manager, GGUF import, full models_hub UI
+(license-before-download, verdict chips, retry affordance).
+Retro: (1) BIGGEST LESSON — the reviewer caught the SAME bug twice at
+different depths (restart orphan, then the fix's own flush-before-rebuild
+race): ordering invariants around event streams need the invariant IN THE
+INTERFACE CONTRACT, and a test that emits during the window; "verified
+non-vacuous by inverting" is now the standard for race tests. (2) QA's
+trust-boundary probe (path traversal) found a real gap the builders' 163
+tests missed — adversarial QA stays mandatory. (3) Two CI environment
+lessons: transient CocoaPods CDN failures (retry once before researching —
+worked) and template deployment targets drifting from recorded decisions
+(iOS 13.0 vs our 14+ floor) — decisions that imply build config must be
+applied to build config the day they're made. (4) Carry into Loop 4: chat
+consumes storageManager's ordered installed list + touchLastUsed; use
+DownloadProgress.failure (typed) not errorMessage; designer gate is BLOCKING.
