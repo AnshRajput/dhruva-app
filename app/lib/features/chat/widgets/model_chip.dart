@@ -48,9 +48,12 @@ class ModelChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              noModel ? 'Pick a model' : modelShortLabel(model!.repoId),
-              style: theme.textTheme.labelLarge?.copyWith(color: foreground),
+            Flexible(
+              child: Text(
+                noModel ? 'Pick a model' : modelShortLabel(model!.repoId),
+                style: theme.textTheme.labelLarge?.copyWith(color: foreground),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             Icon(Icons.expand_more, size: 14, color: foreground),
           ],
