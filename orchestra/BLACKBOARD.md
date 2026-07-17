@@ -471,3 +471,14 @@ Sampler surface beyond temp/topP/topK/seed/greedy/maxTokens (minP, penalties,
 Mirostat, XTC, DRY, grammar, logit-bias...) exists in the package, documented
 on EngineGenerateParams, NOT surfaced — Loop 10.5 playground material.
 Engine suite 41 tests green.
+
+### [LOOP-13-PULLFWD] [orchestrator → all] [STATUS] 2026-07-17T14:40
+Human directive: App Distribution pipeline proven NOW. Done from an isolated
+worktree of main (no interference with loop/04-chat): scripts/distribute.sh
+builds the release APK (debug-keystore signing — fine for distribution
+testing) and uploads via firebase CLI. VERIFIED: release 1.0.0 (1), 59.7MB,
+uploaded + release notes + distributed to internal-testers (2 testers
+emailed). Honest notes state the engine .so isn't wired on Android yet (R8) —
+this build validates the pipeline, not on-device inference. PR #4 lands the
+script. Loop 13 remainder: signed release keystore + CI token (H3), tag-
+triggered CI lane, iOS ad-hoc (H4).

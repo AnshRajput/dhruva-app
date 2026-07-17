@@ -11,3 +11,4 @@
 | R7 | ggml Metal assert at process exit on macOS dev builds after model load (upstream PR #17869) | LOW | Cosmetic, dev-only; track upstream fix at next pin bump |
 | R8 | Android AAR not yet wired (build_native.sh android unimplemented at pin; package ships CPU+Hexagon AARs via releases) | MEDIUM | Wire AAR into android/app/libs/ in Loop 3 gate prep; Android CI release build currently builds without native inference exercised |
 | R9 | On-device (phone) inference perf/thermals unverified — macOS Metal 64.9 tok/s is NOT a phone number | HIGH | Needs on-device verification via Firebase App Distribution testers (Loop 13) |
+| R10 | Distributed pre-alpha APKs run models_hub but NOT inference (Android engine .so unwired — R8); testers may judge the app by a build that can't chat | MEDIUM | Release notes state it plainly; wire the Android AAR before the next distributed build (target: Loop 4 close / v0.1.0-alpha) |
