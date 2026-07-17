@@ -660,341 +660,1555 @@ class InstalledModelsCompanion extends UpdateCompanion<InstalledModel> {
   }
 }
 
+class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FoldersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortIndexMeta = const VerificationMeta(
+    'sortIndex',
+  );
+  @override
+  late final GeneratedColumn<int> sortIndex = GeneratedColumn<int>(
+    'sort_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, sortIndex];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'folders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Folder> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_index')) {
+      context.handle(
+        _sortIndexMeta,
+        sortIndex.isAcceptableOrUnknown(data['sort_index']!, _sortIndexMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Folder map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Folder(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_index'],
+      )!,
+    );
+  }
+
+  @override
+  $FoldersTable createAlias(String alias) {
+    return $FoldersTable(attachedDatabase, alias);
+  }
+}
+
+class Folder extends DataClass implements Insertable<Folder> {
+  final int id;
+  final String name;
+  final int sortIndex;
+  const Folder({required this.id, required this.name, required this.sortIndex});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['sort_index'] = Variable<int>(sortIndex);
+    return map;
+  }
+
+  FoldersCompanion toCompanion(bool nullToAbsent) {
+    return FoldersCompanion(
+      id: Value(id),
+      name: Value(name),
+      sortIndex: Value(sortIndex),
+    );
+  }
+
+  factory Folder.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Folder(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      sortIndex: serializer.fromJson<int>(json['sortIndex']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'sortIndex': serializer.toJson<int>(sortIndex),
+    };
+  }
+
+  Folder copyWith({int? id, String? name, int? sortIndex}) => Folder(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    sortIndex: sortIndex ?? this.sortIndex,
+  );
+  Folder copyWithCompanion(FoldersCompanion data) {
+    return Folder(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      sortIndex: data.sortIndex.present ? data.sortIndex.value : this.sortIndex,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Folder(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortIndex: $sortIndex')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, sortIndex);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Folder &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortIndex == this.sortIndex);
+}
+
+class FoldersCompanion extends UpdateCompanion<Folder> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<int> sortIndex;
+  const FoldersCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortIndex = const Value.absent(),
+  });
+  FoldersCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.sortIndex = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<Folder> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<int>? sortIndex,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (sortIndex != null) 'sort_index': sortIndex,
+    });
+  }
+
+  FoldersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<int>? sortIndex,
+  }) {
+    return FoldersCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortIndex: sortIndex ?? this.sortIndex,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortIndex.present) {
+      map['sort_index'] = Variable<int>(sortIndex.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoldersCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortIndex: $sortIndex')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ConversationsTable extends Conversations
+    with TableInfo<$ConversationsTable, Conversation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ConversationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _folderIdMeta = const VerificationMeta(
+    'folderId',
+  );
+  @override
+  late final GeneratedColumn<int> folderId = GeneratedColumn<int>(
+    'folder_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES folders (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _modelIdMeta = const VerificationMeta(
+    'modelId',
+  );
+  @override
+  late final GeneratedColumn<int> modelId = GeneratedColumn<int>(
+    'model_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES installed_models (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _systemPromptMeta = const VerificationMeta(
+    'systemPrompt',
+  );
+  @override
+  late final GeneratedColumn<String> systemPrompt = GeneratedColumn<String>(
+    'system_prompt',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _samplingParamsJsonMeta =
+      const VerificationMeta('samplingParamsJson');
+  @override
+  late final GeneratedColumn<String> samplingParamsJson =
+      GeneratedColumn<String>(
+        'sampling_params_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    folderId,
+    modelId,
+    systemPrompt,
+    samplingParamsJson,
+    createdAt,
+    updatedAt,
+    pinned,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'conversations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Conversation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('folder_id')) {
+      context.handle(
+        _folderIdMeta,
+        folderId.isAcceptableOrUnknown(data['folder_id']!, _folderIdMeta),
+      );
+    }
+    if (data.containsKey('model_id')) {
+      context.handle(
+        _modelIdMeta,
+        modelId.isAcceptableOrUnknown(data['model_id']!, _modelIdMeta),
+      );
+    }
+    if (data.containsKey('system_prompt')) {
+      context.handle(
+        _systemPromptMeta,
+        systemPrompt.isAcceptableOrUnknown(
+          data['system_prompt']!,
+          _systemPromptMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sampling_params_json')) {
+      context.handle(
+        _samplingParamsJsonMeta,
+        samplingParamsJson.isAcceptableOrUnknown(
+          data['sampling_params_json']!,
+          _samplingParamsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Conversation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Conversation(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      folderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}folder_id'],
+      ),
+      modelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}model_id'],
+      ),
+      systemPrompt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}system_prompt'],
+      )!,
+      samplingParamsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sampling_params_json'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+    );
+  }
+
+  @override
+  $ConversationsTable createAlias(String alias) {
+    return $ConversationsTable(attachedDatabase, alias);
+  }
+}
+
+class Conversation extends DataClass implements Insertable<Conversation> {
+  final int id;
+  final String title;
+  final int? folderId;
+  final int? modelId;
+  final String systemPrompt;
+
+  /// `SamplingParams.toJson()` (see `data/chat/models/sampling_params.dart`),
+  /// or null to use `SamplingParams()` defaults.
+  final String? samplingParamsJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final bool pinned;
+  const Conversation({
+    required this.id,
+    required this.title,
+    this.folderId,
+    this.modelId,
+    required this.systemPrompt,
+    this.samplingParamsJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.pinned,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || folderId != null) {
+      map['folder_id'] = Variable<int>(folderId);
+    }
+    if (!nullToAbsent || modelId != null) {
+      map['model_id'] = Variable<int>(modelId);
+    }
+    map['system_prompt'] = Variable<String>(systemPrompt);
+    if (!nullToAbsent || samplingParamsJson != null) {
+      map['sampling_params_json'] = Variable<String>(samplingParamsJson);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['pinned'] = Variable<bool>(pinned);
+    return map;
+  }
+
+  ConversationsCompanion toCompanion(bool nullToAbsent) {
+    return ConversationsCompanion(
+      id: Value(id),
+      title: Value(title),
+      folderId: folderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(folderId),
+      modelId: modelId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(modelId),
+      systemPrompt: Value(systemPrompt),
+      samplingParamsJson: samplingParamsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(samplingParamsJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      pinned: Value(pinned),
+    );
+  }
+
+  factory Conversation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Conversation(
+      id: serializer.fromJson<int>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      folderId: serializer.fromJson<int?>(json['folderId']),
+      modelId: serializer.fromJson<int?>(json['modelId']),
+      systemPrompt: serializer.fromJson<String>(json['systemPrompt']),
+      samplingParamsJson: serializer.fromJson<String?>(
+        json['samplingParamsJson'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'title': serializer.toJson<String>(title),
+      'folderId': serializer.toJson<int?>(folderId),
+      'modelId': serializer.toJson<int?>(modelId),
+      'systemPrompt': serializer.toJson<String>(systemPrompt),
+      'samplingParamsJson': serializer.toJson<String?>(samplingParamsJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'pinned': serializer.toJson<bool>(pinned),
+    };
+  }
+
+  Conversation copyWith({
+    int? id,
+    String? title,
+    Value<int?> folderId = const Value.absent(),
+    Value<int?> modelId = const Value.absent(),
+    String? systemPrompt,
+    Value<String?> samplingParamsJson = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? pinned,
+  }) => Conversation(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    folderId: folderId.present ? folderId.value : this.folderId,
+    modelId: modelId.present ? modelId.value : this.modelId,
+    systemPrompt: systemPrompt ?? this.systemPrompt,
+    samplingParamsJson: samplingParamsJson.present
+        ? samplingParamsJson.value
+        : this.samplingParamsJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    pinned: pinned ?? this.pinned,
+  );
+  Conversation copyWithCompanion(ConversationsCompanion data) {
+    return Conversation(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      folderId: data.folderId.present ? data.folderId.value : this.folderId,
+      modelId: data.modelId.present ? data.modelId.value : this.modelId,
+      systemPrompt: data.systemPrompt.present
+          ? data.systemPrompt.value
+          : this.systemPrompt,
+      samplingParamsJson: data.samplingParamsJson.present
+          ? data.samplingParamsJson.value
+          : this.samplingParamsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Conversation(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('folderId: $folderId, ')
+          ..write('modelId: $modelId, ')
+          ..write('systemPrompt: $systemPrompt, ')
+          ..write('samplingParamsJson: $samplingParamsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('pinned: $pinned')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    folderId,
+    modelId,
+    systemPrompt,
+    samplingParamsJson,
+    createdAt,
+    updatedAt,
+    pinned,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Conversation &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.folderId == this.folderId &&
+          other.modelId == this.modelId &&
+          other.systemPrompt == this.systemPrompt &&
+          other.samplingParamsJson == this.samplingParamsJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.pinned == this.pinned);
+}
+
+class ConversationsCompanion extends UpdateCompanion<Conversation> {
+  final Value<int> id;
+  final Value<String> title;
+  final Value<int?> folderId;
+  final Value<int?> modelId;
+  final Value<String> systemPrompt;
+  final Value<String?> samplingParamsJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<bool> pinned;
+  const ConversationsCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.folderId = const Value.absent(),
+    this.modelId = const Value.absent(),
+    this.systemPrompt = const Value.absent(),
+    this.samplingParamsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.pinned = const Value.absent(),
+  });
+  ConversationsCompanion.insert({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.folderId = const Value.absent(),
+    this.modelId = const Value.absent(),
+    this.systemPrompt = const Value.absent(),
+    this.samplingParamsJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.pinned = const Value.absent(),
+  }) : createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<Conversation> custom({
+    Expression<int>? id,
+    Expression<String>? title,
+    Expression<int>? folderId,
+    Expression<int>? modelId,
+    Expression<String>? systemPrompt,
+    Expression<String>? samplingParamsJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<bool>? pinned,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (folderId != null) 'folder_id': folderId,
+      if (modelId != null) 'model_id': modelId,
+      if (systemPrompt != null) 'system_prompt': systemPrompt,
+      if (samplingParamsJson != null)
+        'sampling_params_json': samplingParamsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (pinned != null) 'pinned': pinned,
+    });
+  }
+
+  ConversationsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? title,
+    Value<int?>? folderId,
+    Value<int?>? modelId,
+    Value<String>? systemPrompt,
+    Value<String?>? samplingParamsJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<bool>? pinned,
+  }) {
+    return ConversationsCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      folderId: folderId ?? this.folderId,
+      modelId: modelId ?? this.modelId,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      samplingParamsJson: samplingParamsJson ?? this.samplingParamsJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      pinned: pinned ?? this.pinned,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (folderId.present) {
+      map['folder_id'] = Variable<int>(folderId.value);
+    }
+    if (modelId.present) {
+      map['model_id'] = Variable<int>(modelId.value);
+    }
+    if (systemPrompt.present) {
+      map['system_prompt'] = Variable<String>(systemPrompt.value);
+    }
+    if (samplingParamsJson.present) {
+      map['sampling_params_json'] = Variable<String>(samplingParamsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ConversationsCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('folderId: $folderId, ')
+          ..write('modelId: $modelId, ')
+          ..write('systemPrompt: $systemPrompt, ')
+          ..write('samplingParamsJson: $samplingParamsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('pinned: $pinned')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MessagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<int> conversationId = GeneratedColumn<int>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES conversations (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<MessageRole, int> role =
+      GeneratedColumn<int>(
+        'role',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<MessageRole>($MessagesTable.$converterrole);
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _reasoningContentMeta = const VerificationMeta(
+    'reasoningContent',
+  );
+  @override
+  late final GeneratedColumn<String> reasoningContent = GeneratedColumn<String>(
+    'reasoning_content',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<MessageStatus, int> status =
+      GeneratedColumn<int>(
+        'status',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<MessageStatus>($MessagesTable.$converterstatus);
+  static const VerificationMeta _errorKindMeta = const VerificationMeta(
+    'errorKind',
+  );
+  @override
+  late final GeneratedColumn<String> errorKind = GeneratedColumn<String>(
+    'error_kind',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tokCountMeta = const VerificationMeta(
+    'tokCount',
+  );
+  @override
+  late final GeneratedColumn<int> tokCount = GeneratedColumn<int>(
+    'tok_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _genMsMeta = const VerificationMeta('genMs');
+  @override
+  late final GeneratedColumn<int> genMs = GeneratedColumn<int>(
+    'gen_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parentMessageIdMeta = const VerificationMeta(
+    'parentMessageId',
+  );
+  @override
+  late final GeneratedColumn<int> parentMessageId = GeneratedColumn<int>(
+    'parent_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (id) ON DELETE SET NULL',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    conversationId,
+    role,
+    content,
+    reasoningContent,
+    status,
+    errorKind,
+    tokCount,
+    genMs,
+    createdAt,
+    parentMessageId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'messages';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<Message> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    }
+    if (data.containsKey('reasoning_content')) {
+      context.handle(
+        _reasoningContentMeta,
+        reasoningContent.isAcceptableOrUnknown(
+          data['reasoning_content']!,
+          _reasoningContentMeta,
+        ),
+      );
+    }
+    if (data.containsKey('error_kind')) {
+      context.handle(
+        _errorKindMeta,
+        errorKind.isAcceptableOrUnknown(data['error_kind']!, _errorKindMeta),
+      );
+    }
+    if (data.containsKey('tok_count')) {
+      context.handle(
+        _tokCountMeta,
+        tokCount.isAcceptableOrUnknown(data['tok_count']!, _tokCountMeta),
+      );
+    }
+    if (data.containsKey('gen_ms')) {
+      context.handle(
+        _genMsMeta,
+        genMs.isAcceptableOrUnknown(data['gen_ms']!, _genMsMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('parent_message_id')) {
+      context.handle(
+        _parentMessageIdMeta,
+        parentMessageId.isAcceptableOrUnknown(
+          data['parent_message_id']!,
+          _parentMessageIdMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Message map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Message(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      role: $MessagesTable.$converterrole.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}role'],
+        )!,
+      ),
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+      reasoningContent: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reasoning_content'],
+      ),
+      status: $MessagesTable.$converterstatus.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}status'],
+        )!,
+      ),
+      errorKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_kind'],
+      ),
+      tokCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tok_count'],
+      ),
+      genMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}gen_ms'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      parentMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parent_message_id'],
+      ),
+    );
+  }
+
+  @override
+  $MessagesTable createAlias(String alias) {
+    return $MessagesTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<MessageRole, int, int> $converterrole =
+      const EnumIndexConverter<MessageRole>(MessageRole.values);
+  static JsonTypeConverter2<MessageStatus, int, int> $converterstatus =
+      const EnumIndexConverter<MessageStatus>(MessageStatus.values);
+}
+
+class Message extends DataClass implements Insertable<Message> {
+  final int id;
+  final int conversationId;
+  final MessageRole role;
+  final String content;
+
+  /// Extracted `<think>...</think>` text, kept separate from `content` so
+  /// the UI can collapse it independently.
+  final String? reasoningContent;
+  final MessageStatus status;
+
+  /// Free-text failure-kind label (e.g. an `EngineFailure`/`AppFailure`
+  /// `runtimeType`). This layer deliberately doesn't depend on
+  /// `engine_bindings`'s failure tree (ADR-002 dependency direction) — it
+  /// just stores whatever label the caller passed.
+  final String? errorKind;
+  final int? tokCount;
+  final int? genMs;
+  final DateTime createdAt;
+
+  /// Enables edit/regenerate history (a regenerated or edited message
+  /// points back at the message it replaced) without a full tree UI — this
+  /// is linear-history provenance, not a real tree; a deleted parent just
+  /// un-sets the pointer.
+  final int? parentMessageId;
+  const Message({
+    required this.id,
+    required this.conversationId,
+    required this.role,
+    required this.content,
+    this.reasoningContent,
+    required this.status,
+    this.errorKind,
+    this.tokCount,
+    this.genMs,
+    required this.createdAt,
+    this.parentMessageId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['conversation_id'] = Variable<int>(conversationId);
+    {
+      map['role'] = Variable<int>($MessagesTable.$converterrole.toSql(role));
+    }
+    map['content'] = Variable<String>(content);
+    if (!nullToAbsent || reasoningContent != null) {
+      map['reasoning_content'] = Variable<String>(reasoningContent);
+    }
+    {
+      map['status'] = Variable<int>(
+        $MessagesTable.$converterstatus.toSql(status),
+      );
+    }
+    if (!nullToAbsent || errorKind != null) {
+      map['error_kind'] = Variable<String>(errorKind);
+    }
+    if (!nullToAbsent || tokCount != null) {
+      map['tok_count'] = Variable<int>(tokCount);
+    }
+    if (!nullToAbsent || genMs != null) {
+      map['gen_ms'] = Variable<int>(genMs);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || parentMessageId != null) {
+      map['parent_message_id'] = Variable<int>(parentMessageId);
+    }
+    return map;
+  }
+
+  MessagesCompanion toCompanion(bool nullToAbsent) {
+    return MessagesCompanion(
+      id: Value(id),
+      conversationId: Value(conversationId),
+      role: Value(role),
+      content: Value(content),
+      reasoningContent: reasoningContent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reasoningContent),
+      status: Value(status),
+      errorKind: errorKind == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorKind),
+      tokCount: tokCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tokCount),
+      genMs: genMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(genMs),
+      createdAt: Value(createdAt),
+      parentMessageId: parentMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentMessageId),
+    );
+  }
+
+  factory Message.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Message(
+      id: serializer.fromJson<int>(json['id']),
+      conversationId: serializer.fromJson<int>(json['conversationId']),
+      role: $MessagesTable.$converterrole.fromJson(
+        serializer.fromJson<int>(json['role']),
+      ),
+      content: serializer.fromJson<String>(json['content']),
+      reasoningContent: serializer.fromJson<String?>(json['reasoningContent']),
+      status: $MessagesTable.$converterstatus.fromJson(
+        serializer.fromJson<int>(json['status']),
+      ),
+      errorKind: serializer.fromJson<String?>(json['errorKind']),
+      tokCount: serializer.fromJson<int?>(json['tokCount']),
+      genMs: serializer.fromJson<int?>(json['genMs']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      parentMessageId: serializer.fromJson<int?>(json['parentMessageId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'conversationId': serializer.toJson<int>(conversationId),
+      'role': serializer.toJson<int>(
+        $MessagesTable.$converterrole.toJson(role),
+      ),
+      'content': serializer.toJson<String>(content),
+      'reasoningContent': serializer.toJson<String?>(reasoningContent),
+      'status': serializer.toJson<int>(
+        $MessagesTable.$converterstatus.toJson(status),
+      ),
+      'errorKind': serializer.toJson<String?>(errorKind),
+      'tokCount': serializer.toJson<int?>(tokCount),
+      'genMs': serializer.toJson<int?>(genMs),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'parentMessageId': serializer.toJson<int?>(parentMessageId),
+    };
+  }
+
+  Message copyWith({
+    int? id,
+    int? conversationId,
+    MessageRole? role,
+    String? content,
+    Value<String?> reasoningContent = const Value.absent(),
+    MessageStatus? status,
+    Value<String?> errorKind = const Value.absent(),
+    Value<int?> tokCount = const Value.absent(),
+    Value<int?> genMs = const Value.absent(),
+    DateTime? createdAt,
+    Value<int?> parentMessageId = const Value.absent(),
+  }) => Message(
+    id: id ?? this.id,
+    conversationId: conversationId ?? this.conversationId,
+    role: role ?? this.role,
+    content: content ?? this.content,
+    reasoningContent: reasoningContent.present
+        ? reasoningContent.value
+        : this.reasoningContent,
+    status: status ?? this.status,
+    errorKind: errorKind.present ? errorKind.value : this.errorKind,
+    tokCount: tokCount.present ? tokCount.value : this.tokCount,
+    genMs: genMs.present ? genMs.value : this.genMs,
+    createdAt: createdAt ?? this.createdAt,
+    parentMessageId: parentMessageId.present
+        ? parentMessageId.value
+        : this.parentMessageId,
+  );
+  Message copyWithCompanion(MessagesCompanion data) {
+    return Message(
+      id: data.id.present ? data.id.value : this.id,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      role: data.role.present ? data.role.value : this.role,
+      content: data.content.present ? data.content.value : this.content,
+      reasoningContent: data.reasoningContent.present
+          ? data.reasoningContent.value
+          : this.reasoningContent,
+      status: data.status.present ? data.status.value : this.status,
+      errorKind: data.errorKind.present ? data.errorKind.value : this.errorKind,
+      tokCount: data.tokCount.present ? data.tokCount.value : this.tokCount,
+      genMs: data.genMs.present ? data.genMs.value : this.genMs,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      parentMessageId: data.parentMessageId.present
+          ? data.parentMessageId.value
+          : this.parentMessageId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Message(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('role: $role, ')
+          ..write('content: $content, ')
+          ..write('reasoningContent: $reasoningContent, ')
+          ..write('status: $status, ')
+          ..write('errorKind: $errorKind, ')
+          ..write('tokCount: $tokCount, ')
+          ..write('genMs: $genMs, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('parentMessageId: $parentMessageId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    conversationId,
+    role,
+    content,
+    reasoningContent,
+    status,
+    errorKind,
+    tokCount,
+    genMs,
+    createdAt,
+    parentMessageId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Message &&
+          other.id == this.id &&
+          other.conversationId == this.conversationId &&
+          other.role == this.role &&
+          other.content == this.content &&
+          other.reasoningContent == this.reasoningContent &&
+          other.status == this.status &&
+          other.errorKind == this.errorKind &&
+          other.tokCount == this.tokCount &&
+          other.genMs == this.genMs &&
+          other.createdAt == this.createdAt &&
+          other.parentMessageId == this.parentMessageId);
+}
+
+class MessagesCompanion extends UpdateCompanion<Message> {
+  final Value<int> id;
+  final Value<int> conversationId;
+  final Value<MessageRole> role;
+  final Value<String> content;
+  final Value<String?> reasoningContent;
+  final Value<MessageStatus> status;
+  final Value<String?> errorKind;
+  final Value<int?> tokCount;
+  final Value<int?> genMs;
+  final Value<DateTime> createdAt;
+  final Value<int?> parentMessageId;
+  const MessagesCompanion({
+    this.id = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.role = const Value.absent(),
+    this.content = const Value.absent(),
+    this.reasoningContent = const Value.absent(),
+    this.status = const Value.absent(),
+    this.errorKind = const Value.absent(),
+    this.tokCount = const Value.absent(),
+    this.genMs = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.parentMessageId = const Value.absent(),
+  });
+  MessagesCompanion.insert({
+    this.id = const Value.absent(),
+    required int conversationId,
+    required MessageRole role,
+    this.content = const Value.absent(),
+    this.reasoningContent = const Value.absent(),
+    required MessageStatus status,
+    this.errorKind = const Value.absent(),
+    this.tokCount = const Value.absent(),
+    this.genMs = const Value.absent(),
+    required DateTime createdAt,
+    this.parentMessageId = const Value.absent(),
+  }) : conversationId = Value(conversationId),
+       role = Value(role),
+       status = Value(status),
+       createdAt = Value(createdAt);
+  static Insertable<Message> custom({
+    Expression<int>? id,
+    Expression<int>? conversationId,
+    Expression<int>? role,
+    Expression<String>? content,
+    Expression<String>? reasoningContent,
+    Expression<int>? status,
+    Expression<String>? errorKind,
+    Expression<int>? tokCount,
+    Expression<int>? genMs,
+    Expression<DateTime>? createdAt,
+    Expression<int>? parentMessageId,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (role != null) 'role': role,
+      if (content != null) 'content': content,
+      if (reasoningContent != null) 'reasoning_content': reasoningContent,
+      if (status != null) 'status': status,
+      if (errorKind != null) 'error_kind': errorKind,
+      if (tokCount != null) 'tok_count': tokCount,
+      if (genMs != null) 'gen_ms': genMs,
+      if (createdAt != null) 'created_at': createdAt,
+      if (parentMessageId != null) 'parent_message_id': parentMessageId,
+    });
+  }
+
+  MessagesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? conversationId,
+    Value<MessageRole>? role,
+    Value<String>? content,
+    Value<String?>? reasoningContent,
+    Value<MessageStatus>? status,
+    Value<String?>? errorKind,
+    Value<int?>? tokCount,
+    Value<int?>? genMs,
+    Value<DateTime>? createdAt,
+    Value<int?>? parentMessageId,
+  }) {
+    return MessagesCompanion(
+      id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      reasoningContent: reasoningContent ?? this.reasoningContent,
+      status: status ?? this.status,
+      errorKind: errorKind ?? this.errorKind,
+      tokCount: tokCount ?? this.tokCount,
+      genMs: genMs ?? this.genMs,
+      createdAt: createdAt ?? this.createdAt,
+      parentMessageId: parentMessageId ?? this.parentMessageId,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<int>(conversationId.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<int>(
+        $MessagesTable.$converterrole.toSql(role.value),
+      );
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (reasoningContent.present) {
+      map['reasoning_content'] = Variable<String>(reasoningContent.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<int>(
+        $MessagesTable.$converterstatus.toSql(status.value),
+      );
+    }
+    if (errorKind.present) {
+      map['error_kind'] = Variable<String>(errorKind.value);
+    }
+    if (tokCount.present) {
+      map['tok_count'] = Variable<int>(tokCount.value);
+    }
+    if (genMs.present) {
+      map['gen_ms'] = Variable<int>(genMs.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (parentMessageId.present) {
+      map['parent_message_id'] = Variable<int>(parentMessageId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MessagesCompanion(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('role: $role, ')
+          ..write('content: $content, ')
+          ..write('reasoningContent: $reasoningContent, ')
+          ..write('status: $status, ')
+          ..write('errorKind: $errorKind, ')
+          ..write('tokCount: $tokCount, ')
+          ..write('genMs: $genMs, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('parentMessageId: $parentMessageId')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
-  $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $InstalledModelsTable installedModels = $InstalledModelsTable(
     this,
   );
+  late final $FoldersTable folders = $FoldersTable(this);
+  late final $ConversationsTable conversations = $ConversationsTable(this);
+  late final $MessagesTable messages = $MessagesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [installedModels];
-}
-
-typedef $$InstalledModelsTableCreateCompanionBuilder =
-    InstalledModelsCompanion Function({
-      Value<int> id,
-      required String repoId,
-      required String fileName,
-      Value<String?> quant,
-      required int sizeBytes,
-      Value<String?> sha256,
-      required String localPath,
-      Value<String?> license,
-      Value<bool> gated,
-      required DateTime downloadedAt,
-      Value<DateTime?> lastUsedAt,
-    });
-typedef $$InstalledModelsTableUpdateCompanionBuilder =
-    InstalledModelsCompanion Function({
-      Value<int> id,
-      Value<String> repoId,
-      Value<String> fileName,
-      Value<String?> quant,
-      Value<int> sizeBytes,
-      Value<String?> sha256,
-      Value<String> localPath,
-      Value<String?> license,
-      Value<bool> gated,
-      Value<DateTime> downloadedAt,
-      Value<DateTime?> lastUsedAt,
-    });
-
-class $$InstalledModelsTableFilterComposer
-    extends Composer<_$AppDatabase, $InstalledModelsTable> {
-  $$InstalledModelsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get repoId => $composableBuilder(
-    column: $table.repoId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get fileName => $composableBuilder(
-    column: $table.fileName,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get quant => $composableBuilder(
-    column: $table.quant,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get sizeBytes => $composableBuilder(
-    column: $table.sizeBytes,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get sha256 => $composableBuilder(
-    column: $table.sha256,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get localPath => $composableBuilder(
-    column: $table.localPath,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get license => $composableBuilder(
-    column: $table.license,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get gated => $composableBuilder(
-    column: $table.gated,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get downloadedAt => $composableBuilder(
-    column: $table.downloadedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get lastUsedAt => $composableBuilder(
-    column: $table.lastUsedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$InstalledModelsTableOrderingComposer
-    extends Composer<_$AppDatabase, $InstalledModelsTable> {
-  $$InstalledModelsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get repoId => $composableBuilder(
-    column: $table.repoId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get fileName => $composableBuilder(
-    column: $table.fileName,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get quant => $composableBuilder(
-    column: $table.quant,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get sizeBytes => $composableBuilder(
-    column: $table.sizeBytes,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get sha256 => $composableBuilder(
-    column: $table.sha256,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get localPath => $composableBuilder(
-    column: $table.localPath,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get license => $composableBuilder(
-    column: $table.license,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get gated => $composableBuilder(
-    column: $table.gated,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get downloadedAt => $composableBuilder(
-    column: $table.downloadedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get lastUsedAt => $composableBuilder(
-    column: $table.lastUsedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$InstalledModelsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $InstalledModelsTable> {
-  $$InstalledModelsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get repoId =>
-      $composableBuilder(column: $table.repoId, builder: (column) => column);
-
-  GeneratedColumn<String> get fileName =>
-      $composableBuilder(column: $table.fileName, builder: (column) => column);
-
-  GeneratedColumn<String> get quant =>
-      $composableBuilder(column: $table.quant, builder: (column) => column);
-
-  GeneratedColumn<int> get sizeBytes =>
-      $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
-
-  GeneratedColumn<String> get sha256 =>
-      $composableBuilder(column: $table.sha256, builder: (column) => column);
-
-  GeneratedColumn<String> get localPath =>
-      $composableBuilder(column: $table.localPath, builder: (column) => column);
-
-  GeneratedColumn<String> get license =>
-      $composableBuilder(column: $table.license, builder: (column) => column);
-
-  GeneratedColumn<bool> get gated =>
-      $composableBuilder(column: $table.gated, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get downloadedAt => $composableBuilder(
-    column: $table.downloadedAt,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<DateTime> get lastUsedAt => $composableBuilder(
-    column: $table.lastUsedAt,
-    builder: (column) => column,
-  );
-}
-
-class $$InstalledModelsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $InstalledModelsTable,
-          InstalledModel,
-          $$InstalledModelsTableFilterComposer,
-          $$InstalledModelsTableOrderingComposer,
-          $$InstalledModelsTableAnnotationComposer,
-          $$InstalledModelsTableCreateCompanionBuilder,
-          $$InstalledModelsTableUpdateCompanionBuilder,
-          (
-            InstalledModel,
-            BaseReferences<
-              _$AppDatabase,
-              $InstalledModelsTable,
-              InstalledModel
-            >,
-          ),
-          InstalledModel,
-          PrefetchHooks Function()
-        > {
-  $$InstalledModelsTableTableManager(
-    _$AppDatabase db,
-    $InstalledModelsTable table,
-  ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$InstalledModelsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$InstalledModelsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$InstalledModelsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                Value<String> repoId = const Value.absent(),
-                Value<String> fileName = const Value.absent(),
-                Value<String?> quant = const Value.absent(),
-                Value<int> sizeBytes = const Value.absent(),
-                Value<String?> sha256 = const Value.absent(),
-                Value<String> localPath = const Value.absent(),
-                Value<String?> license = const Value.absent(),
-                Value<bool> gated = const Value.absent(),
-                Value<DateTime> downloadedAt = const Value.absent(),
-                Value<DateTime?> lastUsedAt = const Value.absent(),
-              }) => InstalledModelsCompanion(
-                id: id,
-                repoId: repoId,
-                fileName: fileName,
-                quant: quant,
-                sizeBytes: sizeBytes,
-                sha256: sha256,
-                localPath: localPath,
-                license: license,
-                gated: gated,
-                downloadedAt: downloadedAt,
-                lastUsedAt: lastUsedAt,
-              ),
-          createCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                required String repoId,
-                required String fileName,
-                Value<String?> quant = const Value.absent(),
-                required int sizeBytes,
-                Value<String?> sha256 = const Value.absent(),
-                required String localPath,
-                Value<String?> license = const Value.absent(),
-                Value<bool> gated = const Value.absent(),
-                required DateTime downloadedAt,
-                Value<DateTime?> lastUsedAt = const Value.absent(),
-              }) => InstalledModelsCompanion.insert(
-                id: id,
-                repoId: repoId,
-                fileName: fileName,
-                quant: quant,
-                sizeBytes: sizeBytes,
-                sha256: sha256,
-                localPath: localPath,
-                license: license,
-                gated: gated,
-                downloadedAt: downloadedAt,
-                lastUsedAt: lastUsedAt,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$InstalledModelsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $InstalledModelsTable,
-      InstalledModel,
-      $$InstalledModelsTableFilterComposer,
-      $$InstalledModelsTableOrderingComposer,
-      $$InstalledModelsTableAnnotationComposer,
-      $$InstalledModelsTableCreateCompanionBuilder,
-      $$InstalledModelsTableUpdateCompanionBuilder,
-      (
-        InstalledModel,
-        BaseReferences<_$AppDatabase, $InstalledModelsTable, InstalledModel>,
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+    installedModels,
+    folders,
+    conversations,
+    messages,
+  ];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'folders',
+        limitUpdateKind: UpdateKind.delete,
       ),
-      InstalledModel,
-      PrefetchHooks Function()
-    >;
-
-class $AppDatabaseManager {
-  final _$AppDatabase _db;
-  $AppDatabaseManager(this._db);
-  $$InstalledModelsTableTableManager get installedModels =>
-      $$InstalledModelsTableTableManager(_db, _db.installedModels);
+      result: [TableUpdate('conversations', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'installed_models',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('conversations', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'conversations',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('messages', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('messages', kind: UpdateKind.update)],
+    ),
+  ]);
 }

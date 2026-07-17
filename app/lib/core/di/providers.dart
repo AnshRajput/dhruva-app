@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/chat/chat_repository.dart';
 import '../../data/db/database.dart';
 import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
@@ -80,4 +81,8 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
     db: ref.watch(appDatabaseProvider),
     deviceInfo: ref.watch(deviceInfoServiceProvider),
   );
+});
+
+final chatRepositoryProvider = Provider<ChatRepository>((ref) {
+  return ChatRepository(db: ref.watch(appDatabaseProvider));
 });
