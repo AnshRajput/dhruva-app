@@ -991,3 +991,11 @@ Verdict: SIGN-OFF (7e3b962 verified). All three blockers closed: chat AppBar
 _MiniCharacterAvatar with correct image→emoji→star fallback; import dialog on
 DhruvaTokens + CharacterAvatar; gallery empty state on DhruvaStar. Semantics
 added. Characters UI approved.
+
+### [LOOP-05] [reviewer → orchestrator] [REVIEW] 2026-07-17T22:30
+Verdict: APPROVE. Trust boundary complete (sampling _numField choke point +
+validate(); avatarPath not restored from cards; PNG length bombs bounds-
+checked; CRC32 correct/pinned), migration correct + tested both jump paths,
+persona snapshot at creation is the right call, privacy clean, ADR-002 held.
+One nit being closed pre-merge: iTXt zlib inflate unbounded (zlib bomb OOM on
+import) — capping. ponytail-deferred CRC-skip agreed non-blocking.
