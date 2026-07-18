@@ -264,6 +264,18 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// autoDispose-with-keepAlive guard.
   KeepAliveLink? _keepAliveLink;
 
+  /// The in-flight [ensureModelLoaded] future, or null when no load is
+  /// running. `engine.load()` takes seconds and there's no other reentrancy
+  /// lock (WS3 defect): on a fresh chat the screen-open load and a
+  /// suggested-prompt tap (`sendMessage` → `_runAssistantTurn` →
+  /// `ensureModelLoaded`) both pass the `isGenerating`/`loadedModelIdProvider`
+  /// checks while the first load is still awaiting, and each would spawn a
+  /// second inference isolate + load the model into RAM twice — a realistic
+  /// OOM on the RAM-tiered devices this app targets. Deduping every caller
+  /// (screen open, send, `switchModel`, error recovery) onto the same future
+  /// means the second call awaits the first instead of starting another.
+  Future<void>? _loadInFlight;
+
   /// Raw failure text for the "Copy error details" affordance
   /// (`EngineUnknownFailure`, chat-spec.md §8) — not persisted (`Messages`
   /// has no free-text-detail column beyond `errorKind`'s label), so a
@@ -398,7 +410,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// Loads [ChatThreadState.modelId] into the singleton engine if it isn't
   /// already loaded there. No-op with no model set. Idempotent — safe to
   /// call from the thread screen on open and again before every send.
-  Future<void> ensureModelLoaded() async {
+  ///
+  /// Reentrancy-safe: concurrent callers share one in-flight load (see
+  /// [_loadInFlight]) so a second call can never start a second
+  /// `engine.load()`/isolate while the first is still awaiting.
+  Future<void> ensureModelLoaded() {
+    return _loadInFlight ??= _ensureModelLoaded().whenComplete(() {
+      _loadInFlight = null;
+    });
+  }
+
+  Future<void> _ensureModelLoaded() async {
     final current = state.value;
     if (current == null || current.modelId == null || current.isGenerating) {
       return;

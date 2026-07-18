@@ -129,6 +129,36 @@ void main() {
   );
 
   test(
+    'WS3: concurrent ensureModelLoaded calls (screen-open load racing a '
+    'suggested-prompt tap) share one load — no second isolate / 2x RAM',
+    () async {
+      final modelId = await insertModel();
+      final engine = FakeEngineService(scriptedTokens: const ['hi']);
+      final container = buildContainer(engine);
+      final args = ChatRouteArgs(initialModelId: modelId);
+      await container.read(chatControllerProvider(args).future);
+      container.listen(chatControllerProvider(args), (_, _) {});
+      final notifier = container.read(chatControllerProvider(args).notifier);
+
+      // Both fired in the same frame, before the first load resolves — the
+      // exact window the screen-open load and a prompt tap collide in.
+      await Future.wait([
+        notifier.ensureModelLoaded(),
+        notifier.ensureModelLoaded(),
+      ]);
+
+      expect(engine.loadCount, 1);
+      expect(container.read(loadedModelIdProvider), modelId);
+
+      // A later load, after the in-flight one cleared, still works (guard
+      // released, not stuck): sending routes through ensureModelLoaded and
+      // must not deadlock, and re-uses the already-loaded model (no reload).
+      await notifier.sendMessage('hi');
+      expect(engine.loadCount, 1);
+    },
+  );
+
+  test(
     'cancel mid-stream finalizes as cancelled with partial content',
     () async {
       final modelId = await insertModel();
