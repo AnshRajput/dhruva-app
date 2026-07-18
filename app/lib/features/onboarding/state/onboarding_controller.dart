@@ -101,6 +101,13 @@ final class OnboardingDownloadState {
 
   /// 0..1 while [status] is `downloading`; meaningless otherwise.
   final double progress;
+
+  /// The live download progress while [status] is `downloading` — carried so
+  /// the download step surfaces real bytes + speed + ETA
+  /// ([DownloadProgress.transferLabel]), not just a bare percent. Null until
+  /// the first backend progress event arrives.
+  final DownloadProgress? download;
+
   final String? errorMessage;
 
   /// Drift row id of the installed model, set once `status == installed` —
@@ -112,6 +119,7 @@ final class OnboardingDownloadState {
     this.status = OnboardingDownloadStatus.idle,
     this.repoId,
     this.progress = 0,
+    this.download,
     this.errorMessage,
     this.installedId,
   });
@@ -276,6 +284,7 @@ class OnboardingDownloadController
             status: OnboardingDownloadStatus.downloading,
             repoId: prog.repoId,
             progress: progress,
+            download: prog,
           ),
         );
     }

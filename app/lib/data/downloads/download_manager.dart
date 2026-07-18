@@ -104,6 +104,38 @@ final class DownloadProgress {
     }
     return parts.isEmpty ? null : parts.join(' · ');
   }
+
+  /// The full "128 / 512 MB · 3.1 MB/s · 0:45 left" transfer line: real bytes
+  /// (when the total is known) plus [etaLabel]. Null — renders nothing — when
+  /// there's nothing honest to show yet, never a fake estimate. Shared by every
+  /// download surface (Downloads tile, onboarding step, curated card) so they
+  /// all report progress identically.
+  String? get transferLabel {
+    final parts = <String>[];
+    final total = totalBytes;
+    if (total != null && total > 0) {
+      parts.add(
+        '${formatDownloadBytes(downloadedBytes)} / '
+        '${formatDownloadBytes(total)}',
+      );
+    }
+    final eta = etaLabel;
+    if (eta != null) parts.add(eta);
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+}
+
+/// Human byte size for download UI ("512 MB", "1.20 GB"). Shared so every
+/// download surface formats sizes identically.
+String formatDownloadBytes(int bytes) {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} kB';
+  return '$bytes B';
 }
 
 /// Everything needed to enqueue + later verify + register one file download.

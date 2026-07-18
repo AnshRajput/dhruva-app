@@ -48,6 +48,13 @@ final class ListingModelState {
 
   /// 0..1 while [status] is `downloading`; meaningless otherwise.
   final double progress;
+
+  /// The live download progress while [status] is `downloading` — carried so
+  /// the curated card / search row can surface real bytes + speed + ETA
+  /// ([DownloadProgress.transferLabel]), not just a bare percent. Null until
+  /// the first backend progress event arrives.
+  final DownloadProgress? download;
+
   final String? errorMessage;
 
   /// The active download's taskId while downloading — so the row's cancel
@@ -61,6 +68,7 @@ final class ListingModelState {
   const ListingModelState({
     this.status = ListingModelStatus.notInstalled,
     this.progress = 0,
+    this.download,
     this.errorMessage,
     this.taskId,
     this.installedId,
@@ -301,6 +309,7 @@ class ListingDownloadController
           ListingModelState(
             status: ListingModelStatus.downloading,
             progress: progress,
+            download: prog,
             taskId: prog.taskId,
           ),
         );

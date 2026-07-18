@@ -119,6 +119,16 @@ class CuratedModelCard extends ConsumerWidget {
                           ),
                       ],
                     ),
+                    if (dl?.download?.transferLabel case final detail?
+                        when dl?.status == ListingModelStatus.downloading) ...[
+                      SizedBox(height: tokens.spacing.xs),
+                      Text(
+                        detail,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     if (errorMessage != null) ...[
                       SizedBox(height: tokens.spacing.xs),
                       Text(

@@ -601,6 +601,18 @@ class _DownloadStep extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            // Real bytes + speed + ETA under the percent — honest: renders
+            // nothing until the backend has an estimate (never "--:-- left").
+            if (dl?.download?.transferLabel case final detail?) ...[
+              SizedBox(height: tokens.spacing.xs),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             SizedBox(height: tokens.spacing.lg),
             // No dead-end: a large model on a slow link is always cancellable.
             TextButton(onPressed: onCancel, child: const Text('Cancel')),

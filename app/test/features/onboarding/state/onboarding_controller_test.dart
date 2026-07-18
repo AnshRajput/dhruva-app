@@ -191,6 +191,9 @@ void main() {
         );
         await Future<void>.delayed(const Duration(milliseconds: 10));
         expect(stateNow().progress, closeTo(0.5, 0.001));
+        // The live DownloadProgress is carried so the step can show real
+        // bytes (speed/ETA absent here — the fake backend emits none).
+        expect(stateNow().download?.transferLabel, '500 B / 1000 B');
 
         File(
           '${modelsDir.path}/$_fileName',

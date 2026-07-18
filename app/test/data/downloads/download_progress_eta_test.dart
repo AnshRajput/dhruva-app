@@ -4,16 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 DownloadProgress _p({
   double speed = -1,
   Duration eta = const Duration(seconds: -1),
+  int downloaded = 1,
+  int? total = 10,
 }) => DownloadProgress(
   taskId: 't',
   repoId: 'r',
   fileName: 'f',
   state: DownloadState.running,
-  downloadedBytes: 1,
-  totalBytes: 10,
+  downloadedBytes: downloaded,
+  totalBytes: total,
   networkSpeedMBs: speed,
   timeRemaining: eta,
 );
+
+const _mb = 1024 * 1024;
 
 void main() {
   group('DownloadProgress.etaLabel (honest — nothing when unknown)', () {
@@ -42,6 +46,44 @@ void main() {
 
     test('zero/negative sentinels are treated as unknown', () {
       expect(_p(speed: 0, eta: Duration.zero).etaLabel, isNull);
+    });
+  });
+
+  group('DownloadProgress.transferLabel (bytes + speed + ETA, honest)', () {
+    test('bytes only when speed/ETA unknown', () {
+      expect(
+        _p(downloaded: 128 * _mb, total: 512 * _mb).transferLabel,
+        '128 MB / 512 MB',
+      );
+    });
+
+    test('full line: bytes · speed · ETA', () {
+      expect(
+        _p(
+          downloaded: 128 * _mb,
+          total: 512 * _mb,
+          speed: 3.14,
+          eta: const Duration(seconds: 45),
+        ).transferLabel,
+        '128 MB / 512 MB · 3.1 MB/s · 0:45 left',
+      );
+    });
+
+    test('null (renders nothing) when total unknown and no estimate', () {
+      expect(_p(total: null).transferLabel, isNull);
+    });
+
+    test('speed/ETA still show when total is unknown', () {
+      expect(_p(total: null, speed: 2.0).transferLabel, '2.0 MB/s');
+    });
+  });
+
+  group('formatDownloadBytes', () {
+    test('scales B / kB / MB / GB', () {
+      expect(formatDownloadBytes(512), '512 B');
+      expect(formatDownloadBytes(2 * 1024), '2 kB');
+      expect(formatDownloadBytes(512 * _mb), '512 MB');
+      expect(formatDownloadBytes(3 * 1024 * _mb), '3.00 GB');
     });
   });
 }

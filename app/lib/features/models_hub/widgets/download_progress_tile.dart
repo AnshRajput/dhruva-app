@@ -104,25 +104,15 @@ class DownloadProgressTile extends StatelessWidget {
     return parts.join(' · ');
   }
 
-  /// "128 / 512 MB · 3.1 MB/s · 0:45 left" — real bytes plus the already-
-  /// plumbed [DownloadProgress.etaLabel]; null (renders nothing) when there's
-  /// nothing honest to show yet, never a fake "--:-- left".
+  /// "128 / 512 MB · 3.1 MB/s · 0:45 left" — the shared
+  /// [DownloadProgress.transferLabel], gated to the in-flight states (queued/
+  /// verifying have no meaningful in-flight fraction here).
   String? _detailLine() {
     if (progress.state != DownloadState.running &&
         progress.state != DownloadState.paused) {
       return null;
     }
-    final parts = <String>[];
-    final total = progress.totalBytes;
-    if (total != null && total > 0) {
-      parts.add(
-        '${_formatBytes(progress.downloadedBytes)} / ${_formatBytes(total)}',
-      );
-    }
-    if (progress.state == DownloadState.running && progress.etaLabel != null) {
-      parts.add(progress.etaLabel!);
-    }
-    return parts.isEmpty ? null : parts.join(' · ');
+    return progress.transferLabel;
   }
 
   String _stateLabel(DownloadState state) => switch (state) {
@@ -134,15 +124,4 @@ class DownloadProgressTile extends StatelessWidget {
     DownloadState.failed => 'Failed',
     DownloadState.canceled => 'Canceled',
   };
-}
-
-String _formatBytes(int bytes) {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
-  if (bytes >= 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MB';
-  }
-  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(0)} kB';
-  return '$bytes B';
 }
