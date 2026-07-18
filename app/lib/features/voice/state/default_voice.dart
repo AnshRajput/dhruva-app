@@ -28,20 +28,24 @@ import '../../../voice/voice_model_catalog.dart';
 final _devanagari = RegExp(r'[ऀ-ॿ]');
 
 /// The TTS entry to synthesize [text] with: the Hindi voice if [text]
-/// contains Devanagari script, the English voice otherwise. Returns null if
-/// the catalog has no TTS entry for the chosen language (shouldn't happen
-/// with today's fixed catalog, but the caller — which also needs to check
-/// the voice is actually *installed* — treats null the same as "not
-/// installed").
-VoiceCatalogEntry? defaultVoiceEntryFor(String text) {
+/// contains Devanagari script, the English voice otherwise.
+///
+/// When [isInstalled] is given, the choice is constrained to voices that
+/// actually pass it: the language-matched voice is preferred, but if it isn't
+/// installed we fall back to ANY installed voice rather than dead-ending on a
+/// voice that can't speak. This is what keeps a Hindi reply audible when only
+/// the English voice is on disk (and vice-versa) — an accented-but-audible
+/// reply beats a silent, text-only one (the one-tap bundle only ships the
+/// English voice, yet Whisper auto-detects Hindi). Returns null only when no
+/// TTS voice at all is available, which the caller treats as "not installed".
+VoiceCatalogEntry? defaultVoiceEntryFor(
+  String text, {
+  bool Function(VoiceCatalogEntry entry)? isInstalled,
+}) {
   final language = _devanagari.hasMatch(text) ? 'hi' : 'en';
-  for (final entry in voiceModelCatalog) {
-    if (entry.role == VoiceModelRole.tts &&
-        entry.languages.contains(language)) {
-      return entry;
-    }
-  }
-  return voiceModelCatalog
-      .where((e) => e.role == VoiceModelRole.tts)
-      .firstOrNull;
+  final voices = voiceModelCatalog.where(
+    (e) => e.role == VoiceModelRole.tts && (isInstalled?.call(e) ?? true),
+  );
+  return voices.where((e) => e.languages.contains(language)).firstOrNull ??
+      voices.firstOrNull;
 }

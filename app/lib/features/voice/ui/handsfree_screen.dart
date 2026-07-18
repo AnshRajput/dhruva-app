@@ -120,89 +120,108 @@ class _ConversationView extends StatelessWidget {
     final waveActive =
         state.phase == HandsFreePhase.listening ||
         state.phase == HandsFreePhase.speaking;
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Spacer(),
-        _VoiceOrb(phase: state.phase),
-        SizedBox(height: tokens.spacing.xl),
-        _VoiceWaveform(active: waveActive),
-        SizedBox(height: tokens.spacing.xl),
-        // Designer nit: a screen reader can't see the star pulse or the
-        // waveform, so Listening -> Thinking -> Speaking is announced as it
-        // happens, not just read once on focus.
-        Semantics(
-          liveRegion: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _phaseLabel(state.phase),
-                style: theme.textTheme.titleMedium,
-              ),
-              SizedBox(height: tokens.spacing.xs),
-              // mk-meta: the turn-taking hint — "your turn", or that a barge-in
-              // (voice interruption, wired for the Speaking phase) is possible.
-              Text(
-                _turnHint(state.phase),
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+    // Scroll-safe: `lastAssistantText` is an unbounded spoken reply, so a
+    // multi-sentence answer on a small phone would blow past the fixed
+    // Column-with-Spacers height as a RenderFlex overflow. Centre the orb
+    // when it all fits, scroll when it doesn't (same pattern as chat's
+    // NoModelInstalledView) — IntrinsicHeight gives the Spacers a bounded
+    // height to divide inside the scroll view.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
+                _VoiceOrb(phase: state.phase),
+                SizedBox(height: tokens.spacing.xl),
+                _VoiceWaveform(active: waveActive),
+                SizedBox(height: tokens.spacing.xl),
+                // Designer nit: a screen reader can't see the star pulse or the
+                // waveform, so Listening -> Thinking -> Speaking is announced as it
+                // happens, not just read once on focus.
+                Semantics(
+                  liveRegion: true,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _phaseLabel(state.phase),
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      SizedBox(height: tokens.spacing.xs),
+                      // mk-meta: the turn-taking hint — "your turn", or that a barge-in
+                      // (voice interruption, wired for the Speaking phase) is possible.
+                      Text(
+                        _turnHint(state.phase),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: tokens.spacing.xl),
-        Semantics(
-          liveRegion: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (state.lastUserText != null)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-                  child: Text(
-                    '"${state.lastUserText}"',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                SizedBox(height: tokens.spacing.xl),
+                Semantics(
+                  liveRegion: true,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (state.lastUserText != null)
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: tokens.spacing.xs,
+                          ),
+                          child: Text(
+                            '"${state.lastUserText}"',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      if (state.lastAssistantText != null)
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: tokens.spacing.xs,
+                          ),
+                          child: Text(
+                            state.lastAssistantText!,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (state.errorMessage != null)
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+                    child: Text(
+                      state.errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
                     ),
                   ),
+                const Spacer(),
+                const _VoiceTrustMark(),
+                SizedBox(height: tokens.spacing.md),
+                OutlinedButton.icon(
+                  onPressed: onExit,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('End hands-free'),
                 ),
-              if (state.lastAssistantText != null)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-                  child: Text(
-                    state.lastAssistantText!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (state.errorMessage != null)
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
-            child: Text(
-              state.errorMessage!,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.error,
-              ),
+                SizedBox(height: tokens.spacing.lg),
+              ],
             ),
           ),
-        const Spacer(),
-        const _VoiceTrustMark(),
-        SizedBox(height: tokens.spacing.md),
-        OutlinedButton.icon(
-          onPressed: onExit,
-          icon: const Icon(Icons.stop_circle_outlined),
-          label: const Text('End hands-free'),
         ),
-        SizedBox(height: tokens.spacing.lg),
-      ],
+      ),
     );
   }
 

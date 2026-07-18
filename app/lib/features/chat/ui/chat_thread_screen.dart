@@ -23,6 +23,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
 import 'model_picker_sheet.dart';
 import 'sampling_settings_sheet.dart';
+import 'voice_launch.dart';
 
 class ChatThreadScreen extends ConsumerStatefulWidget {
   final ChatRouteArgs args;
@@ -181,8 +182,10 @@ class _ThreadScaffold extends ConsumerWidget {
           // same condition the `Composer` below already uses.
           if (state.model != null)
             IconButton(
-              icon: const Icon(Icons.graphic_eq),
-              tooltip: 'Hands-free mode',
+              // A mic reads as "talk"; the old graphic_eq waveform read as an
+              // equalizer and gave no hint this starts a voice conversation.
+              icon: const Icon(Icons.record_voice_over_outlined),
+              tooltip: 'Talk hands-free',
               onPressed: () => _openHandsFree(context, ref),
             ),
           PopupMenuButton<String>(
@@ -397,21 +400,7 @@ class _ThreadScaffold extends ConsumerWidget {
   /// the finished reply (or a `MessageStatus.error` row) — no separate
   /// "wait for isGenerating to flip back" dance needed.
   void _openHandsFree(BuildContext context, WidgetRef ref) {
-    final provider = chatControllerProvider(args);
-    Future<String?> onUserUtterance(String text) async {
-      await controller.sendMessage(text);
-      final current = ref.read(provider).value;
-      final last = current?.visibleMessages.lastOrNull;
-      if (last == null ||
-          last.role != MessageRole.assistant ||
-          last.status == MessageStatus.error ||
-          last.content.trim().isEmpty) {
-        return null;
-      }
-      return last.content;
-    }
-
-    context.push('/voice/handsfree', extra: onUserUtterance);
+    unawaited(openHandsFreeVoice(context, ref, args));
   }
 
   Future<void> _pickModel(BuildContext context) async {

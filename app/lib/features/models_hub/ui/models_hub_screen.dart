@@ -191,15 +191,33 @@ class _VoiceBundleCard extends StatelessWidget {
             ),
             SizedBox(height: tokens.spacing.md),
             if (allInstalled)
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 18,
-                    color: theme.colorScheme.primary,
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                      SizedBox(width: tokens.spacing.xs),
+                      Text('Voice ready', style: theme.textTheme.labelLarge),
+                    ],
                   ),
-                  SizedBox(width: tokens.spacing.xs),
-                  Text('Voice ready', style: theme.textTheme.labelLarge),
+                  SizedBox(height: tokens.spacing.sm),
+                  // WS5: installing the bundle used to dead-end here with no way
+                  // to start talking. Point the user at the home's "Talk" entry.
+                  // Nav only (no ChatController) so ADR-002 holds — features/
+                  // models_hub can't launch a chat-backed voice session itself.
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => context.go('/chat'),
+                      icon: const Icon(Icons.record_voice_over_outlined),
+                      label: const Text('Go to Chats to talk'),
+                    ),
+                  ),
                 ],
               )
             else if (active)

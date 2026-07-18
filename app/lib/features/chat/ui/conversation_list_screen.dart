@@ -13,11 +13,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../state/chat_controller.dart' show ChatRouteArgs;
 import '../state/conversation_list_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/conversation_tile.dart';
 import '../widgets/empty_states.dart';
 import 'model_picker_sheet.dart';
+import 'voice_launch.dart';
 
 class ConversationListScreen extends ConsumerStatefulWidget {
   const ConversationListScreen({super.key});
@@ -73,6 +75,37 @@ class _ConversationListScreenState
     if (mounted) unawaited(context.push('/chat/new', extra: modelId));
   }
 
+  /// WS5 "obvious entry point": the always-visible, text-labelled voice launch
+  /// on the app's home. Picks a model the same way [_startNewChat] does (so it
+  /// never dead-ends), then opens hands-free against a fresh chat — a
+  /// first-time user finds voice here without decoding an app-bar glyph.
+  /// Doesn't hide when no model is installed; it guides to the models hub.
+  Future<void> _startVoice() async {
+    final models = await ref.read(installedModelsProvider.future);
+    if (!mounted) return;
+    if (models.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download a model to talk hands-free.')),
+      );
+      unawaited(context.push('/models'));
+      return;
+    }
+    int modelId;
+    if (models.length == 1) {
+      modelId = models.single.id;
+    } else {
+      final picked = await showModelPickerSheet(context);
+      if (picked == null) return;
+      modelId = picked.id;
+    }
+    if (!mounted) return;
+    await openHandsFreeVoice(
+      context,
+      ref,
+      ChatRouteArgs(initialModelId: modelId),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -85,7 +118,20 @@ class _ConversationListScreenState
     final hasAnyModel = modelsAsync.value?.isNotEmpty ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chats')),
+      appBar: AppBar(
+        title: const Text('Chats'),
+        actions: [
+          // WS5: a labelled, always-present voice entry — not an unlabelled
+          // waveform glyph. Visible on every state of the home (empty or full),
+          // so voice is findable before any conversation exists.
+          TextButton.icon(
+            onPressed: _startVoice,
+            icon: const Icon(Icons.record_voice_over_outlined, size: 18),
+            label: const Text('Talk'),
+          ),
+          SizedBox(width: tokens.spacing.xs),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

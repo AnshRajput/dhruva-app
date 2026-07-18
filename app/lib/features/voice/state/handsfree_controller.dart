@@ -278,8 +278,17 @@ class HandsFreeController extends Notifier<HandsFreeState> {
 
   Future<void> _speak(String text) async {
     final installer = await ref.read(voiceModelInstallerProvider.future);
-    final entry = defaultVoiceEntryFor(text);
-    if (entry == null || !installer.isInstalled(entry)) {
+    // Prefer the language-matched voice, but fall back to any INSTALLED voice
+    // so a Hindi reply still speaks in English (accented but audible) when
+    // only the English bundle voice is on disk — the alternative is a silent,
+    // text-only turn. `entry` is therefore guaranteed installed when non-null;
+    // it's null only when no TTS voice exists at all, which the `start()` gate
+    // (`anyTtsInstalled`) already rules out, so this is defensive.
+    final entry = defaultVoiceEntryFor(
+      text,
+      isInstalled: installer.isInstalled,
+    );
+    if (entry == null) {
       state = state.copyWith(
         phase: HandsFreePhase.listening,
         errorMessage: 'No TTS voice installed — reply shown as text only.',
