@@ -21,6 +21,7 @@ import '../../features/models_hub/ui/advanced_search_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
+import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
@@ -132,6 +133,16 @@ final appRouter = GoRouter(
         if (id == null) return const CharactersGalleryScreen();
         return CharacterFormScreen(characterId: id);
       },
+    ),
+    // WS2: the guided first-run flow. NOT the router's `initialLocation`
+    // (that stays `/chat` so every existing deep-link/test lands on chat) —
+    // `main()` reads the "onboarding done" flag ONCE at startup and, only on
+    // a fresh install, redirects here before the first frame. Onboarding
+    // writes the flag on finish/skip and `context.go('/chat')`, so it's a
+    // one-time cold-start decision, not an always-on redirect.
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingScreen(),
     ),
     GoRoute(
       path: '/models/repo/:id',

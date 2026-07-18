@@ -3,14 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/onboarding/state/onboarding_controller.dart';
 
-void main() {
+Future<void> main() async {
   // Loop 3: ProviderScope wraps the app so core/di/providers.dart's
   // providers (EngineService, AppDatabase, HfApiClient, DownloadManager,
   // StorageManager) are reachable from features/. `debug_chat` (the one
   // documented exception, per Loop 2/3) was deleted in Loop 4 — its
   // developer-harness role is now the real chat feature.
-  runApp(const ProviderScope(child: DhruvaApp()));
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // WS2: on a fresh install, send the user into the guided onboarding flow
+  // before the first frame. Read the "onboarding done" flag ONCE here (not a
+  // live router redirect — see app_router.dart) via a container we then hand
+  // to the app so the flag store isn't rebuilt. A read failure never blocks
+  // launch: default to chat.
+  final container = ProviderContainer();
+  try {
+    final done = await container.read(onboardingCompleteProvider.future);
+    if (!done) appRouter.go('/onboarding');
+  } catch (_) {
+    // Onboarding is a nicety, not a gate — fall through to chat on any error.
+  }
+
+  runApp(
+    UncontrolledProviderScope(container: container, child: const DhruvaApp()),
+  );
 }
 
 class DhruvaApp extends StatelessWidget {
