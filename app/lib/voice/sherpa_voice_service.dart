@@ -480,6 +480,9 @@ final class _VoiceWorker {
           threshold: config.threshold,
           minSilenceDuration: config.minSilenceDuration,
           minSpeechDuration: config.minSpeechDuration,
+          // Without this sherpa defaults to 5.0s and chops any longer
+          // utterance mid-word (see VadConfig.maxSpeechDuration).
+          maxSpeechDuration: config.maxSpeechDuration,
         ),
         numThreads: 1,
         debug: false,

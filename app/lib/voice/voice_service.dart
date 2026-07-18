@@ -83,11 +83,22 @@ final class VadConfig {
   /// Segments shorter than this (seconds) are dropped as noise.
   final double minSpeechDuration;
 
+  /// Hard cap (seconds) after which Silero force-closes a segment even if the
+  /// speaker hasn't paused. sherpa's own default is a punishingly short 5.0s —
+  /// left unset, any utterance longer than five seconds is chopped mid-word and
+  /// each half is transcribed by whisper as a separate broken fragment, which
+  /// reads on-device as "it isn't listening accurately." Raised to 20s: long
+  /// enough for a full dictated sentence, still under the 30s VAD ring buffer
+  /// ([SherpaVoiceService]'s `bufferSizeInSeconds`). Normal turn-ends still come
+  /// from [minSilenceDuration]; this only bounds an unbroken monologue.
+  final double maxSpeechDuration;
+
   const VadConfig({
     required this.model,
     this.threshold = 0.5,
     this.minSilenceDuration = 0.5,
     this.minSpeechDuration = 0.25,
+    this.maxSpeechDuration = 20.0,
   });
 }
 

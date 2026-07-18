@@ -210,6 +210,9 @@ void main() {
       expect(installer.isInstalled(entry), isTrue);
       final cfg = installer.vadConfig(entry);
       expect(cfg.model, p.join(tmp.path, 'silero_vad.onnx'));
+      // Accuracy guard: must NOT fall back to sherpa's 5.0s default, which
+      // chops long utterances mid-word. A full dictated sentence needs room.
+      expect(cfg.maxSpeechDuration, greaterThanOrEqualTo(15.0));
     });
 
     test('TTS config resolves model/tokens/dataDir once extracted', () {
