@@ -174,9 +174,27 @@ class PlaygroundController extends Notifier<PlaygroundState> {
       // Hand the shared single-session engine back (see header) so chat
       // reloads its own model on the next send.
       await engine.unload();
+      // On abort, no column may be left mid-flight: Stop-during-load leaves A
+      // at `loading` (the `_aborted` guard returns before a terminal status)
+      // and B never leaves `queued`. Both would read as busy forever while the
+      // button says "Run on both" (WS6: no empty/confusing states). Move any
+      // non-terminal slot to `cancelled` ("Stopped").
+      if (_aborted) {
+        state = state.copyWith(
+          runA: _terminalize(state.runA),
+          runB: _terminalize(state.runB),
+        );
+      }
       state = state.copyWith(isRunning: false);
     }
   }
+
+  static RunSlot _terminalize(RunSlot slot) => switch (slot.status) {
+    RunStatus.queued ||
+    RunStatus.loading ||
+    RunStatus.streaming => slot.copyWith(status: RunStatus.cancelled),
+    _ => slot,
+  };
 
   /// Stops the in-flight run cooperatively and skips the not-yet-started model.
   Future<void> cancel() async {

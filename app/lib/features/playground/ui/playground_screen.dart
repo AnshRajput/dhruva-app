@@ -92,6 +92,20 @@ class _PlaygroundTab extends ConsumerStatefulWidget {
 class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
   final _promptCtrl = TextEditingController();
 
+  // Gate the Run button on a non-empty prompt (same pattern chat's composer
+  // uses): without this the primary CTA is always enabled but run() no-ops on
+  // empty input, so a first-time tap gives zero feedback (WS6).
+  bool _hasPrompt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _promptCtrl.addListener(() {
+      final hasPrompt = _promptCtrl.text.trim().isNotEmpty;
+      if (hasPrompt != _hasPrompt) setState(() => _hasPrompt = hasPrompt);
+    });
+  }
+
   @override
   void dispose() {
     _promptCtrl.dispose();
@@ -105,7 +119,11 @@ class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
       AsyncData(:final value) =>
         value.length < 2
             ? _InstallMorePrompt(installedCount: value.length)
-            : _CompareBody(models: value, promptCtrl: _promptCtrl),
+            : _CompareBody(
+                models: value,
+                promptCtrl: _promptCtrl,
+                hasPrompt: _hasPrompt,
+              ),
       AsyncError() => _CenterMessage(
         icon: Icons.error_outline,
         message: 'Could not read installed models.',
@@ -180,7 +198,12 @@ class _CenterMessage extends StatelessWidget {
 class _CompareBody extends ConsumerWidget {
   final List<InstalledModelInfo> models;
   final TextEditingController promptCtrl;
-  const _CompareBody({required this.models, required this.promptCtrl});
+  final bool hasPrompt;
+  const _CompareBody({
+    required this.models,
+    required this.promptCtrl,
+    required this.hasPrompt,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -301,11 +324,13 @@ class _CompareBody extends ConsumerWidget {
                 label: const Text('Stop'),
               )
             : FilledButton.icon(
-                onPressed: () => controller.run(
-                  prompt: promptCtrl.text,
-                  modelA: modelA,
-                  modelB: modelB,
-                ),
+                onPressed: hasPrompt
+                    ? () => controller.run(
+                        prompt: promptCtrl.text,
+                        modelA: modelA,
+                        modelB: modelB,
+                      )
+                    : null,
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Run on both'),
               ),

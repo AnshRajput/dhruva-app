@@ -100,6 +100,7 @@ void main() {
       );
 
       await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.pump(); // let the Run button enable on the typed prompt
       await tester.tap(find.text('Run on both'));
       await tester.pumpAndSettle();
 
@@ -112,6 +113,66 @@ void main() {
       expect(state.isRunning, isFalse);
       expect(state.runA.status, RunStatus.done);
       expect(state.runB.status, RunStatus.done);
+    });
+
+    testWidgets('empty prompt disables Run; typing a prompt enables it', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        overrides: [
+          installed(twoModels),
+          hf(MockClient((_) async => http.Response('[]', 200))),
+        ],
+      );
+
+      // Empty prompt: the primary CTA is disabled, so a first tap can't be a
+      // silent no-op (WS6: no empty/confusing states).
+      final disabled = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Run on both'),
+      );
+      expect(disabled.onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.pump();
+      final enabled = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Run on both'),
+      );
+      expect(enabled.onPressed, isNotNull);
+    });
+
+    testWidgets('Stop leaves no column stuck — both slots reach a terminal '
+        'state (never "queued"/"loading" forever)', (tester) async {
+      final container = await _pump(
+        tester,
+        overrides: [
+          installed(twoModels),
+          hf(MockClient((_) async => http.Response('[]', 200))),
+          engineServiceProvider.overrideWithValue(
+            FakeEngineService(
+              scriptedTokens: const ['a', 'b', 'c', 'd', 'e'],
+              tokenDelay: const Duration(milliseconds: 50),
+            ),
+          ),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.pump(); // let the Run button enable on the typed prompt
+      await tester.tap(find.text('Run on both'));
+      await tester.pump(); // A starts loading, button becomes Stop
+      await tester.pump(const Duration(milliseconds: 60)); // A now streaming
+
+      // Stop mid-stream: A becomes "Stopped", B must not stay "Waiting…".
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+
+      final state = container.read(playgroundControllerProvider);
+      expect(state.isRunning, isFalse);
+      expect(state.runA.status, RunStatus.cancelled);
+      expect(state.runB.status, RunStatus.cancelled);
+      expect(find.text('Waiting its turn…'), findsNothing);
+      expect(find.text('Loading model…'), findsNothing);
     });
 
     testWidgets('the not-yet-started column reads "queued", never idle Ready', (
@@ -129,6 +190,7 @@ void main() {
       );
 
       await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.pump(); // let the Run button enable on the typed prompt
       await tester.tap(find.text('Run on both'));
       // One frame: model A is loading, model B waits its turn (not "Ready").
       await tester.pump();
@@ -153,6 +215,7 @@ void main() {
       );
 
       await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.pump(); // let the Run button enable on the typed prompt
       await tester.tap(find.text('Run on both'));
       await tester.pumpAndSettle();
       expect(find.text('Fastest'), findsOneWidget);
