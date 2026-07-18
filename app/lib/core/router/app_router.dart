@@ -20,6 +20,7 @@ import '../../features/chat/ui/conversation_list_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
+import '../../features/playground/ui/playground_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
@@ -53,6 +54,14 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/models',
               builder: (context, state) => const ModelsHubScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/playground',
+              builder: (context, state) => const PlaygroundScreen(),
             ),
           ],
         ),
