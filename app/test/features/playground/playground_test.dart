@@ -252,7 +252,9 @@ void main() {
   });
 
   group('Playground empty states', () {
-    testWidgets('zero models prompts to install two', (tester) async {
+    testWidgets('zero models: shows a labelled A/B preview + Browse CTA', (
+      tester,
+    ) async {
       await _pump(
         tester,
         overrides: [
@@ -260,11 +262,23 @@ void main() {
           hf(MockClient((_) async => http.Response('[]', 200))),
         ],
       );
-      expect(find.textContaining('at least'), findsOneWidget);
+      expect(find.textContaining('Install two GGUF models'), findsOneWidget);
+      // The payoff is SHOWN, not just described: a labelled two-column preview
+      // with example replies and a "Fastest" verdict on one column.
+      expect(find.text('PREVIEW'), findsOneWidget);
+      expect(find.text('Llama 3.2 1B'), findsOneWidget);
+      expect(find.text('Qwen2.5 1.5B'), findsOneWidget);
+      expect(find.text('Fastest'), findsOneWidget);
+      expect(
+        find.textContaining('Gravity is an invisible pull'),
+        findsOneWidget,
+      );
       expect(find.text('Browse models'), findsOneWidget);
     });
 
-    testWidgets('one model prompts to add one more', (tester) async {
+    testWidgets('one model prompts to add one more, still with the preview', (
+      tester,
+    ) async {
       await _pump(
         tester,
         overrides: [
@@ -273,6 +287,8 @@ void main() {
         ],
       );
       expect(find.textContaining('one more'), findsOneWidget);
+      expect(find.text('PREVIEW'), findsOneWidget);
+      expect(find.text('Browse models'), findsOneWidget);
     });
   });
 

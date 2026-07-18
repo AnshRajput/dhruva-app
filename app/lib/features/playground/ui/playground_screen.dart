@@ -136,22 +136,167 @@ class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
   }
 }
 
+/// Shown when fewer than two models are installed. Rather than only *describing*
+/// the A/B compare, it renders a static, clearly-labelled PREVIEW of what a real
+/// comparison looks like (two example columns, one marked "Fastest") so the
+/// payoff is visible and the incentive to install a 2nd model is concrete (WS6).
 class _InstallMorePrompt extends StatelessWidget {
   final int installedCount;
   const _InstallMorePrompt({required this.installedCount});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
     final message = installedCount == 0
-        ? 'The Playground compares two models head to head. Install at least '
-              'two GGUF models to get started.'
+        ? 'The Playground runs one prompt through two models side by side so you '
+              'can compare their answers and speed. Install two GGUF models to '
+              'try it.'
         : 'You have one model installed. Add one more to compare two side by '
-              'side.';
-    return _CenterMessage(
-      icon: Icons.science_outlined,
-      message: message,
-      actionLabel: 'Browse models',
-      onAction: () => GoRouter.of(context).go('/models'),
+              'side, like the preview below.';
+    return ListView(
+      padding: EdgeInsets.all(tokens.spacing.md),
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.science_outlined,
+              size: 22,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            SizedBox(width: tokens.spacing.sm),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: tokens.spacing.lg),
+        Row(
+          children: [
+            Text(
+              'PREVIEW',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.sm),
+            Expanded(
+              child: Text(
+                '“Explain gravity to a 6-year-old”',
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _PreviewColumn(
+                  name: 'Llama 3.2 1B',
+                  status: '42 tok/s · done',
+                  reply:
+                      'Gravity is an invisible pull that keeps your feet on the '
+                      'ground and the moon close to Earth.',
+                  accent: theme.colorScheme.primary,
+                  isFastest: true,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.sm),
+              Expanded(
+                child: _PreviewColumn(
+                  name: 'Qwen2.5 1.5B',
+                  status: '31 tok/s · done',
+                  reply:
+                      'Think of Earth giving everything a big, gentle hug that '
+                      'never lets go — that hug is gravity.',
+                  accent: theme.colorScheme.secondary,
+                  isFastest: false,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: tokens.spacing.lg),
+        FilledButton(
+          onPressed: () => GoRouter.of(context).go('/models'),
+          child: const Text('Browse models'),
+        ),
+      ],
+    );
+  }
+}
+
+/// A single non-interactive column in the install-more preview. Mirrors the
+/// live `_ResultColumn` look (accent name, status line, tok/s, "Fastest" badge)
+/// with static example content so the payoff reads at a glance.
+class _PreviewColumn extends StatelessWidget {
+  final String name;
+  final String status;
+  final String reply;
+  final Color accent;
+  final bool isFastest;
+  const _PreviewColumn({
+    required this.name,
+    required this.status,
+    required this.reply,
+    required this.accent,
+    required this.isFastest,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Container(
+      padding: EdgeInsets.all(tokens.spacing.sm),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        border: Border.all(
+          color: isFastest ? accent : theme.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(color: accent),
+                ),
+              ),
+              if (isFastest) _FastestBadge(accent: accent),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            status,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          Text(reply, style: theme.textTheme.bodySmall),
+        ],
+      ),
     );
   }
 }
