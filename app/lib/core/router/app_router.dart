@@ -100,12 +100,18 @@ final appRouter = GoRouter(
           // existing `extra: modelId` (an `int`) call site — the
           // conversation-list screen's model-picker flow — is untouched.
           final characterIdParam = state.uri.queryParameters['characterId'];
+          // WS2: onboarding's "Try asking" chips push
+          // `/chat/new?prompt=<encoded>` (extra: installed model id) so the
+          // first turn auto-sends — a query param, like `characterId`, so
+          // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
+          final promptParam = state.uri.queryParameters['prompt'];
           return ChatThreadScreen(
             args: ChatRouteArgs(
               initialModelId: state.extra as int?,
               characterId: characterIdParam == null
                   ? null
                   : int.tryParse(characterIdParam),
+              initialPrompt: promptParam,
             ),
           );
         }

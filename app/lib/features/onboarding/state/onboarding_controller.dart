@@ -119,6 +119,11 @@ class OnboardingDownloadController
   StreamSubscription<DownloadProgress>? _sub;
   String? _activeRepoId;
 
+  /// The in-flight download's task id — held so [cancel] can stop it (the
+  /// download step's Cancel affordance / Android back). Deterministic
+  /// (`repoId::fileName`), set at enqueue time.
+  String? _activeTaskId;
+
   @override
   Future<OnboardingDownloadState> build() async {
     final manager = await ref.watch(downloadManagerProvider.future);
@@ -167,6 +172,7 @@ class OnboardingDownloadController
               .freeBytes;
       final manager = await ref.read(downloadManagerProvider.future);
       await manager.enqueue(request, freeBytes: freeBytes);
+      _activeTaskId = request.taskId;
       state = AsyncData(
         OnboardingDownloadState(
           status: OnboardingDownloadStatus.downloading,
@@ -176,6 +182,22 @@ class OnboardingDownloadController
     } on AppFailure catch (e) {
       _fail(repoId, e.message);
     }
+  }
+
+  /// Cancels the in-flight download and resets to idle — the download step's
+  /// Cancel affordance (and Android back), so a large model on a slow link is
+  /// never a dead-end. No-op if nothing is downloading. The manager's own
+  /// `DownloadState.canceled` event will also arrive and land on the same
+  /// idle state via [_onProgress].
+  Future<void> cancel() async {
+    final taskId = _activeTaskId;
+    _activeRepoId = null;
+    _activeTaskId = null;
+    if (taskId != null) {
+      final manager = await ref.read(downloadManagerProvider.future);
+      await manager.cancel(taskId);
+    }
+    state = const AsyncData(OnboardingDownloadState());
   }
 
   void _onProgress(DownloadProgress prog) {

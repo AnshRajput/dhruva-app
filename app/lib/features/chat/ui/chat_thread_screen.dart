@@ -93,9 +93,20 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       data: (state) {
         if (!_requestedLoad && state.modelId != null) {
           _requestedLoad = true;
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => controller.ensureModelLoaded(),
-          );
+          // WS2: a seeded prompt (onboarding "Try asking" chip) auto-sends
+          // the first turn — `sendMessage` loads the model itself, so this
+          // replaces the plain `ensureModelLoaded` open here rather than
+          // racing a second load. Only on an empty draft.
+          final seed = widget.args.initialPrompt?.trim();
+          if (seed != null && seed.isNotEmpty && state.messages.isEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => controller.sendMessage(seed),
+            );
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => controller.ensureModelLoaded(),
+            );
+          }
         }
         return _ThreadScaffold(
           args: widget.args,

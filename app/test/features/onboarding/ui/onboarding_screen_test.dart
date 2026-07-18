@@ -29,6 +29,26 @@ class _StubDownloadController extends OnboardingDownloadController {
       const OnboardingDownloadState();
 }
 
+/// Skips the real pipeline but lands the "installed" state (with a drift row
+/// id) the instant `download` is called — so the flow reaches the ready step
+/// without touching platform channels, to test the handoff into chat.
+class _ReadyStubController extends OnboardingDownloadController {
+  @override
+  Future<OnboardingDownloadState> build() async =>
+      const OnboardingDownloadState();
+
+  @override
+  Future<void> download(String repoId) async {
+    state = const AsyncData(
+      OnboardingDownloadState(
+        status: OnboardingDownloadStatus.installed,
+        repoId: 'stub/model',
+        installedId: 42,
+      ),
+    );
+  }
+}
+
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
@@ -109,6 +129,76 @@ void main() {
       expect(find.textContaining('quant'), findsNothing);
       // The one obvious next step downloads the selected model in one tap.
       expect(find.textContaining('Download'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'a tapped "Try asking" chip carries its prompt into a new chat thread '
+    'with the installed model',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final store = _FakeOnboardingStore();
+      String? threadLocation;
+      Object? threadExtra;
+      final router = GoRouter(
+        initialLocation: '/onboarding',
+        routes: [
+          GoRoute(
+            path: '/onboarding',
+            builder: (context, state) => const OnboardingScreen(),
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (context, state) => const Text('chat-home'),
+          ),
+          GoRoute(
+            path: '/chat/:id',
+            builder: (context, state) {
+              threadLocation = state.uri.toString();
+              threadExtra = state.extra;
+              return const Text('chat-thread');
+            },
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+            onboardingStoreProvider.overrideWith((ref) async => store),
+            onboardingDownloadControllerProvider.overrideWith(
+              _ReadyStubController.new,
+            ),
+          ],
+          child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Get started'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Download'));
+      await tester.pumpAndSettle();
+
+      // The one-tap install lands on the ready step.
+      expect(find.text('You\'re ready'), findsOneWidget);
+
+      await tester.tap(find.text('Explain how a rainbow forms, simply'));
+      await tester.pumpAndSettle();
+
+      expect(store.complete, isTrue);
+      // Landed IN a chat thread (not the empty list), with the installed
+      // model handed off as `extra` and the tapped prompt on the URL so it
+      // auto-sends — the prompt is no longer thrown away.
+      expect(find.text('chat-thread'), findsOneWidget);
+      expect(threadExtra, 42);
+      expect(threadLocation, contains('prompt='));
+      expect(
+        Uri.parse(threadLocation!).queryParameters['prompt'],
+        'Explain how a rainbow forms, simply',
+      );
     },
   );
 

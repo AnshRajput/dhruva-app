@@ -9,6 +9,8 @@
 /// "Recommended", and the download auto-picks the right quant.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,6 +51,39 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (mounted) context.go('/chat');
   }
 
+  /// The ready-step exit: mark onboarding done, then land the user IN a chat
+  /// thread with the just-installed model already loaded — not on the empty
+  /// conversation list. Push the thread on top of `/chat` so the shell (and
+  /// back-to-list) sits underneath, exactly like the models-hub download CTA.
+  /// [prompt] is a tapped "Try asking" chip: it rides a query param the
+  /// `/chat/:id` route turns into `ChatRouteArgs.initialPrompt`, which
+  /// auto-sends the first turn (PRD golden path: tap a prompt → streaming
+  /// reply).
+  Future<void> _startChat({String? prompt}) async {
+    final store = await ref.read(onboardingStoreProvider.future);
+    await store.markComplete();
+    if (!mounted) return;
+    final installedId = ref
+        .read(onboardingDownloadControllerProvider)
+        .value
+        ?.installedId;
+    final trimmed = prompt?.trim();
+    final location = trimmed == null || trimmed.isEmpty
+        ? '/chat/new'
+        : '/chat/new?prompt=${Uri.encodeQueryComponent(trimmed)}';
+    final router = GoRouter.of(context);
+    router.go('/chat');
+    unawaited(router.push(location, extra: installedId));
+  }
+
+  /// Download-step Cancel / Android back: stop the download and return to the
+  /// pick step so the flow is never a dead-end (PRD: every long op cancellable,
+  /// no dead ends).
+  void _cancelDownload() {
+    unawaited(ref.read(onboardingDownloadControllerProvider.notifier).cancel());
+    setState(() => _step = _Step.pick);
+  }
+
   void _startDownload(StarterModel model) {
     setState(() {
       _selected = model;
@@ -69,29 +104,53 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
     });
 
-    return Scaffold(
-      body: SafeArea(
-        child: switch (_step) {
-          _Step.welcome => _WelcomeStep(
-            onStart: () => setState(() => _step = _Step.pick),
-            onSkip: _finish,
-          ),
-          _Step.pick => _PickStep(
-            selected: _selected,
-            onSelect: (m) => setState(() => _selected = m),
-            onDownload: _startDownload,
-            onSkip: _finish,
-          ),
-          _Step.download => _DownloadStep(
-            model: _selected,
-            onRetry: () {
-              final m = _selected;
-              if (m != null) _startDownload(m);
-            },
-            onPickAnother: () => setState(() => _step = _Step.pick),
-          ),
-          _Step.ready => _ReadyStep(model: _selected, onStartChat: _finish),
-        },
+    // A multi-step wizard on a single route: intercept the system/Android
+    // back gesture so it walks back a step (and cancels an in-flight download)
+    // instead of popping the whole route — which, on a fresh install where
+    // onboarding is the first screen, would exit the app.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        switch (_step) {
+          case _Step.welcome:
+            break; // nothing behind the first step — stay put
+          case _Step.pick:
+            setState(() => _step = _Step.welcome);
+          case _Step.download:
+            _cancelDownload();
+          case _Step.ready:
+            setState(() => _step = _Step.pick);
+        }
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: switch (_step) {
+            _Step.welcome => _WelcomeStep(
+              onStart: () => setState(() => _step = _Step.pick),
+              onSkip: _finish,
+            ),
+            _Step.pick => _PickStep(
+              selected: _selected,
+              onSelect: (m) => setState(() => _selected = m),
+              onDownload: _startDownload,
+              onSkip: _finish,
+            ),
+            _Step.download => _DownloadStep(
+              model: _selected,
+              onRetry: () {
+                final m = _selected;
+                if (m != null) _startDownload(m);
+              },
+              onPickAnother: () => setState(() => _step = _Step.pick),
+              onCancel: _cancelDownload,
+            ),
+            _Step.ready => _ReadyStep(
+              model: _selected,
+              onStartChat: (prompt) => _startChat(prompt: prompt),
+            ),
+          },
+        ),
       ),
     );
   }
@@ -417,10 +476,12 @@ class _DownloadStep extends ConsumerWidget {
     required this.model,
     required this.onRetry,
     required this.onPickAnother,
+    required this.onCancel,
   });
   final StarterModel? model;
   final VoidCallback onRetry;
   final VoidCallback onPickAnother;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -492,6 +553,9 @@ class _DownloadStep extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            SizedBox(height: tokens.spacing.lg),
+            // No dead-end: a large model on a slow link is always cancellable.
+            TextButton(onPressed: onCancel, child: const Text('Cancel')),
           ],
         ],
       ),
@@ -502,7 +566,11 @@ class _DownloadStep extends ConsumerWidget {
 class _ReadyStep extends StatelessWidget {
   const _ReadyStep({required this.model, required this.onStartChat});
   final StarterModel? model;
-  final Future<void> Function() onStartChat;
+
+  /// [prompt] is the tapped "Try asking" chip (null for the plain "Start
+  /// chatting" button) — carried into the first chat turn so it actually gets
+  /// asked, not discarded.
+  final void Function(String? prompt) onStartChat;
 
   @override
   Widget build(BuildContext context) {
@@ -535,7 +603,10 @@ class _ReadyStep extends StatelessWidget {
           Text('Try asking', style: theme.textTheme.titleSmall),
           SizedBox(height: tokens.spacing.sm),
           for (final prompt in _suggestedPrompts) ...[
-            _SuggestedPromptChip(prompt: prompt, onTap: () => onStartChat()),
+            _SuggestedPromptChip(
+              prompt: prompt,
+              onTap: () => onStartChat(prompt),
+            ),
             SizedBox(height: tokens.spacing.sm),
           ],
           SizedBox(height: tokens.spacing.md),
@@ -543,7 +614,7 @@ class _ReadyStep extends StatelessWidget {
             width: double.infinity,
             child: FilledButton.icon(
               icon: const Icon(Icons.chat_bubble_outline, size: 18),
-              onPressed: () => onStartChat(),
+              onPressed: () => onStartChat(null),
               label: const Text('Start chatting'),
             ),
           ),

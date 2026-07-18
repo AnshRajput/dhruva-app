@@ -206,6 +206,23 @@ void main() {
       },
     );
 
+    test('cancel stops the in-flight download and resets to idle', () async {
+      await container.read(onboardingDownloadControllerProvider.future);
+      final notifier = container.read(
+        onboardingDownloadControllerProvider.notifier,
+      );
+
+      await notifier.download(_repoId);
+      expect(stateNow().status, OnboardingDownloadStatus.downloading);
+
+      await notifier.cancel();
+      // The manager was actually told to cancel this task, and the step is
+      // back to a clean idle (the download step's Cancel / Android back is not
+      // a dead-end).
+      expect(backend.cancelCalls, contains(_taskId));
+      expect(stateNow().status, OnboardingDownloadStatus.idle);
+    });
+
     test('a gated model fails gracefully instead of dead-ending', () async {
       container.dispose();
       container = ProviderContainer(

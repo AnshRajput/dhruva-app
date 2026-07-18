@@ -45,10 +45,18 @@ final class ChatRouteArgs {
   final int? initialModelId;
   final int? characterId;
 
+  /// A prompt to seed the first turn of a brand-new draft with — the
+  /// onboarding "Try asking" chips route `/chat/new?prompt=...` here so the
+  /// first chat auto-sends that message (chat_thread_screen.dart), turning
+  /// the guided flow's success step into a real streaming reply instead of an
+  /// empty conversation list. Only meaningful when [conversationId] is null.
+  final String? initialPrompt;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
     this.characterId,
+    this.initialPrompt,
   });
 
   @override
@@ -56,10 +64,12 @@ final class ChatRouteArgs {
       other is ChatRouteArgs &&
       other.conversationId == conversationId &&
       other.initialModelId == initialModelId &&
-      other.characterId == characterId;
+      other.characterId == characterId &&
+      other.initialPrompt == initialPrompt;
 
   @override
-  int get hashCode => Object.hash(conversationId, initialModelId, characterId);
+  int get hashCode =>
+      Object.hash(conversationId, initialModelId, characterId, initialPrompt);
 }
 
 final class ChatThreadState {
