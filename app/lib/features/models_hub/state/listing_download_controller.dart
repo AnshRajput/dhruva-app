@@ -32,6 +32,14 @@ enum ListingModelStatus {
   resolving,
   downloading,
   installed,
+
+  /// The resolved default quant is bigger than this device's RAM tier
+  /// comfortably runs. NOT a dead-end: the row offers a "download anyway"
+  /// confirm — the same informed "may be slow" choice the model detail
+  /// screen gives — which re-runs [ListingDownloadController.download] with
+  /// `force: true`. (Before WS1 this was a hard `failed` whose Retry always
+  /// re-failed, contradicting the detail screen that downloaded it fine.)
+  oversizeWarning,
   failed,
 }
 
@@ -69,6 +77,16 @@ class ListingDownloadController
     extends AsyncNotifier<Map<String, ListingModelState>> {
   StreamSubscription<DownloadProgress>? _sub;
 
+  /// repoId → the chained mmproj projector's file name, for vision one-tap
+  /// downloads. Set in [download]'s vision branch, consumed in [_onProgress]
+  /// to tell the MODEL file's completion (projector still pending — a "needs
+  /// projector" half-install) apart from the PROJECTOR's completion (the
+  /// model is finally usable). Without this, [_onProgress] flipped the row to
+  /// Installed the instant the model file finished — before the projector had
+  /// even been enqueued — then bounced it back to a fresh progress ring when
+  /// the projector download emitted under the same repoId.
+  final Map<String, String> _visionProjectorFile = {};
+
   @override
   Future<Map<String, ListingModelState>> build() async {
     final manager = await ref.watch(downloadManagerProvider.future);
@@ -97,7 +115,11 @@ class ListingDownloadController
   /// Fetches license (gated repos can't be downloaded without HF sign-in —
   /// same rule the detail screen enforces) then the file list, picks a
   /// default quant, and enqueues.
-  Future<void> download(String repoId) async {
+  /// [force] skips the RAM-tier guard — the "download anyway" path the
+  /// `oversizeWarning` row offers, so a below-floor model is never a dead-end
+  /// (matches the model detail screen, which downloads the same file after a
+  /// "may be slow" note rather than refusing it).
+  Future<void> download(String repoId, {bool force = false}) async {
     _set(repoId, const ListingModelState(status: ListingModelStatus.resolving));
     try {
       final client = ref.read(hfApiClientProvider);
@@ -138,15 +160,15 @@ class ListingDownloadController
         fileSizeBytes: footprintBytes,
         totalRamBytes: memory.totalBytes,
       );
-      if (tier == ModelTier.notRecommended) {
+      if (tier == ModelTier.notRecommended && !force) {
         final neededGb = (ramFloorBytesFor(footprintBytes) / (1 << 30)).round();
         _set(
           repoId,
           ListingModelState(
-            status: ListingModelStatus.failed,
+            status: ListingModelStatus.oversizeWarning,
             errorMessage:
-                'Too large for this phone — needs about $neededGb GB of RAM. '
-                'It likely won\'t load.',
+                'May be slow on this phone — models this size run best with '
+                'about $neededGb GB of RAM. Download anyway?',
           ),
         );
         return;
@@ -158,6 +180,9 @@ class ListingDownloadController
       // own `_onProgress` still tracks the model file's progress by repoId and
       // marks the row installed on completion; the projector rides behind it.
       if (quant.mmprojFile != null) {
+        // Remember the projector's file name so `_onProgress` only marks this
+        // row Installed once the PROJECTOR (not just the model file) completes.
+        _visionProjectorFile[repoId] = p.basename(quant.mmprojFile!.path);
         await ref
             .read(downloadActionsControllerProvider.notifier)
             .enqueueVisionQuant(repoId: repoId, quant: quant, license: license);
@@ -234,10 +259,25 @@ class ListingDownloadController
     final repoId = prog.repoId;
     // Voice bundles ride the same stream but have their own tab — ignore.
     if (repoId.startsWith('sherpa-voice/')) return;
+    // For a vision one-tap, both the model file AND its mmproj projector emit
+    // under this same repoId. `projectorFile` is the projector's name (null
+    // for a plain text repo) — used below to hold the row on the ring until
+    // the projector, not just the model file, is done.
+    final projectorFile = _visionProjectorFile[repoId];
     switch (prog.state) {
       case DownloadState.complete:
+        // A vision model isn't usable until its projector lands: the MODEL
+        // file finishing leaves the "needs projector" half-install
+        // (isVision:true, mmprojPath:null). Ignore the model file's own
+        // completion and keep the ring — the chained projector download
+        // (same repoId) drives it onward — then mark Installed only when the
+        // PROJECTOR completes. Non-vision repos have no projector entry, so
+        // they install on their single completion exactly as before.
+        if (projectorFile != null && prog.fileName != projectorFile) return;
+        _visionProjectorFile.remove(repoId);
         unawaited(_markInstalled(repoId));
       case DownloadState.failed:
+        _visionProjectorFile.remove(repoId);
         _set(
           repoId,
           ListingModelState(
@@ -246,6 +286,7 @@ class ListingDownloadController
           ),
         );
       case DownloadState.canceled:
+        _visionProjectorFile.remove(repoId);
         _set(repoId, const ListingModelState());
       case DownloadState.queued:
       case DownloadState.running:

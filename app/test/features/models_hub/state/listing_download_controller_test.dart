@@ -220,6 +220,24 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 80));
 
     expect(backend.enqueuedRequests.keys, contains(_mmprojTaskId));
+
+    // The MODEL file finishing must NOT flip the row to Installed — the
+    // projector hasn't landed, so the model is a "needs projector" half-state
+    // and tapping Chat here would load a projector-less vision model. The row
+    // stays on the ring.
+    expect(stateFor(_repoIdVision).status, ListingModelStatus.downloading);
+
+    // Only once the PROJECTOR completes is the model actually usable → the row
+    // flips to Installed exactly once, with no Installed→ring→Installed bounce.
+    File(
+      '${modelsDir.path}/$_mmprojFileName',
+    ).writeAsBytesSync(List.filled(900, 0));
+    backend.emit(
+      BackendStatusUpdate(_mmprojTaskId, status: BackendTaskStatus.complete),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(stateFor(_repoIdVision).status, ListingModelStatus.installed);
   });
 
   test('tile state machine: Download → progress → Installed', () async {
@@ -290,11 +308,12 @@ void main() {
     expect(backend.enqueuedRequests, isEmpty);
   });
 
-  // WS1: a model too large for the device's RAM is refused at download time —
-  // the real per-device guard the search filter's name-only param cap can't
-  // provide (a big repo encoding no "B" token slips through). Enqueue never
-  // happens, so no multi-GB download lands only to OOM at chat-load.
-  test('download() refuses a model too large for this phone\'s RAM', () async {
+  // WS1: a model too large for the device's RAM is NOT downloaded on the first
+  // tap — but it is NOT a dead-end either. The row moves to `oversizeWarning`
+  // (no enqueue yet), and a second `download(force: true)` — the "download
+  // anyway" confirm — proceeds, matching the model detail screen which
+  // downloads the same below-floor file after a "may be slow" note.
+  test('download() offers "download anyway" for an oversize model', () async {
     const bigRepoId = 'bartowski/Huge-Model-GGUF';
     const bigFileName = 'Huge-Model-Q4_K_M.gguf';
     const gib = 1024 * 1024 * 1024;
@@ -347,13 +366,19 @@ void main() {
     );
 
     await container.read(listingDownloadControllerProvider.future);
-    await container
-        .read(listingDownloadControllerProvider.notifier)
-        .download(bigRepoId);
+    final notifier = container.read(listingDownloadControllerProvider.notifier);
+    await notifier.download(bigRepoId);
 
-    expect(stateFor(bigRepoId).status, ListingModelStatus.failed);
+    // First tap: a confirmable warning, not a hard failure, and nothing
+    // downloaded yet.
+    expect(stateFor(bigRepoId).status, ListingModelStatus.oversizeWarning);
     expect(stateFor(bigRepoId).errorMessage, contains('RAM'));
     expect(backend.enqueuedRequests, isEmpty);
+
+    // "Download anyway": the forced download proceeds and enqueues.
+    await notifier.download(bigRepoId, force: true);
+    expect(stateFor(bigRepoId).status, ListingModelStatus.downloading);
+    expect(backend.enqueuedRequests.keys, contains('$bigRepoId::$bigFileName'));
   });
 
   test('build() seeds Installed for a model already on disk', () async {

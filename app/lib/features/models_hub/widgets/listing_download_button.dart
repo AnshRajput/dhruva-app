@@ -42,6 +42,18 @@ class ListingDownloadButton extends ConsumerWidget {
           tooltip: 'Download',
           onPressed: () => notifier.download(repoId),
         );
+      case ListingModelStatus.oversizeWarning:
+        // Not a dead-end: an informed "download anyway" — a warning-tinted
+        // download button that confirms the "may be slow" tradeoff, then
+        // forces the download (mirrors the model detail screen, which
+        // downloads the same below-floor file after the same note).
+        return IconButton(
+          icon: const Icon(Icons.download_outlined),
+          color: Theme.of(context).colorScheme.tertiary,
+          tooltip: 'Download anyway',
+          onPressed: () =>
+              _confirmOversize(context, notifier, state.errorMessage),
+        );
       case ListingModelStatus.failed:
         return IconButton(
           icon: const Icon(Icons.refresh),
@@ -88,6 +100,31 @@ class ListingDownloadButton extends ConsumerWidget {
           ],
         );
     }
+  }
+
+  Future<void> _confirmOversize(
+    BuildContext context,
+    ListingDownloadController notifier,
+    String? message,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download anyway?'),
+        content: Text(message ?? 'This model may be slow on your device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Download'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await notifier.download(repoId, force: true);
   }
 
   Future<void> _confirmDelete(
