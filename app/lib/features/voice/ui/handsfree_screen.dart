@@ -234,13 +234,19 @@ class _ConversationView extends StatelessWidget {
     HandsFreePhase.permissionDenied => 'Microphone access needed',
   };
 
-  // Honest turn-taking copy: barge-in is voice-driven (the mic stays open
-  // through the Speaking phase — see HandsFreeController), so the interrupt
-  // affordance is "speak", not a tap.
+  // Honest, calm turn-taking copy: barge-in is voice-driven (the mic stays
+  // open through the Speaking phase — see HandsFreeController), so the
+  // interrupt affordance is "speak", not a tap. Kept deliberately low-key
+  // ("speak to interrupt", not "any time") because the barge-in logic is
+  // wired + unit-tested but the on-device acoustic path — the mic hearing you
+  // over the speaker without echo cancellation — is unverified (orchestra/
+  // RISKS.md R11). So the UI invites the action without promising it always
+  // lands: don't over-promise a behaviour we can't yet stand behind on a real
+  // phone.
   String _turnHint(HandsFreePhase phase) => switch (phase) {
     HandsFreePhase.listening => 'your turn — speak now',
     HandsFreePhase.thinking => 'thinking on your device…',
-    HandsFreePhase.speaking => 'speak any time to interrupt',
+    HandsFreePhase.speaking => 'speak to interrupt',
     _ => '',
   };
 }

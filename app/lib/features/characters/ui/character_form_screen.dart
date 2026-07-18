@@ -23,6 +23,7 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/characters/character_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
+import '../../../data/models/starter_catalog.dart' show friendlyModelName;
 import '../state/characters_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/character_avatar.dart';
@@ -372,20 +373,48 @@ class _ModelDropdown extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
     final modelsAsync = ref.watch(installedModelsProvider);
     return switch (modelsAsync) {
-      AsyncData(:final value) => DropdownButtonFormField<int?>(
-        initialValue: selectedModelId,
-        isExpanded: true,
-        items: [
-          const DropdownMenuItem<int?>(value: null, child: Text('None')),
-          for (final model in value)
-            DropdownMenuItem<int?>(
-              value: model.id,
-              child: Text(model.repoId, overflow: TextOverflow.ellipsis),
+      AsyncData(:final value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<int?>(
+            initialValue: selectedModelId,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem<int?>(value: null, child: Text('None')),
+              // Friendly catalog name (falls back to the raw repo id for
+              // imported/HF-searched models) — the same helper every other
+              // model surface uses (Downloads, Installed tabs, chat picker),
+              // so a curated model never reverts to its cryptic HF path here.
+              for (final model in value)
+                DropdownMenuItem<int?>(
+                  value: model.id,
+                  child: Text(
+                    friendlyModelName(model.repoId),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: onChanged,
+          ),
+          // Empty-state parity with the chat model picker: when nothing is
+          // installed the only choice is "None", so say why rather than
+          // leaving a lone dropdown that looks broken.
+          if (value.isEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: tokens.spacing.xs),
+              child: Text(
+                'No models installed yet — install one from the Models tab to '
+                'bind a default.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
         ],
-        onChanged: onChanged,
       ),
       _ => const LinearProgressIndicator(),
     };

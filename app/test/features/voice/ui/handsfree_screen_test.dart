@@ -135,6 +135,10 @@ void main() {
       }
 
       expect(find.text('Speaking…'), findsOneWidget);
+      // Honest, calm barge-in copy: invites the action ("speak to interrupt")
+      // without the "any time" reliability promise the on-device acoustic path
+      // can't yet stand behind (RISKS.md R11).
+      expect(find.text('speak to interrupt'), findsOneWidget);
       expect(find.text('"hello there"'), findsOneWidget);
       expect(find.text('sure thing'), findsOneWidget);
       expect(find.text('End hands-free'), findsOneWidget);

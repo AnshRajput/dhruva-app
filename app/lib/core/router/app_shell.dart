@@ -1,8 +1,9 @@
-/// Bottom-nav shell for the four top-level destinations (Loop 4 + Amendment
-/// 4b + Loop 5). Not specified by chat-spec.md (it only covers the chat
-/// screens themselves) — per the Loop-4 brief's fallback, a plain
-/// `NavigationBar`. `/chat` is app home per chat-spec.md §1; characters,
-/// models hub, and settings are the second/third/fourth destinations. Detail
+/// Bottom-nav shell for the five top-level destinations (Loop 4 + Amendment
+/// 4b + Loop 5 + the UI-PARITY Playground tab). Not specified by chat-spec.md
+/// (it only covers the chat screens themselves) — per the Loop-4 brief's
+/// fallback, a plain `NavigationBar`. `/chat` is app home per chat-spec.md §1;
+/// characters, models hub, playground, and settings are the second through
+/// fifth destinations. Detail
 /// routes (`/chat/:id`, `/characters/:id`, `/models/repo/:id`,
 /// `/models/downloads`) are pushed as siblings of this shell (see
 /// `app_router.dart`), so they cover the nav bar full-screen rather than

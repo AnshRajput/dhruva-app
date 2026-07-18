@@ -35,7 +35,8 @@ import '../widgets/voice_model_tile.dart';
 class ModelsHubScreen extends StatelessWidget {
   /// Which tab to open on. Deep-linked callers (e.g. hands-free's "Set up
   /// voice" — WS5) pass `2` to land straight on the Voice tab instead of the
-  /// default Discover firehose.
+  /// default Discover tab (the curated, phone-verified catalog — the raw HF
+  /// firehose now lives behind the advanced-search screen, see the class doc).
   final int initialTabIndex;
 
   const ModelsHubScreen({super.key, this.initialTabIndex = 0});

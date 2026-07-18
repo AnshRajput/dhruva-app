@@ -1,7 +1,7 @@
 /// go_router setup. `/chat` is the app home (chat-spec.md §1: "the product's
 /// make-or-break feature and the MVP closer" — Loop 4). Characters (Loop 5),
-/// models hub, and settings are the second/third/fourth bottom-nav
-/// destinations (`app_shell.dart`).
+/// models hub, playground (UI-PARITY), and settings are the second through
+/// fifth bottom-nav destinations (`app_shell.dart`).
 ///
 /// Repo ids contain a `/` (`namespace/model-name`), so callers must
 /// percent-encode the id when pushing `/models/repo/:id` — `GoRoute`'s
@@ -57,7 +57,7 @@ final appRouter = GoRouter(
               path: '/models',
               // `?tab=voice` deep-links straight to the Voice tab (WS5:
               // hands-free's "Set up voice" must land on voice models, not the
-              // default Discover firehose).
+              // default Discover tab — now the curated catalog, not a firehose).
               builder: (context, state) => ModelsHubScreen(
                 initialTabIndex: state.uri.queryParameters['tab'] == 'voice'
                     ? 2

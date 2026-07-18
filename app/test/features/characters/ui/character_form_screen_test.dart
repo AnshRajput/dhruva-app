@@ -7,11 +7,14 @@ import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/characters/character_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/downloads/storage_manager.dart';
+import 'package:dhruva/features/characters/state/installed_models_provider.dart';
 import 'package:dhruva/features/characters/ui/character_form_screen.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -49,7 +52,10 @@ void main() {
   // app (the form is always *pushed* on top of a gallery/detail screen) —
   // `context.pop()` on save-while-editing needs something to pop back to,
   // which a bare `initialLocation` at the form route itself wouldn't have.
-  Widget buildApp({int? characterId}) {
+  Widget buildApp({
+    int? characterId,
+    List<Override> extraOverrides = const [],
+  }) {
     final router = GoRouter(
       initialLocation: '/characters',
       routes: [
@@ -93,6 +99,7 @@ void main() {
         characterRepositoryProvider.overrideWithValue(
           CharacterRepository(db: db, starterPackLoader: () async => null),
         ),
+        ...extraOverrides,
       ],
       child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
     );
@@ -189,6 +196,32 @@ void main() {
       );
       expect(find.text('Duplicate to edit'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Name'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'the default-model picker shows an empty-state hint (not a lone bare '
+    'dropdown) when no models are installed',
+    (tester) async {
+      await tester.pumpWidget(
+        buildApp(
+          extraOverrides: [
+            installedModelsProvider.overrideWith(
+              (ref) async => <InstalledModelInfo>[],
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openForm(tester);
+
+      final hint = find.textContaining('No models installed yet');
+      await tester.scrollUntilVisible(
+        hint,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(hint, findsOneWidget);
     },
   );
 }
