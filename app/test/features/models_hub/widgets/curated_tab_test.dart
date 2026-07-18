@@ -167,4 +167,47 @@ void main() {
     expect(find.text('Vision'), findsOneWidget);
     expect(find.byTooltip('Download'), findsOneWidget);
   });
+
+  testWidgets(
+    'segments non-fitting models into a collapsed "Larger models" group and '
+    'badges the recommended pick (critic HIGH)',
+    (tester) async {
+      // A low-RAM device: the biggest curated models do not fit, so they must
+      // NOT sit under the "Runs great" header — they go under "Larger models".
+      // 5 GB: small (≤1.2GB file, 4GB floor) models are "possible" and fit,
+      // but the 1.2–3GB-file models (6GB floor) are "not recommended" — a real
+      // split, so the collapsed group and the badge both render.
+      const lowRam = FakeDeviceInfoService(
+        memory: DeviceMemoryInfo(
+          totalBytes: 5000000000,
+          availableBytes: 2500000000,
+        ),
+        storage: DeviceStorageInfo(
+          totalBytes: 64000000000,
+          freeBytes: 32000000000,
+        ),
+      );
+      await tester.binding.setSurfaceSize(const Size(500, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            deviceInfoServiceProvider.overrideWithValue(lowRam),
+            listingDownloadControllerProvider.overrideWith(_StubController.new),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const Scaffold(body: CuratedTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The best fitting pick is badged, and the too-big models are hidden in
+      // the collapsed group (so the screen never promises "runs great" for a
+      // model this phone can't run).
+      expect(find.text('Recommended'), findsOneWidget);
+      expect(find.text('Larger models'), findsOneWidget);
+    },
+  );
 }
