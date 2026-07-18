@@ -250,3 +250,25 @@ bigger than any single bug: real value, end-to-end, not a playground. That's
 now the north-star in CLAUDE.md. Remaining video asks (UI-match-website,
 per-variant benchmark, download ETA, in-app Playground+AI-news, value-highlight)
 are queued as the next loop(s).
+
+## UI-PARITY loop (v0.2.4 + v0.2.5, 2026-07-18) — the rest of the video
+After the crash fix, the human asked to "complete all" remaining video points.
+Ran parallel builders (chat/voice UI parity, benchmark/ETA/value, playground) —
+a git-stash race between concurrent agents on ONE shared checkout crossed their
+working trees (rescued to .rescue-foreign/). Lesson: do NOT run multiple agents
+mutating the same repo without reliable worktree isolation; isolation:worktree
+mis-targeted the sibling website repo here. Recovered deterministically:
+committed A + C, integrated, dropped the half-broken playground from v0.2.4.
+Shipped v0.2.4: dark theme default, chat/voice website parity, per-quant quality
+chips, download ETA/speed, in-app + website value copy. Then a SINGLE sequential
+agent (no concurrency = no collision) finished the rest -> v0.2.5: playground
+two-model compare + AI-news (fixed a subscription-cancel deadlock that stranded
+model B's load), voice re-detects installed models without restart, voice STT
+accuracy (Silero maxSpeechDuration 5s->20s stopped chopping sentences mid-word),
+generation persistence (in-app leave/reconnect verified; true background-while-
+minimised deferred to a foreground service, RISKS R12). Each verified on the
+emulator before shipping; make verify green (840 tests). Retro: (1) one agent at
+a time on a shared repo, or nothing. (2) Ship the verified subset, defer the
+unverified feature (playground held out of v0.2.4) rather than ship red. (3)
+On-device screenshotting caught what tests can't (dark theme, nav tab, empty
+states) — kept as the release gate.

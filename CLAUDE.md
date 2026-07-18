@@ -71,7 +71,7 @@ app→FAD + web. Next: Loop 8 (image generation, stable-diffusion.cpp). Remainin
 · 12 website-gate · 13 distribution-CI (H3/H4) · 14 hardening+handover. CI pins
 Flutter 3.41.2.
 
-**v0.2.3 (build 33) SHIPPED** (2026-07-18) — UX-CRASH-FIX loop. Fixed the 0.2.2
+**v0.2.5 SHIPPED** (2026-07-18) — UX-CRASH-FIX loop. Fixed the 0.2.2
 regression where every download crashed the app on Android 14+ (missing
 foreground-service perms + dataSync service-type; see orchestra/LOOP_LOG.md +
 VIDEO_FIXES.md). Verified download→install→chat end-to-end on the emulator
