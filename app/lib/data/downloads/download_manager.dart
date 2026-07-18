@@ -51,6 +51,13 @@ final class DownloadProgress {
   final double networkSpeedMBs;
   final Duration timeRemaining;
 
+  /// Mirrors [DownloadRequest.registerAsInstalledModel]: false for a vision
+  /// model's mmproj projector, which rides the same pipeline but never becomes
+  /// its own installed model. The UI uses this to keep the projector out of
+  /// the "Ready — start chatting" surfaces (it has no chat-loadable row) — see
+  /// `_ReadySection` and `AppShell`'s completion listener.
+  final bool registerAsInstalledModel;
+
   const DownloadProgress({
     required this.taskId,
     required this.repoId,
@@ -62,6 +69,7 @@ final class DownloadProgress {
     this.failure,
     this.networkSpeedMBs = -1,
     this.timeRemaining = const Duration(seconds: -1),
+    this.registerAsInstalledModel = true,
   });
 
   /// A compact "3.1 MB/s · 0:45 left" line, or null when neither estimate is
@@ -518,6 +526,7 @@ final class DownloadManager {
         failure: failure,
         networkSpeedMBs: networkSpeedMBs,
         timeRemaining: timeRemaining,
+        registerAsInstalledModel: request.registerAsInstalledModel,
       ),
     );
   }

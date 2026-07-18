@@ -55,6 +55,9 @@ void main() {
     url: Uri.parse('https://huggingface.co/x/resolve/main/x.gguf'),
     expectedSizeBytes: 1000,
   );
+  // WS4: the download rows show the curated friendly name, not the raw repo id
+  // or .gguf filename — this repoId is in the starter catalog.
+  const friendlyName = 'Llama 3.2 1B Instruct';
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -116,7 +119,7 @@ void main() {
       ),
     );
 
-    expect(find.text(request.fileName), findsOneWidget);
+    expect(find.text(friendlyName), findsOneWidget);
     expect(find.textContaining('Downloading'), findsOneWidget);
     // WS4: real percent + speed/ETA are surfaced (40% of 1000 bytes).
     expect(find.textContaining('40%'), findsOneWidget);
@@ -154,6 +157,41 @@ void main() {
     },
   );
 
+  testWidgets(
+    'WS4: a completed mmproj projector does NOT render a "Ready" card — it '
+    'is not a chat-loadable model (registerAsInstalledModel: false)',
+    (tester) async {
+      final projector = DownloadRequest(
+        repoId: 'ggml-org/SmolVLM2-2.2B-Instruct-GGUF',
+        fileName: 'mmproj-SmolVLM2-2.2B-Instruct-f16.gguf',
+        url: Uri.parse('https://huggingface.co/x/resolve/main/mmproj.gguf'),
+        expectedSizeBytes: 1000,
+        registerAsInstalledModel: false,
+      );
+      await pump(tester);
+      await settleAfter(
+        tester,
+        () => manager.enqueue(projector, freeBytes: 1 << 30),
+      );
+      final file = File('${modelsDir.path}/${projector.fileName}')
+        ..writeAsBytesSync(List<int>.filled(projector.expectedSizeBytes, 7));
+      backend.filePaths[projector.taskId] = file.path;
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(
+          projector.taskId,
+          status: BackendTaskStatus.complete,
+        ),
+      );
+
+      // No bogus green card, no model-less "Start chatting" CTA, and the raw
+      // mmproj filename never surfaces.
+      expect(find.text('Ready — start chatting'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Start chatting'), findsNothing);
+      expect(find.textContaining('mmproj'), findsNothing);
+    },
+  );
+
   testWidgets('cancel calls the backend and removes the row', (tester) async {
     await pump(tester);
     await settleAfter(
@@ -168,12 +206,12 @@ void main() {
         expectedFileSizeBytes: 1000,
       ),
     );
-    expect(find.text(request.fileName), findsOneWidget);
+    expect(find.text(friendlyName), findsOneWidget);
 
     await settleAfter(tester, () => tester.tap(find.byTooltip('Cancel')));
 
     expect(backend.cancelCalls, contains(request.taskId));
-    expect(find.text(request.fileName), findsNothing);
+    expect(find.text(friendlyName), findsNothing);
     expect(find.text('No active downloads.'), findsOneWidget);
   });
 
@@ -193,8 +231,8 @@ void main() {
       ),
     );
 
-    expect(find.text(request.fileName), findsOneWidget);
-    expect(find.textContaining('failed'), findsOneWidget);
+    expect(find.text(friendlyName), findsOneWidget);
+    expect(find.textContaining('Failed'), findsOneWidget);
     expect(find.text('connection lost'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.byIcon(Icons.refresh), findsOneWidget);
@@ -209,9 +247,9 @@ void main() {
     await settleAfter(tester, () => tester.tap(find.text('Retry')));
 
     expect(backend.enqueuedRequests, contains(request.taskId));
-    expect(find.text(request.fileName), findsOneWidget);
+    expect(find.text(friendlyName), findsOneWidget);
     expect(find.text('Retry'), findsNothing);
-    expect(find.textContaining('failed'), findsNothing);
+    expect(find.textContaining('Failed'), findsNothing);
     expect(find.textContaining('Queued'), findsOneWidget);
   });
 

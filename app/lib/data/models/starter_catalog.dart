@@ -123,6 +123,18 @@ const starterModelCatalog = <StarterModel>[
   ),
 ];
 
+/// The curated catalog's friendly name for [repoId], or the raw repo id when
+/// the model was imported / found via advanced HF search (not curated). Used
+/// everywhere a download surfaces a model to the user — the Downloads screen,
+/// the completion SnackBar, the Installed tabs — so a curated model never
+/// reverts to its cryptic HF path (PRD v0.3 WS1/WS4 "no jargon").
+String friendlyModelName(String repoId) =>
+    _friendlyNamesByRepo[repoId] ?? repoId;
+
+final _friendlyNamesByRepo = {
+  for (final m in starterModelCatalog) m.repoId: m.displayName,
+};
+
 /// The single model onboarding pre-selects and badges "Recommended" (PRD v0.3
 /// WS2): the MOST capable text model that still runs *comfortably* on this
 /// device, so a first-timer gets the best experience their phone can hold

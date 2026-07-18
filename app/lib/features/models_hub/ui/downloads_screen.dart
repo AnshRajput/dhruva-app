@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../data/models/starter_catalog.dart';
 import '../state/downloads_controller.dart';
 import '../state/storage_controller.dart';
 import '../widgets/download_progress_tile.dart';
@@ -106,7 +107,11 @@ class _ActiveSection extends ConsumerWidget {
 /// loaded with that model — closing the download→chat loop without making the
 /// user hunt for the model in a picker. Voice bundles ride the same download
 /// pipeline (`sherpa-voice/` repoId) but aren't a chat pick, so they're
-/// excluded here — they surface in their own Voice tab.
+/// excluded here — they surface in their own Voice tab. A vision model's mmproj
+/// projector rides the same pipeline (`registerAsInstalledModel: false`, same
+/// vision repoId) but never becomes its own installed model, so it's excluded
+/// too — otherwise it renders a bogus "Ready" card whose CTA opens a model-less
+/// chat.
 class _ReadySection extends ConsumerWidget {
   final Map<String, DownloadProgress> progress;
   const _ReadySection({required this.progress});
@@ -117,6 +122,7 @@ class _ReadySection extends ConsumerWidget {
         .where(
           (p) =>
               p.state == DownloadState.complete &&
+              p.registerAsInstalledModel &&
               !p.repoId.startsWith('sherpa-voice/'),
         )
         .toList();
@@ -169,7 +175,10 @@ class _ReadyTile extends StatelessWidget {
       ),
       child: ListTile(
         leading: Icon(Icons.check_circle, color: tokens.success),
-        title: Text(progress.fileName, overflow: TextOverflow.ellipsis),
+        title: Text(
+          friendlyModelName(progress.repoId),
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: const Text('Ready — start chatting'),
         trailing: FilledButton(
           onPressed: () => modelId != null
@@ -201,13 +210,16 @@ class _FailedDownloadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      title: Text(progress.fileName, overflow: TextOverflow.ellipsis),
+      title: Text(
+        friendlyModelName(progress.repoId),
+        overflow: TextOverflow.ellipsis,
+      ),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${progress.repoId} · failed'),
+            const Text('Failed'),
             if (progress.errorMessage != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -256,10 +268,11 @@ class _CompletedSection extends ConsumerWidget {
                     .map(
                       (m) => ListTile(
                         leading: const Icon(Icons.check_circle_outline),
-                        title: Text(m.repoId, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          '${m.fileName}${m.quant != null ? ' · ${m.quant}' : ''}',
+                        title: Text(
+                          friendlyModelName(m.repoId),
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        subtitle: Text(m.quant ?? m.fileName),
                       ),
                     )
                     .toList(),

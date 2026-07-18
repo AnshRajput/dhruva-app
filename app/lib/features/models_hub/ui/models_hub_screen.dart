@@ -179,7 +179,7 @@ class _InstalledBody extends ConsumerWidget {
                 // name from the starter catalog; fall back to the repo id for
                 // models imported or found via advanced HF search.
                 title: Text(
-                  _friendlyNamesByRepo[m.repoId] ?? m.repoId,
+                  friendlyModelName(m.repoId),
                   overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
@@ -250,13 +250,6 @@ class _InstalledBody extends ConsumerWidget {
         .importLocal(File(picked.path));
   }
 }
-
-/// Friendly display name per curated repo id, so the Installed tab shows the
-/// same name Discover used instead of the raw HF repo path. Built once from the
-/// const catalog.
-final _friendlyNamesByRepo = {
-  for (final m in starterModelCatalog) m.repoId: m.displayName,
-};
 
 String _formatBytes(int bytes) {
   if (bytes >= 1024 * 1024 * 1024) {

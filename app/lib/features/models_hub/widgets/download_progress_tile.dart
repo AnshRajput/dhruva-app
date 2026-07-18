@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/downloads/download_manager.dart';
+import '../../../data/models/starter_catalog.dart';
 
 /// One active/recent download row: file name, repo, live status + percent,
 /// progress bar, real speed/ETA (WS4 — surfaced from `DownloadProgress`),
@@ -32,7 +33,10 @@ class DownloadProgressTile extends StatelessWidget {
         ? null
         : fraction;
     return ListTile(
-      title: Text(progress.fileName, overflow: TextOverflow.ellipsis),
+      title: Text(
+        friendlyModelName(progress.repoId),
+        overflow: TextOverflow.ellipsis,
+      ),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Column(
@@ -87,14 +91,15 @@ class DownloadProgressTile extends StatelessWidget {
     );
   }
 
-  /// "`repoId` · Downloading · 40%" — the percent only when it's known and
-  /// meaningful (not for queued/verifying, which have no in-flight fraction).
+  /// "Downloading · 40%" — the percent only when it's known and meaningful
+  /// (not for queued/verifying, which have no in-flight fraction). The model's
+  /// friendly name is the tile title, so it isn't repeated here.
   String _headline(double? fraction) {
     final showPercent =
         fraction != null &&
         (progress.state == DownloadState.running ||
             progress.state == DownloadState.paused);
-    final parts = <String>[progress.repoId, _stateLabel(progress.state)];
+    final parts = <String>[_stateLabel(progress.state)];
     if (showPercent) parts.add('${(fraction * 100).round()}%');
     return parts.join(' · ');
   }

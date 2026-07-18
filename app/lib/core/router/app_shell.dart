@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/downloads/download_manager.dart';
+import '../../data/models/starter_catalog.dart';
 import '../../features/characters/state/installed_models_provider.dart'
     as char_installed;
 import '../../features/chat/state/installed_models_provider.dart'
@@ -62,10 +63,15 @@ class AppShell extends ConsumerWidget {
       // but only for chat-usable GGUF models. Voice bundles ride the same
       // download pipeline (sherpa-voice/ repoId) yet aren't a chat pick; they
       // have their own Voice tab, so don't tell the user to "start chatting".
+      // A vision model's mmproj projector rides the pipeline too
+      // (registerAsInstalledModel: false) but has no chat-loadable row — skip
+      // it, else the user gets a second cryptic SnackBar into a model-less chat.
       DownloadProgress? model;
       for (final id in newly) {
         final p = next.value?[id];
-        if (p != null && !p.repoId.startsWith('sherpa-voice/')) {
+        if (p != null &&
+            p.registerAsInstalledModel &&
+            !p.repoId.startsWith('sherpa-voice/')) {
           model = p;
           break;
         }
@@ -77,7 +83,9 @@ class AppShell extends ConsumerWidget {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
-              content: Text('${model.fileName} is ready — start chatting.'),
+              content: Text(
+                '${friendlyModelName(model.repoId)} is ready — start chatting.',
+              ),
               action: SnackBarAction(
                 label: 'Start chatting',
                 // Direct CTA into a chat already LOADED with the model that
