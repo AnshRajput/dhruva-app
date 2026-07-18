@@ -114,6 +114,61 @@ void main() {
       expect(state.runB.status, RunStatus.done);
     });
 
+    testWidgets('the not-yet-started column reads "queued", never idle Ready', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        overrides: [
+          installed(twoModels),
+          hf(MockClient((_) async => http.Response('[]', 200))),
+          engineServiceProvider.overrideWithValue(
+            FakeEngineService(scriptedTokens: const ['Hi']),
+          ),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.tap(find.text('Run on both'));
+      // One frame: model A is loading, model B waits its turn (not "Ready").
+      await tester.pump();
+      expect(find.text('Waiting its turn…'), findsOneWidget);
+      expect(find.text('Ready'), findsNothing);
+
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('swapping a model after a run clears its stale result + badge', (
+      tester,
+    ) async {
+      final container = await _pump(
+        tester,
+        overrides: [
+          installed(twoModels),
+          hf(MockClient((_) async => http.Response('[]', 200))),
+          engineServiceProvider.overrideWithValue(
+            FakeEngineService(scriptedTokens: const ['Hi', ' ', 'there']),
+          ),
+        ],
+      );
+
+      await tester.enterText(find.byType(TextField), 'Say hi');
+      await tester.tap(find.text('Run on both'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fastest'), findsOneWidget);
+
+      // Re-selecting model A must drop A's stale output + the (now wrong) badge.
+      container.read(playgroundControllerProvider.notifier).setModelA(2);
+      await tester.pumpAndSettle();
+
+      final state = container.read(playgroundControllerProvider);
+      expect(state.runA.status, RunStatus.idle);
+      expect(state.runA.text, isEmpty);
+      expect(find.text('Fastest'), findsNothing);
+      // The other column keeps its finished result.
+      expect(state.runB.status, RunStatus.done);
+    });
+
     testWidgets('Temperature slider updates controller state', (tester) async {
       final container = await _pump(
         tester,

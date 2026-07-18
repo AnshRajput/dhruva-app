@@ -209,8 +209,9 @@ class _CompareBody extends ConsumerWidget {
       padding: EdgeInsets.all(tokens.spacing.md),
       children: [
         Text(
-          'One prompt, two models, side by side — compare their speed and '
-          'answers, then keep the one you like.',
+          'One prompt, two models. Your phone runs one model at a time, so '
+          'they answer one after another — compare their speed and answers, '
+          'then keep the one you like.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -526,6 +527,7 @@ class _ResultColumn extends StatelessWidget {
 
   String _statusLine(RunSlot slot) => switch (slot.status) {
     RunStatus.idle => 'Ready',
+    RunStatus.queued => 'Waiting its turn…',
     RunStatus.loading => 'Loading model…',
     RunStatus.streaming => '${slot.liveTokPerSec.toStringAsFixed(0)} tok/s',
     RunStatus.done => '${slot.finalTokPerSec.toStringAsFixed(0)} tok/s · done',

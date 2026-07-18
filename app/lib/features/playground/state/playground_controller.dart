@@ -24,8 +24,10 @@ import '../../../core/di/providers.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../engine_bindings/engine_service.dart';
 
-/// Lifecycle of one model's column in the compare.
-enum RunStatus { idle, loading, streaming, done, error, cancelled }
+/// Lifecycle of one model's column in the compare. [queued] is the
+/// not-yet-started column while the other model runs — the phone runs one
+/// model at a time (ADR-001), so the two runs are serialized, not simultaneous.
+enum RunStatus { idle, queued, loading, streaming, done, error, cancelled }
 
 /// One model's output column.
 final class RunSlot {
@@ -134,8 +136,12 @@ class PlaygroundController extends Notifier<PlaygroundState> {
     return const PlaygroundState();
   }
 
-  void setModelA(int id) => state = state.copyWith(modelAId: id);
-  void setModelB(int id) => state = state.copyWith(modelBId: id);
+  // Swapping a model invalidates that column's stale result (text/tok-s and
+  // any "Fastest" badge), so reset its slot to idle when the selection changes.
+  void setModelA(int id) =>
+      state = state.copyWith(modelAId: id, runA: const RunSlot());
+  void setModelB(int id) =>
+      state = state.copyWith(modelBId: id, runB: const RunSlot());
   void setTemperature(double v) => state = state.copyWith(temperature: v);
   void setTopP(double v) => state = state.copyWith(topP: v);
   void setMaxTokens(int v) => state = state.copyWith(maxTokens: v);
@@ -150,10 +156,12 @@ class PlaygroundController extends Notifier<PlaygroundState> {
     final trimmed = prompt.trim();
     if (trimmed.isEmpty || state.isRunning) return;
     _aborted = false;
+    // Model B waits its turn while A loads + streams (single-session, ADR-001),
+    // so mark it queued rather than idle/"Ready" — it never reads as inert.
     state = state.copyWith(
       isRunning: true,
       runA: const RunSlot(status: RunStatus.idle),
-      runB: const RunSlot(status: RunStatus.idle),
+      runB: const RunSlot(status: RunStatus.queued),
     );
     final engine = ref.read(engineServiceProvider);
     try {
