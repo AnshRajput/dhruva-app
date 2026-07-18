@@ -19,6 +19,12 @@ void main() {
 
     expect(find.text('No model installed yet'), findsOneWidget);
     expect(find.text('Browse models'), findsOneWidget);
+    // Value made explicit + brand tagline (VIDEO_FIXES #6).
+    expect(find.textContaining('runs entirely on your phone'), findsOneWidget);
+    expect(
+      find.text("Your AI. Your phone. Nobody else's business."),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Browse models'));
     expect(tapped, isTrue);
   });

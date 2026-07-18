@@ -148,6 +148,12 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
           expectedFileSizeBytes: update.hasExpectedFileSize
               ? update.expectedFileSize
               : null,
+          // The plugin already computes speed + ETA on the progress channel
+          // (its own negative sentinels for "unknown"); pass them straight
+          // through the seam so the in-app ring can show the same estimate
+          // the OS notification does.
+          networkSpeedMBs: update.networkSpeed,
+          timeRemaining: update.timeRemaining,
         );
     }
   }

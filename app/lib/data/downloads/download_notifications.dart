@@ -4,9 +4,11 @@
 /// platform call itself is mobile-only and exercised on-device).
 ///
 /// `background_downloader` owns the task lifecycle and substitutes
-/// `{filename}`, `{progress}`, `{timeRemaining}` tokens itself and drives the
-/// Android progress bar — so this is a config object, not a second
-/// notification pipeline. Applies globally (GGUF + voice downloads alike).
+/// `{filename}`, `{progress}`, `{networkSpeed}`, `{timeRemaining}` tokens
+/// itself and drives the Android progress bar — so this is a config object,
+/// not a second notification pipeline. Applies globally (GGUF + voice
+/// downloads alike). `{networkSpeed}`/`{timeRemaining}` render as '--' / '--:--'
+/// until the plugin has a real estimate, so the copy stays honest.
 library;
 
 import 'package:background_downloader/background_downloader.dart' as bg;
@@ -16,7 +18,7 @@ import 'package:background_downloader/background_downloader.dart' as bg;
 final dhruvaDownloadNotificationConfig = bg.TaskNotificationConfig(
   running: const bg.TaskNotification(
     '{filename}',
-    'Downloading… {progress} · {timeRemaining} left',
+    'Downloading… {progress} · {networkSpeed} · {timeRemaining} left',
   ),
   complete: const bg.TaskNotification('{filename}', 'Download complete'),
   error: const bg.TaskNotification('{filename}', 'Download failed'),

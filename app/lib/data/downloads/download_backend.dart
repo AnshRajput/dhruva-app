@@ -67,10 +67,20 @@ final class BackendProgressUpdate extends BackendUpdate {
   /// special states (e.g. waiting-to-retry); callers should clamp to 0-1.
   final double progress;
   final int? expectedFileSizeBytes;
+
+  /// Live transfer estimates the plugin exposes on its progress channel.
+  /// [networkSpeedMBs] is MB/s, valid only when positive; [timeRemaining]
+  /// is valid only when non-negative. Both default to the plugin's
+  /// "unknown" sentinels so a caller that doesn't have them (the fake
+  /// backend) surfaces nothing rather than a fake estimate.
+  final double networkSpeedMBs;
+  final Duration timeRemaining;
   const BackendProgressUpdate(
     super.taskId, {
     required this.progress,
     this.expectedFileSizeBytes,
+    this.networkSpeedMBs = -1,
+    this.timeRemaining = const Duration(seconds: -1),
   });
 }
 
