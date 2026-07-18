@@ -48,8 +48,7 @@ class NoModelInstalledView extends StatelessWidget {
                 // value"): the concrete use case, then the brand tagline.
                 Text(
                   'A private AI that runs entirely on your phone — chat, '
-                  'analyze photos, talk, generate images, and chat with your '
-                  'documents. Nothing is sent to any server.',
+                  'analyze photos, and talk. Nothing is sent to any server.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,

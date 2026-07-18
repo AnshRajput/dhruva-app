@@ -49,6 +49,10 @@ final class FakeEngineService implements EngineService {
   /// Test hook: number of successful [load] calls.
   int loadCount = 0;
 
+  /// Test hook: number of [generate] calls (WS3: asserts a second send during
+  /// the model-load window doesn't start a second concurrent generation).
+  int generateCount = 0;
+
   /// Test hook: the `params` passed to the most recent [load] call — Loop 7
   /// gate, lets a test assert `mmprojPath` actually reached the engine
   /// (`ChatController.ensureModelLoaded`'s load path), not just that the
@@ -99,6 +103,7 @@ final class FakeEngineService implements EngineService {
     List<ChatTurn>? messages,
     EngineGenerateParams params = const EngineGenerateParams(),
   }) {
+    generateCount++;
     lastMessages = messages;
     lastParams = params;
     lastImageCount = messages?.fold<int>(0, (n, m) => n + m.images.length) ?? 0;

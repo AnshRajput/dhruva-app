@@ -276,6 +276,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// means the second call awaits the first instead of starting another.
   Future<void>? _loadInFlight;
 
+  /// Synchronous "a generation is being set up or is in flight" latch (WS3
+  /// defect). `ChatThreadState.isGenerating` can't be the guard here: it's
+  /// only flipped true AFTER `ensureModelLoaded()` returns (and
+  /// `_ensureModelLoaded` itself early-returns when `isGenerating` is true, so
+  /// it can't be set earlier), leaving the whole multi-second cold-model load
+  /// window with `isGenerating == false`. During that window a second send /
+  /// switch / regenerate would sail past the state guard and start a second
+  /// concurrent turn on the singleton engine (double generate, leaked
+  /// flush-timer). This flag is set synchronously at the entry of every
+  /// generation path BEFORE the first `await`, checked by all of them, and
+  /// cleared on every exit path — so exactly one turn is ever in flight.
+  bool _turnInFlight = false;
+
   /// Raw failure text for the "Copy error details" affordance
   /// (`EngineUnknownFailure`, chat-spec.md §8) — not persisted (`Messages`
   /// has no free-text-detail column beyond `errorKind`'s label), so a
@@ -500,22 +513,30 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// ahead of that.
   Future<void> switchModel(InstalledModelInfo model) async {
     final current = state.value;
-    if (current == null || current.isGenerating) return;
-    if (current.conversationId != null) {
-      await _repo.setModel(current.conversationId!, model.id);
+    if (current == null || current.isGenerating || _turnInFlight) return;
+    // Hold the same in-flight latch across the switch's own load: a send
+    // fired while the new model is still loading must not start a turn on a
+    // half-swapped model, and a second switch must not race this one.
+    _turnInFlight = true;
+    try {
+      if (current.conversationId != null) {
+        await _repo.setModel(current.conversationId!, model.id);
+      }
+      state = AsyncData(
+        current.copyWith(
+          modelId: model.id,
+          model: model,
+          clearModelLoadError: true,
+          // Placeholder until ensureModelLoaded confirms the new model's real
+          // capability — avoids a one-frame stale "attach button visible"
+          // flash carried over from the previous model.
+          isMultimodal: false,
+        ),
+      );
+      await ensureModelLoaded();
+    } finally {
+      _turnInFlight = false;
     }
-    state = AsyncData(
-      current.copyWith(
-        modelId: model.id,
-        model: model,
-        clearModelLoadError: true,
-        // Placeholder until ensureModelLoaded confirms the new model's real
-        // capability — avoids a one-frame stale "attach button visible" flash
-        // carried over from the previous model.
-        isMultimodal: false,
-      ),
-    );
-    await ensureModelLoaded();
   }
 
   // ---- System prompt / sampling (chat-spec.md §5) ------------------------
@@ -579,7 +600,11 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final trimmed = text.trim();
     if (trimmed.isEmpty && imageBytes == null) return;
     final current = state.value;
-    if (current == null || current.isGenerating) return;
+    if (current == null || current.isGenerating || _turnInFlight) return;
+    // Latch synchronously, before the first await (createConversation /
+    // appendMessage below, then the model load in _runAssistantTurn) — so a
+    // second send fired during any of those windows is dropped here.
+    _turnInFlight = true;
 
     var conversationId = current.conversationId;
     if (conversationId == null) {
@@ -630,12 +655,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final current = state.value;
     if (current == null ||
         current.isGenerating ||
+        _turnInFlight ||
         current.conversationId == null) {
       return;
     }
     final visible = current.visibleMessages;
     final index = visible.indexWhere((m) => m.id == assistantMessageId);
     if (index < 0) return;
+    _turnInFlight = true;
     await _runAssistantTurn(
       conversationId: current.conversationId!,
       historyMessages: visible.sublist(0, index),
@@ -652,12 +679,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final current = state.value;
     if (current == null ||
         current.isGenerating ||
+        _turnInFlight ||
         current.conversationId == null) {
       return;
     }
     final visible = current.visibleMessages;
     final index = visible.indexWhere((m) => m.id == userMessageId);
     if (index < 0 || visible[index].role != MessageRole.user) return;
+    _turnInFlight = true;
 
     final oldAssistant =
         index + 1 < visible.length &&
@@ -710,11 +739,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // "starts." Released on every early-return path below, and in
     // `_resetStreamState` once a real stream actually finishes.
     _keepAliveLink ??= ref.keepAlive();
+    // Defensive: every caller already latched before its first await, but set
+    // it here too so a future caller of this method can't forget. Cleared on
+    // both early returns below and in `_resetStreamState` once a stream ends.
+    _turnInFlight = true;
     await ensureModelLoaded();
     var current = state.value!;
     if (current.modelLoadError != null) {
       _keepAliveLink?.close();
       _keepAliveLink = null;
+      _turnInFlight = false;
       return;
     }
     if (current.modelId == null) {
@@ -727,6 +761,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       );
       _keepAliveLink?.close();
       _keepAliveLink = null;
+      _turnInFlight = false;
       return;
     }
 
@@ -1015,6 +1050,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _flushTimer = null;
     _keepAliveLink?.close();
     _keepAliveLink = null;
+    _turnInFlight = false;
   }
 
   /// Raw failure text for a finalized error message's "Copy error details"

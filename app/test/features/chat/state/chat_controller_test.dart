@@ -158,6 +158,49 @@ void main() {
     },
   );
 
+  test('WS3: a second send fired during the model-load window does not spawn a '
+      'concurrent generation (exactly one turn runs)', () async {
+    final modelId = await insertModel();
+    final engine = FakeEngineService(
+      scriptedTokens: const ['one'],
+      tokenDelay: const Duration(milliseconds: 20),
+    );
+    final container = buildContainer(engine);
+    final args = ChatRouteArgs(initialModelId: modelId);
+    await container.read(chatControllerProvider(args).future);
+    container.listen(chatControllerProvider(args), (_, _) {});
+    final notifier = container.read(chatControllerProvider(args).notifier);
+
+    // The golden-path collision: tap a suggested prompt (send #1 begins,
+    // model starts loading), then type + send during 'Loading…'. Both fire
+    // before the first send's load resolves — send #2 is issued without
+    // awaiting #1, exactly as two UI taps would interleave.
+    final first = notifier.sendMessage('from the tapped prompt');
+    final second = notifier.sendMessage('typed during the load');
+    await Future.wait([first, second]);
+
+    final state = container.read(chatControllerProvider(args)).value!;
+    // Exactly one generation reached the engine — the synchronous in-flight
+    // latch dropped send #2 rather than starting a second concurrent turn
+    // (which would leak a flush timer and run generate() twice on the
+    // singleton session).
+    expect(engine.generateCount, 1);
+    expect(engine.loadCount, 1);
+    expect(
+      state.messages.where((m) => m.role == MessageRole.user),
+      hasLength(1),
+    );
+    expect(
+      state.messages.where((m) => m.role == MessageRole.assistant),
+      hasLength(1),
+    );
+    expect(state.isGenerating, isFalse);
+
+    // Latch released cleanly — a subsequent send still works.
+    await notifier.sendMessage('after');
+    expect(engine.generateCount, 2);
+  });
+
   test(
     'cancel mid-stream finalizes as cancelled with partial content',
     () async {
