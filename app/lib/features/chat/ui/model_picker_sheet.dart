@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../state/installed_models_provider.dart';
@@ -78,7 +79,7 @@ class _ModelPickerSheet extends ConsumerWidget {
               ),
               _ => const Padding(
                 padding: EdgeInsets.all(16),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: DhruvaLoader()),
               ),
             },
             // Loop 7: "no vision model installed but the user wants vision"
@@ -142,7 +143,7 @@ class _ModelList extends ConsumerWidget {
         if (memory == null) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: DhruvaLoader()),
           );
         }
         final filtered = models.where((m) {

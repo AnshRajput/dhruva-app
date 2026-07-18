@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../voice/voice_model_catalog.dart'
@@ -107,7 +108,7 @@ class _VoiceTab extends ConsumerWidget {
         error: error,
         onRetry: () => ref.invalidate(voiceModelsControllerProvider),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const Center(child: DhruvaLoader()),
     };
   }
 
@@ -265,7 +266,7 @@ class _InstalledTab extends ConsumerWidget {
         error: error,
         onRetry: () => ref.read(storageControllerProvider.notifier).refresh(),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const Center(child: DhruvaLoader()),
     };
   }
 }

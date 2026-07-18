@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/characters/character_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
@@ -117,8 +118,7 @@ class _CharacterFormScreenState extends ConsumerState<CharacterFormScreen> {
           _loadedExisting = true;
           return _buildForm(context);
         },
-        loading: () =>
-            const Scaffold(body: Center(child: CircularProgressIndicator())),
+        loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
         error: (error, stack) => Scaffold(
           appBar: AppBar(title: const Text('Character')),
           body: const Center(child: Text('Could not load this character.')),

@@ -1,9 +1,12 @@
 /// Shared loading/empty/error state widgets (T5 §6: every screen designs
-/// all three, no blank fallthroughs).
+/// all three, no blank fallthroughs). Spacing and typography come from
+/// `DhruvaTokens` so these read the same as the chat feature's crafted
+/// states rather than as bare Material defaults.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/dhruva_theme_extension.dart';
 import '../state/failure_message.dart';
 
 class ErrorStateView extends StatelessWidget {
@@ -13,21 +16,39 @@ class ErrorStateView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(tokens.spacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.error_outline,
-              size: 40,
-              color: Theme.of(context).colorScheme.error,
+              Icons.error_outline_rounded,
+              size: 44,
+              color: theme.colorScheme.error,
             ),
-            const SizedBox(height: 12),
-            Text(describeError(error), textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
+            SizedBox(height: tokens.spacing.md),
+            Text(
+              'Something went wrong',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+            SizedBox(height: tokens.spacing.xs),
+            Text(
+              describeError(error),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.lg),
+            FilledButton.tonalIcon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+            ),
           ],
         ),
       ),
@@ -41,20 +62,28 @@ class EmptyStateView extends StatelessWidget {
   const EmptyStateView({
     super.key,
     required this.message,
-    this.icon = Icons.search_off,
+    this.icon = Icons.search_off_rounded,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(tokens.spacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: Theme.of(context).colorScheme.outline),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
+            Icon(icon, size: 44, color: theme.colorScheme.outline),
+            SizedBox(height: tokens.spacing.md),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),

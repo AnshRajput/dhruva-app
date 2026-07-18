@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../data/hf_api/models/hf_model_summary.dart';
@@ -130,7 +131,7 @@ class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
         actionLabel: 'Retry',
         onAction: () => ref.invalidate(playgroundInstalledModelsProvider),
       ),
-      _ => const Center(child: CircularProgressIndicator()),
+      _ => const Center(child: DhruvaLoader()),
     };
   }
 }
@@ -517,14 +518,7 @@ class _ResultColumn extends StatelessWidget {
                   slot.status == RunStatus.streaming)
                 Padding(
                   padding: EdgeInsets.only(right: tokens.spacing.xs),
-                  child: SizedBox(
-                    width: 10,
-                    height: 10,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: accent,
-                    ),
-                  ),
+                  child: DhruvaLoader(size: 11, color: accent),
                 ),
               Expanded(
                 child: Text(
@@ -684,11 +678,7 @@ class _AiNewsTab extends ConsumerWidget {
           ),
           _ => const _DigestCard(
             subtitle: 'Loading this week’s picks…',
-            trailing: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            trailing: DhruvaLoader(size: 18),
           ),
         },
       ],

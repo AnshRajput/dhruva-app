@@ -3,6 +3,7 @@
 // (Chat + Delete). Drives it by overriding the controller with fixed state.
 
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/core/theme/brand_star.dart';
 import 'package:dhruva/data/hf_api/models/hf_model_summary.dart';
 import 'package:dhruva/data/hf_api/models/model_license_info.dart';
 import 'package:dhruva/features/models_hub/state/listing_download_controller.dart';
@@ -135,9 +136,10 @@ void main() {
   });
 
   // QA (Phase B attack #1): the "resolving" window (license+file-tree fetch
-  // in flight, before a taskId exists) also renders an indeterminate ring —
-  // same bounded-pump reasoning as above.
-  testWidgets('resolving shows an indeterminate ring', (tester) async {
+  // in flight, before a taskId exists) renders the branded DhruvaLoader (WS7
+  // replaced the generic spinner) — same bounded-pump reasoning as above, the
+  // loader breathes forever so pumpAndSettle would time out.
+  testWidgets('resolving shows the branded loader', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -160,7 +162,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(DhruvaLoader), findsOneWidget);
   });
 
   // QA (Phase B attack #2), NOW FIXED: the installed row's Chat action follows

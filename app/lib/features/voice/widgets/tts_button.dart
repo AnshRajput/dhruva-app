@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../state/voice_playback_controller.dart';
 
 class TtsButton extends ConsumerWidget {
@@ -40,11 +41,7 @@ class TtsButton extends ConsumerWidget {
                 .toggle(messageId, text),
       tooltip: playing ? 'Stop' : 'Read aloud',
       icon: synthesizing
-          ? SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: color),
-            )
+          ? DhruvaLoader(size: 16, color: color)
           : Icon(
               playing ? Icons.stop_circle_outlined : Icons.volume_up_outlined,
               size: 16,

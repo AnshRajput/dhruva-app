@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../voice/voice_model_catalog.dart';
 import '../state/voice_models_controller.dart';
 
@@ -78,7 +79,7 @@ class VoiceModelTile extends StatelessWidget {
         return const SizedBox(
           width: 24,
           height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: Center(child: DhruvaLoader(size: 22)),
         );
       case VoiceModelStatus.notInstalled:
         return IconButton(

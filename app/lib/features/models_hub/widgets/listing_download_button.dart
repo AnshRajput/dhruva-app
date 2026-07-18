@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../state/listing_download_controller.dart';
 import 'download_progress_ring.dart';
 
@@ -64,13 +65,7 @@ class ListingDownloadButton extends ConsumerWidget {
         return const SizedBox(
           width: 40,
           height: 40,
-          child: Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
+          child: Center(child: DhruvaLoader(size: 22)),
         );
       case ListingModelStatus.downloading:
         return DownloadProgressRing(

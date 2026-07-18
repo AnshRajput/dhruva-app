@@ -44,7 +44,7 @@ class CharactersGalleryScreen extends ConsumerWidget {
       body: switch (state) {
         AsyncData(:final value) => _GalleryBody(characters: value.characters),
         AsyncError() => const Center(child: Text('Could not load characters.')),
-        _ => const Center(child: CircularProgressIndicator()),
+        _ => const Center(child: DhruvaLoader()),
       },
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/characters/new'),

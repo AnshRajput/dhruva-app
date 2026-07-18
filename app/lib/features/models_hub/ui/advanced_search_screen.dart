@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../state/failure_message.dart';
 import '../state/model_search_controller.dart';
@@ -142,7 +143,7 @@ class _SearchBodyState extends ConsumerState<_SearchBody> {
                   .read(modelSearchControllerProvider.notifier)
                   .search(_queryCtrl.text),
             ),
-            _ => const Center(child: CircularProgressIndicator()),
+            _ => const Center(child: DhruvaLoader()),
           },
         ),
       ],
@@ -185,7 +186,7 @@ class _ResultsList extends ConsumerWidget {
                           '${describeError(state.loadMoreError!)} · Tap to retry',
                         ),
                       )
-                    : const CircularProgressIndicator(),
+                    : const DhruvaLoader(size: 28),
               ),
             );
           }

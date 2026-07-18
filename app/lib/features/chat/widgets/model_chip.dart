@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 
@@ -65,14 +66,7 @@ class ModelChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (loading && !noModel) ...[
-              SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
+              DhruvaLoader(size: 12, color: theme.colorScheme.primary),
               SizedBox(width: tokens.spacing.xs),
             ],
             Flexible(

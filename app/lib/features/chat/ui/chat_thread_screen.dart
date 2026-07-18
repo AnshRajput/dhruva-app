@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
@@ -117,8 +118,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           onScrollToBottom: _scrollToBottom,
         );
       },
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
       error: (error, stack) => const Scaffold(
         body: Center(child: Text('Could not open this conversation.')),
       ),

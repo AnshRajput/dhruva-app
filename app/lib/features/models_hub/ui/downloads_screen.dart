@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/downloads/storage_manager.dart';
@@ -46,7 +47,7 @@ class DownloadsScreen extends ConsumerWidget {
           error: error,
           onRetry: () => ref.invalidate(downloadsControllerProvider),
         ),
-        _ => const Center(child: CircularProgressIndicator()),
+        _ => const Center(child: DhruvaLoader()),
       },
     );
   }
@@ -303,7 +304,7 @@ class _CompletedSection extends ConsumerWidget {
       ),
       _ => const Padding(
         padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: DhruvaLoader()),
       ),
     };
   }

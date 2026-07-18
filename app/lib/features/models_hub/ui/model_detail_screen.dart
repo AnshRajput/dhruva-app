@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/hf_api/default_quant.dart';
@@ -45,7 +46,7 @@ class ModelDetailScreen extends ConsumerWidget {
           error: error,
           onRetry: () => ref.invalidate(modelDetailProvider(repoId)),
         ),
-        _ => const Center(child: CircularProgressIndicator()),
+        _ => const Center(child: DhruvaLoader()),
       },
     );
   }
@@ -468,10 +469,9 @@ class _QuantDownloadButton extends ConsumerWidget {
     }
     final button = FilledButton.icon(
       icon: pending
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ? DhruvaLoader(
+              size: 16,
+              color: Theme.of(context).colorScheme.onPrimary,
             )
           : const Icon(Icons.download),
       label: Text(pending ? 'Starting…' : 'Download'),
