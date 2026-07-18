@@ -61,7 +61,7 @@ void main() {
     expect(find.text('Dhruva AI'), findsOneWidget);
     // DESIGNER BLOCKING #3: the name's own meaning, in its own script.
     expect(find.text('ध्रुव'), findsOneWidget);
-    expect(find.text('Version 0.2.2 (build 2)'), findsOneWidget);
+    expect(find.text('Version 0.2.4 (build 4)'), findsOneWidget);
     expect(
       find.textContaining('Your AI. Your phone. Nobody else’s business.'),
       findsOneWidget,
