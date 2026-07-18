@@ -29,13 +29,17 @@ String friendlyFailureMessage(AppFailure failure) {
           '${_formatBytes(availableBytes)} free.',
     StorageCorruptFileFailure() =>
       'The file failed an integrity check and was removed.',
-    StorageNotFoundFailure() => "That model isn't installed anymore.",
+    StorageNotFoundFailure() => 'That item is no longer available.',
     StorageIoFailure() => 'A storage error occurred.',
     StorageUnknownFailure() => 'A storage error occurred.',
     ValidationFailure(:final message) => message,
-    UnknownFailure() => 'Something went wrong.',
+    UnknownFailure() => kGenericFailureMessage,
   };
 }
+
+/// Generic fallback used when we have nothing specific to say. Exposed so UI
+/// (e.g. `ErrorStateView`) can avoid stacking it under an identical title.
+const String kGenericFailureMessage = 'Something went wrong.';
 
 /// For an arbitrary caught [Object] (e.g. from `AsyncValue.error`, which
 /// isn't statically known to carry an [AppFailure]): the typed message when
@@ -43,7 +47,7 @@ String friendlyFailureMessage(AppFailure failure) {
 String describeError(Object error) {
   return error is AppFailure
       ? friendlyFailureMessage(error)
-      : 'Something went wrong.';
+      : kGenericFailureMessage;
 }
 
 String _formatBytes(int bytes) {

@@ -20,6 +20,10 @@ class ErrorStateView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final detail = describeError(error);
+    // The generic fallback reads identically to the title, so show it only
+    // when it adds something the title doesn't already say.
+    final hasDetail = detail != kGenericFailureMessage;
     return Center(
       child: Padding(
         padding: EdgeInsets.all(tokens.spacing.xl),
@@ -37,14 +41,16 @@ class ErrorStateView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium,
             ),
-            SizedBox(height: tokens.spacing.xs),
-            Text(
-              describeError(error),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            if (hasDetail) ...[
+              SizedBox(height: tokens.spacing.xs),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
+            ],
             SizedBox(height: tokens.spacing.lg),
             FilledButton.tonalIcon(
               onPressed: onRetry,

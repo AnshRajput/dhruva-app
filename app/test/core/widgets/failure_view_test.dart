@@ -29,6 +29,25 @@ void main() {
     expect(retries, 1);
   });
 
+  testWidgets('ErrorStateView does not stack the generic fallback under an '
+      'identical title', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: ErrorStateView(
+            error: Exception('drift blew up'),
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    // Title once, and no separate 'Something went wrong.' body line.
+    expect(find.text('Something went wrong'), findsOneWidget);
+    expect(find.text('Something went wrong.'), findsNothing);
+  });
+
   testWidgets('EmptyStateView renders its message and icon', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

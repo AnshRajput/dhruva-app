@@ -61,7 +61,7 @@ void main() {
     test('not found', () {
       expect(
         friendlyFailureMessage(const StorageNotFoundFailure('x')),
-        contains("isn't installed"),
+        contains('no longer available'),
       );
     });
 
