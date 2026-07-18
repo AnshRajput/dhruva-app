@@ -82,8 +82,13 @@ class TokPerSecTicker extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
               child: Text(
                 '${tokPerSec!.toStringAsFixed(1)} tok/s',
+                // mk-tokps (mock.css): the live ticker is the one gold accent
+                // in the app bar — `--color-primary`, not the quiet variant —
+                // so the "your device is doing this, right now" number reads
+                // as the hero metric it is.
                 style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w700,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),

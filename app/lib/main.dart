@@ -18,17 +18,19 @@ class DhruvaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Loop 4: real theming from design-tokens.json (ADR-003). Dark is the
-    // hero/default (design-tokens.json meta.defaultTheme); themeMode.system
-    // still lets a light-preference device get the recalibrated light
-    // theme. Every screen already reads Theme.of(context)'s semantic roles,
-    // so both modes light up for free — see the designer's spot-check note
-    // on the Loop-4 blackboard entry for any role-misuse fixes.
+    // Real theming from design-tokens.json (ADR-003). Dark is the
+    // hero/default — `meta.defaultTheme` is "dark" and the website the app
+    // must match is dark, so we pin `themeMode.dark` (not `.system`): that is
+    // what makes the app open in the striking navy/gold palette the mockups
+    // show, instead of the flat light theme a light-preference device was
+    // defaulting into. The light theme still exists (`AppTheme.light`, kept
+    // as `theme:`) for a future in-app appearance toggle; every screen reads
+    // Theme.of(context)'s semantic roles, so both modes light up unchanged.
     return MaterialApp.router(
       title: 'Dhruva',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.dark,
       routerConfig: appRouter,
     );
   }

@@ -123,6 +123,10 @@ void main() {
       }
 
       expect(find.text('Listening…'), findsOneWidget);
+      // UI-PARITY: the VoiceMock trust mark + turn-taking hint render on the
+      // live conversation view (not the empty/permission views).
+      expect(find.text('STT + TTS on-device'), findsOneWidget);
+      expect(find.text('your turn — speak now'), findsOneWidget);
 
       mic.pushSpeech();
       mic.pushSilence();
