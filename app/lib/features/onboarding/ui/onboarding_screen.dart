@@ -94,6 +94,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         .download(model.repoId);
   }
 
+  /// The `oversizeWarning` step's "Download anyway" — re-run the download for
+  /// the already-selected model, this time past the RAM-tier guard.
+  void _downloadAnyway() {
+    final model = _selected;
+    if (model == null) return;
+    ref
+        .read(onboardingDownloadControllerProvider.notifier)
+        .download(model.repoId, force: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     // The download step auto-advances to "ready" the moment the model lands.
@@ -142,6 +152,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 final m = _selected;
                 if (m != null) _startDownload(m);
               },
+              onDownloadAnyway: _downloadAnyway,
               onPickAnother: () => setState(() => _step = _Step.pick),
               onCancel: _cancelDownload,
             ),
@@ -488,11 +499,13 @@ class _DownloadStep extends ConsumerWidget {
   const _DownloadStep({
     required this.model,
     required this.onRetry,
+    required this.onDownloadAnyway,
     required this.onPickAnother,
     required this.onCancel,
   });
   final StarterModel? model;
   final VoidCallback onRetry;
+  final VoidCallback onDownloadAnyway;
   final VoidCallback onPickAnother;
   final VoidCallback onCancel;
 
@@ -503,6 +516,7 @@ class _DownloadStep extends ConsumerWidget {
     final dl = ref.watch(onboardingDownloadControllerProvider).value;
     final status = dl?.status ?? OnboardingDownloadStatus.resolving;
     final failed = status == OnboardingDownloadStatus.failed;
+    final oversize = status == OnboardingDownloadStatus.oversizeWarning;
     final name = model?.displayName ?? 'your model';
 
     return _Page(
@@ -512,17 +526,25 @@ class _DownloadStep extends ConsumerWidget {
           SizedBox(height: tokens.spacing.xl),
           DhruvaStar(
             size: 72,
-            color: failed ? theme.colorScheme.error : theme.colorScheme.primary,
+            color: failed
+                ? theme.colorScheme.error
+                : oversize
+                ? tokens.warning
+                : theme.colorScheme.primary,
           ),
           SizedBox(height: tokens.spacing.lg),
           Text(
-            failed ? 'Download didn\'t finish' : 'Getting $name ready',
+            failed
+                ? 'Download didn\'t finish'
+                : oversize
+                ? 'This model may be heavy'
+                : 'Getting $name ready',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            failed
+            failed || oversize
                 ? (dl?.errorMessage ?? 'Something went wrong.')
                 : 'Downloading once, then it runs fully offline on your phone.',
             textAlign: TextAlign.center,
@@ -531,7 +553,20 @@ class _DownloadStep extends ConsumerWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.xl),
-          if (failed) ...[
+          if (oversize) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onDownloadAnyway,
+                child: const Text('Download anyway'),
+              ),
+            ),
+            SizedBox(height: tokens.spacing.sm),
+            TextButton(
+              onPressed: onPickAnother,
+              child: const Text('Pick a smaller model'),
+            ),
+          ] else if (failed) ...[
             SizedBox(
               width: double.infinity,
               child: FilledButton(

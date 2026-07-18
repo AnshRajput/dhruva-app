@@ -38,7 +38,7 @@ class _ReadyStubController extends OnboardingDownloadController {
       const OnboardingDownloadState();
 
   @override
-  Future<void> download(String repoId) async {
+  Future<void> download(String repoId, {bool force = false}) async {
     state = const AsyncData(
       OnboardingDownloadState(
         status: OnboardingDownloadStatus.installed,

@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/device_info/device_info_service.dart';
+import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
@@ -79,6 +80,14 @@ final onboardingMemoryProvider = FutureProvider<DeviceMemoryInfo>((ref) {
 enum OnboardingDownloadStatus {
   idle,
   resolving,
+
+  /// The resolved default quant is bigger than this device's RAM tier
+  /// comfortably runs. NOT a dead-end: the download step offers a "download
+  /// anyway" confirm that re-runs [download] with `force: true` — the same
+  /// informed "may be slow" choice the hub's listing/detail screens give,
+  /// so first-run isn't LESS safe than the hub (would otherwise download a
+  /// too-big model fully and then OOM at chat-load).
+  oversizeWarning,
   downloading,
   installed,
   failed,
@@ -136,7 +145,13 @@ class OnboardingDownloadController
   /// text-only (no mmproj chaining; the recommended pick is never a vision
   /// model). Mirrors the resolve step in `ListingDownloadController.download`
   /// against the same `data/` pipeline.
-  Future<void> download(String repoId) async {
+  ///
+  /// [force] skips the RAM-tier guard — the "download anyway" path the
+  /// `oversizeWarning` step offers. On a sub-4GB device even the smallest
+  /// starter model (`recommendedStarterModel`'s last-resort fallback)
+  /// classifies `notRecommended`, so without this guard first-run would
+  /// silently download a model too big for the device and OOM at chat-load.
+  Future<void> download(String repoId, {bool force = false}) async {
     _activeRepoId = repoId;
     state = AsyncData(
       OnboardingDownloadState(
@@ -155,6 +170,33 @@ class OnboardingDownloadController
       final quant = pickDefaultQuant(client.quantVariantsFrom(files));
       if (quant == null) {
         _fail(repoId, 'This model has no phone-ready download — try another.');
+        return;
+      }
+      // Real per-device RAM-tier guard — the same one the hub's listing
+      // controller applies. This is the first point the actual footprint is
+      // known (the repo's file tree is fetched); `DownloadManager.enqueue`
+      // only guards DISK space, so without this a too-big GGUF would download
+      // fully and then OOM at chat-load. Refuse it up front unless forced.
+      final footprintBytes =
+          quant.file.sizeBytes + (quant.mmprojFile?.sizeBytes ?? 0);
+      final memory = await ref.read(deviceInfoServiceProvider).getMemoryInfo();
+      final tier = classifyModelTier(
+        fileSizeBytes: footprintBytes,
+        totalRamBytes: memory.totalBytes,
+      );
+      if (tier == ModelTier.notRecommended && !force) {
+        // Cancelled during the resolve awaits above? Honour it over the warning.
+        if (_activeRepoId != repoId) return;
+        final neededGb = (ramFloorBytesFor(footprintBytes) / (1 << 30)).round();
+        state = AsyncData(
+          OnboardingDownloadState(
+            status: OnboardingDownloadStatus.oversizeWarning,
+            repoId: repoId,
+            errorMessage:
+                'This model may run slowly on this phone — models this size '
+                'run best with about $neededGb GB of RAM. Download anyway?',
+          ),
+        );
         return;
       }
       final request = DownloadRequest(

@@ -243,6 +243,52 @@ void main() {
       },
     );
 
+    test(
+      'a too-big-for-RAM model warns before download, then force downloads',
+      () async {
+        // A sub-4GB phone: the 1000-byte file classifies notRecommended
+        // (1B-class floor is 4GB). Onboarding must NOT silently enqueue it —
+        // that is the OOM-at-chat-load path the hub already guards.
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            deviceInfoServiceProvider.overrideWithValue(
+              const FakeDeviceInfoService(
+                memory: DeviceMemoryInfo(
+                  totalBytes: 3000000000, // ~2.8 GiB, below the 4GB floor
+                  availableBytes: 1500000000,
+                ),
+                storage: DeviceStorageInfo(
+                  totalBytes: 64000000000,
+                  freeBytes: 32000000000,
+                ),
+              ),
+            ),
+            modelsDirectoryProvider.overrideWith((ref) async => modelsDir),
+            downloadManagerProvider.overrideWith((ref) async => manager),
+            hfApiClientProvider.overrideWithValue(
+              mockHfClient(MockClient((r) async => _hfResponder(r))),
+            ),
+          ],
+        );
+        await container.read(onboardingDownloadControllerProvider.future);
+        final notifier = container.read(
+          onboardingDownloadControllerProvider.notifier,
+        );
+
+        await notifier.download(_repoId);
+        expect(stateNow().status, OnboardingDownloadStatus.oversizeWarning);
+        expect(stateNow().errorMessage, isNotNull);
+        expect(backend.enqueuedRequests, isEmpty);
+
+        // "Download anyway" bypasses the guard — never a dead-end.
+        await notifier.download(_repoId, force: true);
+        expect(stateNow().status, OnboardingDownloadStatus.downloading);
+        expect(backend.enqueuedRequests.keys, contains(_taskId));
+      },
+    );
+
     test('a gated model fails gracefully instead of dead-ending', () async {
       container.dispose();
       container = ProviderContainer(
