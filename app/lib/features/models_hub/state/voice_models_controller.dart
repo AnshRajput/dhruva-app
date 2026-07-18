@@ -75,7 +75,14 @@ class VoiceModelsController extends AsyncNotifier<List<VoiceModelState>> {
 
   @override
   Future<List<VoiceModelState>> build() async {
-    final installer = await ref.watch(voiceModelInstallerProvider.future);
+    // `read`, not `watch`: [_finishInstall]/[delete] invalidate
+    // `voiceModelInstallerProvider` so the voice FEATURE re-detects a
+    // just-installed/deleted model without an app restart. The installer
+    // instance only depends on the (stable) models directory and
+    // `isInstalled` reads disk live, so watching it here would buy nothing
+    // but a full list rebuild that also wipes any sibling entry's in-flight
+    // download progress on every invalidation.
+    final installer = await ref.read(voiceModelInstallerProvider.future);
     final manager = await ref.watch(downloadManagerProvider.future);
     ref.onDispose(() => unawaited(_sub?.cancel()));
     _sub = manager.progress.listen(_onProgress);
@@ -134,6 +141,9 @@ class VoiceModelsController extends AsyncNotifier<List<VoiceModelState>> {
         clearError: true,
       ),
     );
+    // Mirror install: refresh the shared installer so the voice feature stops
+    // offering a model whose files we just removed, without a restart.
+    ref.invalidate(voiceModelInstallerProvider);
   }
 
   void _onProgress(DownloadProgress p) {
@@ -182,6 +192,12 @@ class VoiceModelsController extends AsyncNotifier<List<VoiceModelState>> {
       final installer = await ref.read(voiceModelInstallerProvider.future);
       await installer.install(entry);
       _update(entry.id, (s) => s.copyWith(status: VoiceModelStatus.installed));
+      // Files are now on disk — drop the cached installer so the voice
+      // feature (handsfree / hold-to-talk / TTS playback) re-detects this
+      // model on its next use instead of only after an app restart. Same
+      // "invalidate installed-model providers on completion" precedent as the
+      // GGUF path in `app_shell.dart` (A1/A5).
+      ref.invalidate(voiceModelInstallerProvider);
     } on VoiceFailure catch (e) {
       _update(
         entry.id,

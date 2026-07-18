@@ -106,6 +106,35 @@ void main() {
     },
   );
 
+  test('install-complete invalidates voiceModelInstallerProvider so the voice '
+      'feature re-detects the model without a restart', () async {
+    await container.read(voiceModelsControllerProvider.future);
+    final notifier = container.read(voiceModelsControllerProvider.notifier);
+    final entry = _noChecksum(vadCatalogEntry);
+
+    // The installer the voice feature reads BEFORE the install completes.
+    final before = await container.read(voiceModelInstallerProvider.future);
+
+    await notifier.download(entry);
+    final taskId = 'sherpa-voice/${entry.id}::${entry.archiveName}';
+    File(
+      '${modelsDir.path}/${entry.archiveName}',
+    ).writeAsBytesSync(List.filled(entry.downloadSizeBytes, 0));
+    backend.emit(
+      BackendStatusUpdate(taskId, status: BackendTaskStatus.complete),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(_statusFor(container, entry.id), VoiceModelStatus.installed);
+
+    // Provider was invalidated on install-complete: the voice feature's next
+    // read (same container — no restart) resolves a FRESH installer that
+    // sees the model on disk.
+    final after = await container.read(voiceModelInstallerProvider.future);
+    expect(identical(before, after), isFalse);
+    expect(after.isInstalled(entry), isTrue);
+  });
+
   test('a failed download surfaces an error status', () async {
     await container.read(voiceModelsControllerProvider.future);
     final notifier = container.read(voiceModelsControllerProvider.notifier);
