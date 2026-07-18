@@ -14,34 +14,63 @@ class NoModelInstalledView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DhruvaStar(size: 96, color: theme.colorScheme.primary),
-            SizedBox(height: tokens.spacing.lg),
-            Text(
-              'No model installed yet',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineSmall,
+    // Scroll-safe: with the value copy below, the content can exceed a short
+    // viewport (small phones, split-screen). Centre it when it fits, scroll
+    // when it doesn't — instead of a RenderFlex overflow.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: EdgeInsets.all(tokens.spacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                DhruvaStar(size: 96, color: theme.colorScheme.primary),
+                SizedBox(height: tokens.spacing.lg),
+                Text(
+                  'No model installed yet',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall,
+                ),
+                SizedBox(height: tokens.spacing.sm),
+                Text(
+                  'Pick a model from Hugging Face to start chatting — fully '
+                  'offline once it\'s on your device.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.md),
+                // Value made explicit (VIDEO_FIXES #6 / CLAUDE.md "real
+                // value"): the concrete use case, then the brand tagline.
+                Text(
+                  'A private AI that runs entirely on your phone — chat, '
+                  'analyze photos, talk, generate images, and chat with your '
+                  'documents. Nothing is sent to any server.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.sm),
+                Text(
+                  'Your AI. Your phone. Nobody else\'s business.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.lg),
+                FilledButton(
+                  onPressed: onBrowseModels,
+                  child: const Text('Browse models'),
+                ),
+              ],
             ),
-            SizedBox(height: tokens.spacing.sm),
-            Text(
-              'Pick a model from Hugging Face to start chatting — fully '
-              'offline once it\'s on your device.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            SizedBox(height: tokens.spacing.lg),
-            FilledButton(
-              onPressed: onBrowseModels,
-              child: const Text('Browse models'),
-            ),
-          ],
+          ),
         ),
       ),
     );

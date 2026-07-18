@@ -43,6 +43,14 @@ final class DownloadProgress {
   /// it's [NetworkUnknownFailure] rather than left untyped.
   final AppFailure? failure;
 
+  /// Live transfer estimate from the backend's progress channel, only ever
+  /// set on a `running` update. [networkSpeedMBs] is MB/s (valid when > 0);
+  /// [timeRemaining] is valid when non-negative. Defaults are the "unknown"
+  /// sentinels — see [etaLabel], which shows nothing rather than a fake
+  /// estimate when they're unknown.
+  final double networkSpeedMBs;
+  final Duration timeRemaining;
+
   const DownloadProgress({
     required this.taskId,
     required this.repoId,
@@ -52,7 +60,32 @@ final class DownloadProgress {
     this.totalBytes,
     this.errorMessage,
     this.failure,
+    this.networkSpeedMBs = -1,
+    this.timeRemaining = const Duration(seconds: -1),
   });
+
+  /// A compact "3.1 MB/s · 0:45 left" line, or null when neither estimate is
+  /// known yet — so the UI renders nothing rather than "--:-- left". Speed and
+  /// ETA are shown independently: whichever the backend has.
+  String? get etaLabel {
+    final parts = <String>[];
+    if (networkSpeedMBs > 0) {
+      parts.add(
+        networkSpeedMBs >= 1
+            ? '${networkSpeedMBs.toStringAsFixed(1)} MB/s'
+            : '${(networkSpeedMBs * 1000).round()} kB/s',
+      );
+    }
+    if (!timeRemaining.isNegative && timeRemaining.inSeconds > 0) {
+      final m = timeRemaining.inMinutes;
+      final sec = timeRemaining.inSeconds
+          .remainder(60)
+          .toString()
+          .padLeft(2, '0');
+      parts.add('$m:$sec left');
+    }
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 }
 
 /// Everything needed to enqueue + later verify + register one file download.
@@ -307,6 +340,8 @@ final class DownloadManager {
           DownloadState.running,
           downloadedBytes: (u.progress.clamp(0, 1) * total).round(),
           totalBytes: total,
+          networkSpeedMBs: u.networkSpeedMBs,
+          timeRemaining: u.timeRemaining,
         );
       case final BackendStatusUpdate u:
         await _handleStatus(request, u);
@@ -468,6 +503,8 @@ final class DownloadManager {
     int? totalBytes,
     String? errorMessage,
     AppFailure? failure,
+    double networkSpeedMBs = -1,
+    Duration timeRemaining = const Duration(seconds: -1),
   }) {
     _controller.add(
       DownloadProgress(
@@ -479,6 +516,8 @@ final class DownloadManager {
         totalBytes: totalBytes ?? request.expectedSizeBytes,
         errorMessage: errorMessage,
         failure: failure,
+        networkSpeedMBs: networkSpeedMBs,
+        timeRemaining: timeRemaining,
       ),
     );
   }

@@ -27,6 +27,7 @@ import '../state/model_detail_provider.dart';
 import '../widgets/download_progress_ring.dart';
 import '../widgets/failure_view.dart';
 import '../widgets/license_chip.dart';
+import '../widgets/quant_quality.dart';
 import '../widgets/verdict_chip.dart';
 
 class ModelDetailScreen extends ConsumerWidget {
@@ -290,6 +291,7 @@ class _QuantTile extends StatelessWidget {
       quant: quant.label,
       mmprojSizeBytes: mmprojSizeBytes,
     );
+    final quality = classifyQuantQuality(quant.label);
 
     return Card(
       child: Padding(
@@ -315,6 +317,18 @@ class _QuantTile extends StatelessWidget {
                   mmprojSizeBytes: mmprojSizeBytes,
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            // Quality/effectiveness guidance (heuristic from the quant name,
+            // not a measured benchmark) so the size↔quality tradeoff is
+            // visible, not just the file size.
+            QuantQualityChip(quality: quality),
+            const SizedBox(height: 4),
+            Text(
+              quality.blurb,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             _QuantDownloadButton(
@@ -418,11 +432,28 @@ class _QuantDownloadButton extends ConsumerWidget {
       final fraction = total > 0
           ? (progress.downloadedBytes / total).clamp(0.0, 1.0)
           : 0.0;
-      return DownloadProgressRing(
+      final ring = DownloadProgressRing(
         progress: fraction,
         onCancel: () => ref
             .read(downloadsControllerProvider.notifier)
             .cancel(request.taskId),
+      );
+      // Honest ETA/speed under the ring when the backend has an estimate;
+      // `etaLabel` is null (renders nothing) until it does — no "--:-- left".
+      final eta = progress.etaLabel;
+      if (eta == null) return ring;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ring,
+          const SizedBox(height: 4),
+          Text(
+            eta,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       );
     }
     if (state == DownloadState.complete) {

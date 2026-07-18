@@ -22,6 +22,9 @@ void main() {
     // background_downloader substitutes these tokens at runtime.
     expect(c.running!.title, contains('{filename}'));
     expect(c.running!.body, contains('{progress}'));
+    // ETA/speed the human saw missing in the video ("--:-- left" only).
+    expect(c.running!.body, contains('{networkSpeed}'));
+    expect(c.running!.body, contains('{timeRemaining}'));
   });
 
   test('does not try to open the file on tap (GGUF is not user-openable)', () {
