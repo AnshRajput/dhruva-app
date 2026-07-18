@@ -55,7 +55,14 @@ final appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/models',
-              builder: (context, state) => const ModelsHubScreen(),
+              // `?tab=voice` deep-links straight to the Voice tab (WS5:
+              // hands-free's "Set up voice" must land on voice models, not the
+              // default Discover firehose).
+              builder: (context, state) => ModelsHubScreen(
+                initialTabIndex: state.uri.queryParameters['tab'] == 'voice'
+                    ? 2
+                    : 0,
+              ),
             ),
           ],
         ),

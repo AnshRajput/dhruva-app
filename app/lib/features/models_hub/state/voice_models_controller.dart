@@ -123,6 +123,23 @@ class VoiceModelsController extends AsyncNotifier<List<VoiceModelState>> {
     }
   }
 
+  /// WS5 "one guided step": download every still-missing model in the voice
+  /// bundle (VAD + ASR + default voice) in one tap. Each enqueues on the same
+  /// `DownloadManager` as an individual tile, so per-model progress and the
+  /// aggregate bundle progress both update from the same stream — this just
+  /// spares the user from deducing the three roles and tapping three buttons.
+  Future<void> downloadBundle() async {
+    final current = state.value;
+    if (current == null) return;
+    for (final entry in voiceBundleEntries) {
+      final row = current.firstWhere((s) => s.entry.id == entry.id);
+      if (row.status == VoiceModelStatus.notInstalled ||
+          row.status == VoiceModelStatus.failed) {
+        await download(entry);
+      }
+    }
+  }
+
   Future<void> delete(VoiceCatalogEntry entry) async {
     final installer = await ref.read(voiceModelInstallerProvider.future);
     final dir = installer.installDir(entry);

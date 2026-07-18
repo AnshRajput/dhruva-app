@@ -19,8 +19,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
-import '../../../voice/voice_model_catalog.dart' show VoiceModelRole;
+import '../../../voice/voice_model_catalog.dart'
+    show VoiceModelRole, voiceBundleEntries;
 import '../state/failure_message.dart';
 import '../state/recommended_models_provider.dart';
 import '../state/storage_controller.dart';
@@ -30,12 +32,18 @@ import '../widgets/failure_view.dart';
 import '../widgets/voice_model_tile.dart';
 
 class ModelsHubScreen extends StatelessWidget {
-  const ModelsHubScreen({super.key});
+  /// Which tab to open on. Deep-linked callers (e.g. hands-free's "Set up
+  /// voice" — WS5) pass `2` to land straight on the Voice tab instead of the
+  /// default Discover firehose.
+  final int initialTabIndex;
+
+  const ModelsHubScreen({super.key, this.initialTabIndex = 0});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
+      initialIndex: initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Models'),
@@ -77,6 +85,7 @@ class _VoiceTab extends ConsumerWidget {
     return switch (state) {
       AsyncData(:final value) => ListView(
         children: [
+          _VoiceBundleCard(states: value, onInstall: notifier.downloadBundle),
           for (final role in VoiceModelRole.values) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -107,6 +116,123 @@ class _VoiceTab extends ConsumerWidget {
     VoiceModelRole.asr => 'Speech-to-text',
     VoiceModelRole.tts => 'Text-to-speech voices',
   };
+}
+
+/// WS5 "one guided step": the single primary action that installs everything
+/// hands-free needs (VAD + ASR + a default voice) in one tap, with aggregate
+/// progress — so a first-timer never has to understand the three roles below
+/// or download them separately. The per-role tiles remain for adding extra
+/// voices or re-downloading a single failed model.
+class _VoiceBundleCard extends StatelessWidget {
+  final List<VoiceModelState> states;
+  final VoidCallback onInstall;
+
+  const _VoiceBundleCard({required this.states, required this.onInstall});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final bundleIds = voiceBundleEntries.map((e) => e.id).toSet();
+    final bundle = states.where((s) => bundleIds.contains(s.entry.id)).toList();
+    final installed = bundle
+        .where((s) => s.status == VoiceModelStatus.installed)
+        .length;
+    final active = bundle.any(
+      (s) =>
+          s.status == VoiceModelStatus.downloading ||
+          s.status == VoiceModelStatus.installing,
+    );
+    final allInstalled = bundle.isNotEmpty && installed == bundle.length;
+    // Aggregate progress: an installed model counts as done (1.0), an in-flight
+    // one contributes its live fraction, everything else 0.
+    final progress =
+        bundle.fold<double>(0, (sum, s) {
+          if (s.status == VoiceModelStatus.installed) return sum + 1;
+          if (s.status == VoiceModelStatus.downloading) {
+            return sum + s.progress;
+          }
+          return sum;
+        }) /
+        (bundle.isEmpty ? 1 : bundle.length);
+
+    return Card(
+      margin: EdgeInsets.all(tokens.spacing.md),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  allInstalled ? Icons.check_circle : Icons.graphic_eq_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                SizedBox(width: tokens.spacing.sm),
+                Expanded(
+                  child: Text(
+                    'Hands-free voice',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: tokens.spacing.xs),
+            Text(
+              allInstalled
+                  ? 'Everything hands-free needs is installed. You\'re ready '
+                        'to talk.'
+                  : 'Turn-taking, speech-to-text, and a voice — installed '
+                        'together in one tap.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: tokens.spacing.md),
+            if (allInstalled)
+              Row(
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  SizedBox(width: tokens.spacing.xs),
+                  Text('Voice ready', style: theme.textTheme.labelLarge),
+                ],
+              )
+            else if (active)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(tokens.radius.full),
+                    child: LinearProgressIndicator(value: progress),
+                  ),
+                  SizedBox(height: tokens.spacing.xs),
+                  Text(
+                    'Installing… $installed of ${bundle.length} ready',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onInstall,
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Install voice bundle'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _InstalledTab extends ConsumerWidget {

@@ -174,6 +174,17 @@ final voiceModelCatalog = <VoiceCatalogEntry>[
 VoiceCatalogEntry get vadCatalogEntry =>
     voiceModelCatalog.firstWhere((e) => e.role == VoiceModelRole.vad);
 
+/// The minimal set that makes hands-free work, as a single one-tap "voice
+/// bundle" (WS5 acceptance: "install its models in one guided step"):
+/// turn-taking (VAD) + speech-to-text (ASR) + one default English voice (TTS).
+/// Extra voices (e.g. the Hindi Pratham TTS) stay optional add-ons in the
+/// Voice tab — this is the "just make it work" starter set, not every model.
+List<VoiceCatalogEntry> get voiceBundleEntries => [
+  vadCatalogEntry,
+  voiceModelCatalog.firstWhere((e) => e.role == VoiceModelRole.asr),
+  voiceModelCatalog.firstWhere((e) => e.id == 'piper-en-amy-low'),
+];
+
 Uri _uri(String s) => Uri.parse(s);
 
 Uri _asr(String asset) => Uri.parse(

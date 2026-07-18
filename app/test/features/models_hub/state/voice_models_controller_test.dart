@@ -135,6 +135,47 @@ void main() {
     expect(after.isInstalled(entry), isTrue);
   });
 
+  test('downloadBundle() enqueues every missing bundle model in one call '
+      '(WS5 one-tap voice setup)', () async {
+    await container.read(voiceModelsControllerProvider.future);
+    final notifier = container.read(voiceModelsControllerProvider.notifier);
+
+    await notifier.downloadBundle();
+
+    for (final entry in voiceBundleEntries) {
+      expect(
+        backend.enqueuedRequests,
+        contains('sherpa-voice/${entry.id}::${entry.archiveName}'),
+        reason: '${entry.id} should be part of the one-tap bundle install',
+      );
+      expect(_statusFor(container, entry.id), VoiceModelStatus.downloading);
+    }
+  });
+
+  test('downloadBundle() skips models already installed', () async {
+    // Plant the VAD on disk so it starts installed.
+    File('${modelsDir.path}/silero_vad.onnx').writeAsStringSync('x');
+    await container.read(voiceModelsControllerProvider.future);
+    final notifier = container.read(voiceModelsControllerProvider.notifier);
+
+    await notifier.downloadBundle();
+
+    expect(
+      backend.enqueuedRequests,
+      isNot(
+        contains(
+          'sherpa-voice/${vadCatalogEntry.id}::'
+          '${vadCatalogEntry.archiveName}',
+        ),
+      ),
+      reason: 'an already-installed model must not be re-downloaded',
+    );
+    expect(
+      _statusFor(container, vadCatalogEntry.id),
+      VoiceModelStatus.installed,
+    );
+  });
+
   test('a failed download surfaces an error status', () async {
     await container.read(voiceModelsControllerProvider.future);
     final notifier = container.read(voiceModelsControllerProvider.notifier);

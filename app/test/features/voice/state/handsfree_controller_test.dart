@@ -133,6 +133,60 @@ void main() {
     );
   });
 
+  test('reset() + start() picks up a fresh voice install without recreating '
+      'the screen (WS5: no dead-end after installing and returning)', () async {
+    final freshTmp = Directory.systemTemp.createTempSync('handsfree_fresh_');
+    addTearDown(() => freshTmp.deleteSync(recursive: true));
+    final freshContainer = ProviderContainer(
+      overrides: [
+        voiceModelInstallerProvider.overrideWith(
+          (ref) async => VoiceModelInstaller(modelsDirectory: freshTmp),
+        ),
+        voiceServiceProvider.overrideWithValue(FakeVoiceService()),
+        micSourceProvider.overrideWithValue(FakeMicSource()),
+        audioSinkProvider.overrideWithValue(FakeAudioSink()),
+      ],
+    );
+    addTearDown(freshContainer.dispose);
+    freshContainer.listen(handsFreeControllerProvider, (_, _) {});
+
+    final notifier = freshContainer.read(handsFreeControllerProvider.notifier);
+    await notifier.start(onUserUtterance: (t) async => 'x');
+    expect(
+      freshContainer.read(handsFreeControllerProvider).phase,
+      HandsFreePhase.noModel,
+    );
+
+    // User installs the voice bundle via the models hub and pops back onto the
+    // (still-mounted) hands-free screen, which calls reset() + start() again.
+    installAllVoiceModels(freshTmp);
+    notifier.reset();
+    await notifier.start(onUserUtterance: (t) async => 'x');
+
+    expect(
+      freshContainer.read(handsFreeControllerProvider).phase,
+      HandsFreePhase.listening,
+      reason: 'a fresh install must be picked up without exiting hands-free',
+    );
+  });
+
+  test('reset() is a no-op during an active turn', () async {
+    final notifier = container.read(handsFreeControllerProvider.notifier);
+    await notifier.start(onUserUtterance: (t) async => 'ok');
+    expect(
+      container.read(handsFreeControllerProvider).phase,
+      HandsFreePhase.listening,
+    );
+
+    notifier.reset();
+
+    expect(
+      container.read(handsFreeControllerProvider).phase,
+      HandsFreePhase.listening,
+      reason: 'reset() must not yank a live session back to idle',
+    );
+  });
+
   test(
     'full turn: Listening -> Thinking -> Speaking -> back to Listening',
     () async {

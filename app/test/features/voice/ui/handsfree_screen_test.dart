@@ -91,9 +91,9 @@ void main() {
       }
 
       expect(find.text('Voice models needed'), findsOneWidget);
-      expect(find.text('Open models hub'), findsOneWidget);
+      expect(find.text('Set up voice'), findsOneWidget);
 
-      await tester.tap(find.text('Open models hub'));
+      await tester.tap(find.text('Set up voice'));
       await tester.pumpAndSettle();
       expect(find.text('models hub stand-in'), findsOneWidget);
     },

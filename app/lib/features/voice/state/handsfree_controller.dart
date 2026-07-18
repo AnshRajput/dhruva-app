@@ -176,6 +176,26 @@ class HandsFreeController extends Notifier<HandsFreeState> {
     _vadSub = voice.segment(audio).listen(_handleEvent);
   }
 
+  /// Resets a non-running session back to `idle` so [start] (which early-
+  /// returns unless `phase == idle`) can run again. Used by the screen's
+  /// "try again" path after the user installs voice models and returns: the
+  /// screen State isn't recreated (it sits under the pushed models route), so
+  /// without this the phase would stay `noModel`/`permissionDenied` forever.
+  /// A no-op while a turn is actually flowing, so it can't yank a live
+  /// session out from under itself.
+  void reset() {
+    switch (state.phase) {
+      case HandsFreePhase.listening:
+      case HandsFreePhase.thinking:
+      case HandsFreePhase.speaking:
+        return;
+      case HandsFreePhase.idle:
+      case HandsFreePhase.noModel:
+      case HandsFreePhase.permissionDenied:
+        state = const HandsFreeState();
+    }
+  }
+
   Future<void> stop() async {
     // Fire-and-forget, not awaited: cancelling a subscription to a
     // `segment()` stream that's still mid-`await for` on a live (not yet

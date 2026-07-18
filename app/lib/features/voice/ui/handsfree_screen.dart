@@ -41,11 +41,29 @@ class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(handsFreeControllerProvider.notifier)
-          .start(onUserUtterance: widget.onUserUtterance);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  Future<void> _start() => ref
+      .read(handsFreeControllerProvider.notifier)
+      .start(onUserUtterance: widget.onUserUtterance);
+
+  /// Re-runs [start] after resetting a stalled phase. `start()` early-returns
+  /// unless `phase == idle`, so reset first — otherwise a fresh install done
+  /// via the models hub is never picked up and the user stays stuck on
+  /// "Voice models needed".
+  Future<void> _retry() async {
+    ref.read(handsFreeControllerProvider.notifier).reset();
+    await _start();
+  }
+
+  /// The one guided step (WS5): open the models hub ON the Voice tab, then —
+  /// when the user finishes installing and pops back onto this still-mounted
+  /// screen — automatically re-check so hands-free just starts, no exit/re-
+  /// enter dance.
+  Future<void> _openVoiceModels() async {
+    await context.push('/models?tab=voice');
+    if (mounted) await _retry();
   }
 
   Future<void> _exit() async {
@@ -72,7 +90,10 @@ class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
         child: Padding(
           padding: EdgeInsets.all(tokens.spacing.lg),
           child: switch (state.phase) {
-            HandsFreePhase.noModel => const _NoModelView(),
+            HandsFreePhase.noModel => _NoModelView(
+              onSetUpVoice: _openVoiceModels,
+              onRetry: _retry,
+            ),
             HandsFreePhase.permissionDenied => _PermissionDeniedView(
               onExit: _exit,
             ),
@@ -474,7 +495,13 @@ class _VoiceTrustMark extends StatelessWidget {
 }
 
 class _NoModelView extends StatelessWidget {
-  const _NoModelView();
+  /// Opens the models hub on the Voice tab and re-checks on return (the one
+  /// guided step). [onRetry] re-checks in place for the case the user
+  /// installed the models some other way.
+  final VoidCallback onSetUpVoice;
+  final VoidCallback onRetry;
+
+  const _NoModelView({required this.onSetUpVoice, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -493,9 +520,9 @@ class _NoModelView extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            'Hands-free mode needs a turn-taking, speech-to-text, and '
-            'text-to-speech model installed — download them from the '
-            'models hub\'s Voice tab.',
+            'Hands-free needs a small voice bundle — turn-taking, '
+            'speech-to-text, and a voice. Install it in one tap, then come '
+            'straight back here.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
@@ -507,8 +534,14 @@ class _NoModelView extends StatelessWidget {
             // the mic whenever it lands on `noModel` (see `HandsFreeController
             // .start`), so this is a plain forward navigation, not an exit.
             // The AppBar's own close button is still there for "never mind."
-            onPressed: () => context.push('/models'),
-            child: const Text('Open models hub'),
+            // Returns to this still-mounted screen and re-checks automatically.
+            onPressed: onSetUpVoice,
+            child: const Text('Set up voice'),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('Already installed? Try again'),
           ),
         ],
       ),
