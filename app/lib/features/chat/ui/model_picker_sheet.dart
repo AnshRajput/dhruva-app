@@ -13,6 +13,7 @@ import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/brand_motif.dart';
@@ -73,9 +74,9 @@ class _ModelPickerSheet extends ConsumerWidget {
                 selectedModelId: selectedModelId,
                 smallerModelsOnly: smallerModelsOnly,
               ),
-              AsyncError() => const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Could not load installed models.'),
+              AsyncError(:final error) => ErrorStateView(
+                error: error,
+                onRetry: () => ref.invalidate(installedModelsProvider),
               ),
               _ => const Padding(
                 padding: EdgeInsets.all(16),

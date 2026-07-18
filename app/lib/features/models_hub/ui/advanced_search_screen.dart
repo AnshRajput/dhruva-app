@@ -13,11 +13,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/failures/failure_message.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
-import '../state/failure_message.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../state/model_search_controller.dart';
-import '../widgets/failure_view.dart';
 import '../widgets/model_list_tile.dart';
 
 class AdvancedSearchScreen extends StatelessWidget {

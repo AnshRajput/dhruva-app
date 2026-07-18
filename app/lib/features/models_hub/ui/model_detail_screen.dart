@@ -15,18 +15,18 @@ import 'package:path/path.dart' as p;
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/failures/failure_message.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/hf_api/default_quant.dart';
 import '../../../data/hf_api/models/model_license_info.dart';
 import '../../../data/hf_api/models/quant_variant.dart';
 import '../state/download_actions_controller.dart';
 import '../state/downloads_controller.dart';
-import '../state/failure_message.dart';
 import '../state/model_detail_provider.dart';
 import '../widgets/download_progress_ring.dart';
-import '../widgets/failure_view.dart';
 import '../widgets/license_chip.dart';
 import '../widgets/quant_quality.dart';
 import '../widgets/verdict_chip.dart';
@@ -469,10 +469,11 @@ class _QuantDownloadButton extends ConsumerWidget {
     }
     final button = FilledButton.icon(
       icon: pending
-          ? DhruvaLoader(
-              size: 16,
-              color: Theme.of(context).colorScheme.onPrimary,
-            )
+          // The button is disabled while pending, so its fill is the M3
+          // disabled surface (not `primary`); an `onPrimary` star would be
+          // near-invisible there. Let the loader default to `primary` (gold),
+          // which reads clearly and matches the still-visible label.
+          ? const DhruvaLoader(size: 16)
           : const Icon(Icons.download),
       label: Text(pending ? 'Starting…' : 'Download'),
       // A vision quant also enqueues its paired mmproj projector (Loop-7 T2

@@ -1,13 +1,15 @@
 /// Shared loading/empty/error state widgets (T5 §6: every screen designs
 /// all three, no blank fallthroughs). Spacing and typography come from
-/// `DhruvaTokens` so these read the same as the chat feature's crafted
-/// states rather than as bare Material defaults.
+/// `DhruvaTokens` so every feature reads the same crafted states rather
+/// than bare Material defaults. Lives in `core/` (next to `DhruvaLoader`)
+/// so chat, characters and models_hub can all use it without the
+/// cross-feature import ADR-002 bans.
 library;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/dhruva_theme_extension.dart';
-import '../state/failure_message.dart';
+import '../failures/failure_message.dart';
+import '../theme/dhruva_theme_extension.dart';
 
 class ErrorStateView extends StatelessWidget {
   final Object error;

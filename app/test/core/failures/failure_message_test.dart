@@ -1,5 +1,5 @@
 import 'package:dhruva/core/failures/app_failure.dart';
-import 'package:dhruva/features/models_hub/state/failure_message.dart';
+import 'package:dhruva/core/failures/failure_message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

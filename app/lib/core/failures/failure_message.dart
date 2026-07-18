@@ -3,7 +3,7 @@
 /// failure reads the same way on every models_hub screen.
 library;
 
-import '../../../core/failures/app_failure.dart';
+import 'app_failure.dart';
 
 /// Renders any [AppFailure] leaf to a short, honest, user-facing sentence.
 /// Exhaustive over the sealed taxonomy — a new failure type is a compile

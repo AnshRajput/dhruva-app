@@ -10,13 +10,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../data/models/starter_catalog.dart';
 import '../state/downloads_controller.dart';
 import '../state/storage_controller.dart';
 import '../widgets/download_progress_tile.dart';
-import '../widgets/failure_view.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
@@ -298,9 +298,9 @@ class _CompletedSection extends ConsumerWidget {
                     )
                     .toList(),
               ),
-      AsyncError() => const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('Could not load installed models.'),
+      AsyncError(:final error) => ErrorStateView(
+        error: error,
+        onRetry: () => ref.invalidate(storageControllerProvider),
       ),
       _ => const Padding(
         padding: EdgeInsets.all(16),

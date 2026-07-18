@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/characters/character_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
 import '../state/characters_controller.dart';
@@ -108,7 +109,10 @@ class _CharacterFormScreenState extends ConsumerState<CharacterFormScreen> {
           if (character == null) {
             return Scaffold(
               appBar: AppBar(title: const Text('Character')),
-              body: const Center(child: Text('Character not found.')),
+              body: const EmptyStateView(
+                message: 'Character not found.',
+                icon: Icons.person_off_outlined,
+              ),
             );
           }
           if (character.isBuiltIn) {
@@ -121,7 +125,11 @@ class _CharacterFormScreenState extends ConsumerState<CharacterFormScreen> {
         loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
         error: (error, stack) => Scaffold(
           appBar: AppBar(title: const Text('Character')),
-          body: const Center(child: Text('Could not load this character.')),
+          body: ErrorStateView(
+            error: error,
+            onRetry: () =>
+                ref.invalidate(characterByIdProvider(widget.characterId!)),
+          ),
         ),
       );
     }

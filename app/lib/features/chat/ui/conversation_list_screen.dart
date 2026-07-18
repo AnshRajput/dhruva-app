@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/chat_controller.dart' show ChatRouteArgs;
 import '../state/conversation_list_controller.dart';
@@ -162,8 +163,10 @@ class _ConversationListScreenState
                         hasAnyModel: hasAnyModel,
                         onNewChat: _startNewChat,
                       ),
-              AsyncError() => const Center(
-                child: Text('Could not load conversations.'),
+              AsyncError(:final error) => ErrorStateView(
+                error: error,
+                onRetry: () =>
+                    ref.invalidate(conversationListControllerProvider),
               ),
               _ => const Center(child: DhruvaLoader()),
             },

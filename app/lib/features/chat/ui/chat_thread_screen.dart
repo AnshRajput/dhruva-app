@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
@@ -119,8 +120,12 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         );
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
-      error: (error, stack) => const Scaffold(
-        body: Center(child: Text('Could not open this conversation.')),
+      error: (error, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Chat')),
+        body: ErrorStateView(
+          error: error,
+          onRetry: () => ref.invalidate(provider),
+        ),
       ),
     );
   }
