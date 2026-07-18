@@ -744,6 +744,77 @@ void main() {
         expect(container.exists(chatControllerProvider(args)), isFalse);
       },
     );
+
+    test(
+      'leave the page mid-stream then return: the reattached view reconnects '
+      'to the SAME live generation and sees it finish, and the partial is '
+      'persisted for a cold reader (kill-while-backgrounded) in the meantime',
+      () async {
+        final modelId = await insertModel();
+        final engine = FakeEngineService(
+          scriptedTokens: List.generate(12, (i) => 'w$i '),
+          tokenDelay: const Duration(milliseconds: 25),
+        );
+        final container = buildContainer(engine);
+        final args = ChatRouteArgs(initialModelId: modelId);
+
+        final sub = container.listen(chatControllerProvider(args), (_, _) {});
+        await container.read(chatControllerProvider(args).future);
+        final notifier = container.read(chatControllerProvider(args).notifier);
+
+        final sendFuture = notifier.sendMessage('hi');
+        // Past the first 100ms flush so the streaming message has both grown
+        // in memory and had that delta persisted (the flush's DB write is
+        // fire-and-forget; the extra settle lets it commit).
+        await Future<void>.delayed(const Duration(milliseconds: 160));
+        final midState = container.read(chatControllerProvider(args)).value!;
+        expect(midState.isGenerating, isTrue);
+        final partialLen = midState.messages.last.content.length;
+        expect(partialLen, greaterThan(0));
+        final conversationId = midState.conversationId!;
+
+        // Leave the page: drop the only listener mid-stream (nav away).
+        sub.close();
+        await container.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(container.exists(chatControllerProvider(args)), isTrue);
+
+        // A cold reader over the SAME database (what a fresh process would see
+        // if Android killed us while backgrounded) already has the partial —
+        // it is persisted incrementally, not only on finalize.
+        final coldContainer = ProviderContainer(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(coldContainer.dispose);
+        final persisted = await coldContainer
+            .read(chatRepositoryProvider)
+            .getMessages(conversationId);
+        expect(persisted.last.content.length, greaterThan(0));
+
+        // Come back: a NEW listener attaches to the still-alive controller and
+        // sees the stream CONTINUE past where it left off (not frozen).
+        final observed = <int>[];
+        final sub2 = container.listen(chatControllerProvider(args), (_, next) {
+          observed.add(next.value?.messages.lastOrNull?.content.length ?? -1);
+        });
+
+        await sendFuture;
+        final finalState = container.read(chatControllerProvider(args)).value!;
+        expect(finalState.isGenerating, isFalse);
+        expect(finalState.messages.last.status, MessageStatus.complete);
+        expect(
+          finalState.messages.last.content.length,
+          greaterThan(partialLen),
+          reason: 'the reconnected view saw the stream keep going',
+        );
+        expect(
+          observed.where((l) => l > partialLen),
+          isNotEmpty,
+          reason: 'live token updates arrived on the reattached listener',
+        );
+        sub2.close();
+      },
+    );
   });
 
   group('Loop 5: character-bound conversations', () {
