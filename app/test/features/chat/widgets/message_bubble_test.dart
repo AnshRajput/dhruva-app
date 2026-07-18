@@ -109,12 +109,14 @@ void main() {
 
       expect(find.textContaining('bold'), findsOneWidget);
       expect(find.text('DART'), findsOneWidget); // language label (mk-code)
-      expect(find.byIcon(Icons.copy), findsOneWidget);
+      // Two copy affordances now: the code block's (Copy code) and the
+      // WS3 universal message copy (Copy text) in the metadata row.
+      expect(find.byIcon(Icons.copy), findsNWidgets(2));
       // DESIGNER BLOCKING #2: real tooltip/semantic label, not a bare
       // unlabeled InkWell.
       expect(find.byTooltip('Copy code'), findsOneWidget);
 
-      await tester.tap(find.byIcon(Icons.copy));
+      await tester.tap(find.byTooltip('Copy code'));
       await tester.pump();
       await tester.pump();
       expect(find.byIcon(Icons.check), findsOneWidget);
@@ -306,7 +308,7 @@ void main() {
     );
 
     testWidgets(
-      'D3: an extract-text result shows a copy-to-clipboard affordance',
+      'WS3: every assistant reply with content shows a copy affordance',
       (tester) async {
         await _pump(
           tester,
@@ -315,7 +317,6 @@ void main() {
               role: MessageRole.assistant,
               content: 'Hello World',
             ),
-            isExtractResult: true,
           ),
         );
         await tester.pumpAndSettle();
@@ -332,19 +333,18 @@ void main() {
       },
     );
 
-    testWidgets(
-      'a normal (non-extract) assistant reply has no copy affordance',
-      (tester) async {
-        await _pump(
-          tester,
-          MessageBubble(
-            message: _message(role: MessageRole.assistant, content: 'hi'),
-          ),
-        );
-        await tester.pumpAndSettle();
+    testWidgets('a contentless assistant reply has no copy affordance', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(role: MessageRole.assistant, content: ''),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        expect(find.byTooltip('Copy text'), findsNothing);
-      },
-    );
+      expect(find.byTooltip('Copy text'), findsNothing);
+    });
   });
 }

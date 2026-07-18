@@ -17,9 +17,19 @@ String modelShortLabel(String repoId) {
 
 class ModelChip extends StatelessWidget {
   final InstalledModelInfo? model;
+
+  /// WS3: true while `ChatController.ensureModelLoaded` is mapping the model
+  /// into memory — the chip shows a spinner + "Loading…" so the wait for the
+  /// first token reads as "the model is warming up," not "nothing happened."
+  final bool loading;
   final VoidCallback onTap;
 
-  const ModelChip({super.key, required this.model, required this.onTap});
+  const ModelChip({
+    super.key,
+    required this.model,
+    this.loading = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +42,12 @@ class ModelChip extends StatelessWidget {
     final foreground = noModel
         ? theme.colorScheme.error
         : theme.colorScheme.onSurfaceVariant;
+
+    final label = noModel
+        ? 'Pick a model'
+        : loading
+        ? 'Loading…'
+        : modelShortLabel(model!.repoId);
 
     return InkWell(
       borderRadius: BorderRadius.circular(tokens.radius.full),
@@ -48,9 +64,23 @@ class ModelChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              noModel ? 'Pick a model' : modelShortLabel(model!.repoId),
-              style: theme.textTheme.labelLarge?.copyWith(color: foreground),
+            if (loading && !noModel) ...[
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              SizedBox(width: tokens.spacing.xs),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(color: foreground),
+              ),
             ),
             Icon(Icons.expand_more, size: 14, color: foreground),
           ],

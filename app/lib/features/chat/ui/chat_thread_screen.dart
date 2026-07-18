@@ -15,7 +15,6 @@ import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/message_info_x.dart';
-import '../state/vision_presets.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
@@ -167,6 +166,7 @@ class _ThreadScaffold extends ConsumerWidget {
             Flexible(
               child: ModelChip(
                 model: state.model,
+                loading: state.modelLoading,
                 onTap: () => _pickModel(context),
               ),
             ),
@@ -210,23 +210,11 @@ class _ThreadScaffold extends ConsumerWidget {
                         ? NoModelInstalledView(
                             onBrowseModels: () => context.push('/models'),
                           )
-                        : Padding(
-                            padding: EdgeInsets.all(tokens.spacing.xl),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                DhruvaStar(
-                                  size: 72,
-                                  color: theme.colorScheme.primary,
-                                ),
-                                SizedBox(height: tokens.spacing.md),
-                                Text(
-                                  'Say hello',
-                                  style: theme.textTheme.headlineSmall,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
+                        : SuggestedPrompts(
+                            onSelect: (prompt) {
+                              onScrollToBottom();
+                              controller.sendMessage(prompt);
+                            },
                           ),
                   )
                 : Stack(
@@ -352,17 +340,6 @@ class _ThreadScaffold extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final canAct = !state.isGenerating;
-    // Loop 7 D3: the "Extract text" quick action's reply gets a copy button
-    // — detected structurally (the preceding user turn used the exact
-    // preset prompt with an image attached) rather than a separate persisted
-    // flag, since `attachedImages` (ChatThreadState doc) is already the
-    // session-only source of truth for "this turn had an image".
-    final precedingUser = index > 0 ? visible[index - 1] : null;
-    final isExtractResult =
-        message.role == MessageRole.assistant &&
-        precedingUser != null &&
-        precedingUser.content == extractTextPrompt &&
-        state.attachedImages.containsKey(precedingUser.id);
     return MessageBubble(
       message: message,
       isStreaming: isStreamingMessage,
@@ -371,7 +348,6 @@ class _ThreadScaffold extends ConsumerWidget {
           isStreamingMessage &&
           !state.reasoningDurationMs.containsKey(message.id),
       attachedImage: state.attachedImages[message.id],
-      isExtractResult: isExtractResult,
       onRegenerate: message.role == MessageRole.assistant && canAct
           ? () => controller.regenerate(message.id)
           : null,

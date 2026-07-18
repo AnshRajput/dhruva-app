@@ -33,9 +33,6 @@ class MessageBubble extends StatelessWidget {
   /// tap opens it full-size (`image_lightbox.dart`).
   final Uint8List? attachedImage;
 
-  /// Loop 7 D3: true when this assistant message answered the "Extract
-  /// text" preset — shows a one-tap copy-to-clipboard affordance.
-  final bool isExtractResult;
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
 
@@ -46,7 +43,6 @@ class MessageBubble extends StatelessWidget {
     this.reasoningDurationMs,
     this.reasoningOpen = false,
     this.attachedImage,
-    this.isExtractResult = false,
     this.onRegenerate,
     this.onEdit,
   });
@@ -134,11 +130,7 @@ class MessageBubble extends StatelessWidget {
             ),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
-              _MetadataRow(
-                message: message,
-                onRegenerate: onRegenerate,
-                showCopy: isExtractResult && message.content.isNotEmpty,
-              ),
+              _MetadataRow(message: message, onRegenerate: onRegenerate),
             ],
             if (isUser && onEdit != null) ...[
               SizedBox(height: tokens.spacing.xs),
@@ -190,14 +182,7 @@ class _MetadataRow extends StatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
 
-  /// Loop 7 D3: shows the "Extract text" preset's copy-to-clipboard button.
-  final bool showCopy;
-
-  const _MetadataRow({
-    required this.message,
-    this.onRegenerate,
-    this.showCopy = false,
-  });
+  const _MetadataRow({required this.message, this.onRegenerate});
 
   @override
   State<_MetadataRow> createState() => _MetadataRowState();
@@ -235,7 +220,10 @@ class _MetadataRowState extends State<_MetadataRow> {
           SizedBox(width: tokens.spacing.xs),
           TtsButton(messageId: message.id, text: message.content),
         ],
-        if (widget.showCopy) ...[
+        // WS3: copy is a universal quick action on every assistant reply
+        // with content — discoverable next to regenerate, not gated to the
+        // vision "Extract text" preset it started life as (Loop 7).
+        if (message.content.isNotEmpty) ...[
           SizedBox(width: tokens.spacing.xs),
           IconButton(
             onPressed: _copy,

@@ -47,4 +47,23 @@ void main() {
     await tester.tap(find.text('New chat'));
     expect(tapped, isTrue);
   });
+
+  testWidgets(
+    'SuggestedPrompts tapping a starter fires onSelect with its text',
+    (tester) async {
+      String? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(body: SuggestedPrompts(onSelect: (p) => selected = p)),
+        ),
+      );
+
+      expect(find.text('SUGGESTED'), findsOneWidget);
+      final first = SuggestedPrompts.prompts.first.text;
+      expect(find.text(first), findsOneWidget);
+      await tester.tap(find.text(first));
+      expect(selected, first);
+    },
+  );
 }
