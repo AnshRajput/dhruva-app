@@ -1,0 +1,8 @@
+app/lib/features/models_hub/widgets/quant_quality.dart
+app/lib/features/playground/state/ai_news_controller.dart
+app/lib/features/playground/state/playground_controller.dart
+app/lib/features/playground/state/playground_installed_models_provider.dart
+app/lib/features/playground/ui/playground_screen.dart
+app/test/data/downloads/download_progress_eta_test.dart
+app/test/features/models_hub/widgets/quant_quality_test.dart
+app/test/features/playground/playground_test.dart

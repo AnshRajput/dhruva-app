@@ -1,0 +1,324 @@
+diff --git a/app/lib/core/router/app_router.dart b/app/lib/core/router/app_router.dart
+index 0c6b201..52dc9bc 100644
+--- a/app/lib/core/router/app_router.dart
++++ b/app/lib/core/router/app_router.dart
+@@ -20,6 +20,7 @@ import '../../features/chat/ui/conversation_list_screen.dart';
+ import '../../features/models_hub/ui/downloads_screen.dart';
+ import '../../features/models_hub/ui/model_detail_screen.dart';
+ import '../../features/models_hub/ui/models_hub_screen.dart';
++import '../../features/playground/ui/playground_screen.dart';
+ import '../../features/settings/ui/about_screen.dart';
+ import '../../features/settings/ui/settings_screen.dart';
+ import '../../features/voice/ui/handsfree_screen.dart';
+@@ -56,6 +57,14 @@ final appRouter = GoRouter(
+             ),
+           ],
+         ),
++        StatefulShellBranch(
++          routes: [
++            GoRoute(
++              path: '/playground',
++              builder: (context, state) => const PlaygroundScreen(),
++            ),
++          ],
++        ),
+         StatefulShellBranch(
+           routes: [
+             GoRoute(
+diff --git a/app/lib/core/router/app_shell.dart b/app/lib/core/router/app_shell.dart
+index 94316ed..c46064d 100644
+--- a/app/lib/core/router/app_shell.dart
++++ b/app/lib/core/router/app_shell.dart
+@@ -118,6 +118,11 @@ class AppShell extends ConsumerWidget {
+                 ? 'Models — download in progress'
+                 : 'Models',
+           ),
++          const NavigationDestination(
++            icon: Icon(Icons.science_outlined),
++            selectedIcon: Icon(Icons.science),
++            label: 'Playground',
++          ),
+           const NavigationDestination(
+             icon: Icon(Icons.settings_outlined),
+             selectedIcon: Icon(Icons.settings),
+diff --git a/app/lib/data/downloads/background_downloader_backend.dart b/app/lib/data/downloads/background_downloader_backend.dart
+index 59935a7..294b42f 100644
+--- a/app/lib/data/downloads/background_downloader_backend.dart
++++ b/app/lib/data/downloads/background_downloader_backend.dart
+@@ -148,6 +148,12 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
+           expectedFileSizeBytes: update.hasExpectedFileSize
+               ? update.expectedFileSize
+               : null,
++          // The plugin already computes speed + ETA on the progress channel
++          // (its own negative sentinels for "unknown"); pass them straight
++          // through the seam so the in-app ring can show the same estimate
++          // the OS notification does.
++          networkSpeedMBs: update.networkSpeed,
++          timeRemaining: update.timeRemaining,
+         );
+     }
+   }
+diff --git a/app/lib/data/downloads/download_backend.dart b/app/lib/data/downloads/download_backend.dart
+index 80e0c55..108c8cc 100644
+--- a/app/lib/data/downloads/download_backend.dart
++++ b/app/lib/data/downloads/download_backend.dart
+@@ -67,10 +67,20 @@ final class BackendProgressUpdate extends BackendUpdate {
+   /// special states (e.g. waiting-to-retry); callers should clamp to 0-1.
+   final double progress;
+   final int? expectedFileSizeBytes;
++
++  /// Live transfer estimates the plugin exposes on its progress channel.
++  /// [networkSpeedMBs] is MB/s, valid only when positive; [timeRemaining]
++  /// is valid only when non-negative. Both default to the plugin's
++  /// "unknown" sentinels so a caller that doesn't have them (the fake
++  /// backend) surfaces nothing rather than a fake estimate.
++  final double networkSpeedMBs;
++  final Duration timeRemaining;
+   const BackendProgressUpdate(
+     super.taskId, {
+     required this.progress,
+     this.expectedFileSizeBytes,
++    this.networkSpeedMBs = -1,
++    this.timeRemaining = const Duration(seconds: -1),
+   });
+ }
+ 
+diff --git a/app/lib/data/downloads/download_manager.dart b/app/lib/data/downloads/download_manager.dart
+index 268d58b..3a18961 100644
+--- a/app/lib/data/downloads/download_manager.dart
++++ b/app/lib/data/downloads/download_manager.dart
+@@ -43,6 +43,14 @@ final class DownloadProgress {
+   /// it's [NetworkUnknownFailure] rather than left untyped.
+   final AppFailure? failure;
+ 
++  /// Live transfer estimate from the backend's progress channel, only ever
++  /// set on a `running` update. [networkSpeedMBs] is MB/s (valid when > 0);
++  /// [timeRemaining] is valid when non-negative. Defaults are the "unknown"
++  /// sentinels — see [etaLabel], which shows nothing rather than a fake
++  /// estimate when they're unknown.
++  final double networkSpeedMBs;
++  final Duration timeRemaining;
++
+   const DownloadProgress({
+     required this.taskId,
+     required this.repoId,
+@@ -52,7 +60,32 @@ final class DownloadProgress {
+     this.totalBytes,
+     this.errorMessage,
+     this.failure,
++    this.networkSpeedMBs = -1,
++    this.timeRemaining = const Duration(seconds: -1),
+   });
++
++  /// A compact "3.1 MB/s · 0:45 left" line, or null when neither estimate is
++  /// known yet — so the UI renders nothing rather than "--:-- left". Speed and
++  /// ETA are shown independently: whichever the backend has.
++  String? get etaLabel {
++    final parts = <String>[];
++    if (networkSpeedMBs > 0) {
++      parts.add(
++        networkSpeedMBs >= 1
++            ? '${networkSpeedMBs.toStringAsFixed(1)} MB/s'
++            : '${(networkSpeedMBs * 1000).round()} kB/s',
++      );
++    }
++    if (!timeRemaining.isNegative && timeRemaining.inSeconds > 0) {
++      final m = timeRemaining.inMinutes;
++      final sec = timeRemaining.inSeconds
++          .remainder(60)
++          .toString()
++          .padLeft(2, '0');
++      parts.add('$m:$sec left');
++    }
++    return parts.isEmpty ? null : parts.join(' · ');
++  }
+ }
+ 
+ /// Everything needed to enqueue + later verify + register one file download.
+@@ -307,6 +340,8 @@ final class DownloadManager {
+           DownloadState.running,
+           downloadedBytes: (u.progress.clamp(0, 1) * total).round(),
+           totalBytes: total,
++          networkSpeedMBs: u.networkSpeedMBs,
++          timeRemaining: u.timeRemaining,
+         );
+       case final BackendStatusUpdate u:
+         await _handleStatus(request, u);
+@@ -468,6 +503,8 @@ final class DownloadManager {
+     int? totalBytes,
+     String? errorMessage,
+     AppFailure? failure,
++    double networkSpeedMBs = -1,
++    Duration timeRemaining = const Duration(seconds: -1),
+   }) {
+     _controller.add(
+       DownloadProgress(
+@@ -479,6 +516,8 @@ final class DownloadManager {
+         totalBytes: totalBytes ?? request.expectedSizeBytes,
+         errorMessage: errorMessage,
+         failure: failure,
++        networkSpeedMBs: networkSpeedMBs,
++        timeRemaining: timeRemaining,
+       ),
+     );
+   }
+diff --git a/app/lib/data/downloads/download_notifications.dart b/app/lib/data/downloads/download_notifications.dart
+index 9cfa6ec..4608b44 100644
+--- a/app/lib/data/downloads/download_notifications.dart
++++ b/app/lib/data/downloads/download_notifications.dart
+@@ -4,9 +4,11 @@
+ /// platform call itself is mobile-only and exercised on-device).
+ ///
+ /// `background_downloader` owns the task lifecycle and substitutes
+-/// `{filename}`, `{progress}`, `{timeRemaining}` tokens itself and drives the
+-/// Android progress bar — so this is a config object, not a second
+-/// notification pipeline. Applies globally (GGUF + voice downloads alike).
++/// `{filename}`, `{progress}`, `{networkSpeed}`, `{timeRemaining}` tokens
++/// itself and drives the Android progress bar — so this is a config object,
++/// not a second notification pipeline. Applies globally (GGUF + voice
++/// downloads alike). `{networkSpeed}`/`{timeRemaining}` render as '--' / '--:--'
++/// until the plugin has a real estimate, so the copy stays honest.
+ library;
+ 
+ import 'package:background_downloader/background_downloader.dart' as bg;
+@@ -16,7 +18,7 @@ import 'package:background_downloader/background_downloader.dart' as bg;
+ final dhruvaDownloadNotificationConfig = bg.TaskNotificationConfig(
+   running: const bg.TaskNotification(
+     '{filename}',
+-    'Downloading… {progress} · {timeRemaining} left',
++    'Downloading… {progress} · {networkSpeed} · {timeRemaining} left',
+   ),
+   complete: const bg.TaskNotification('{filename}', 'Download complete'),
+   error: const bg.TaskNotification('{filename}', 'Download failed'),
+diff --git a/app/lib/features/chat/widgets/empty_states.dart b/app/lib/features/chat/widgets/empty_states.dart
+index fa5335a..2366da9 100644
+--- a/app/lib/features/chat/widgets/empty_states.dart
++++ b/app/lib/features/chat/widgets/empty_states.dart
+@@ -36,6 +36,26 @@ class NoModelInstalledView extends StatelessWidget {
+                 color: theme.colorScheme.onSurfaceVariant,
+               ),
+             ),
++            SizedBox(height: tokens.spacing.md),
++            // Value made explicit (VIDEO_FIXES #6 / CLAUDE.md "real value"):
++            // the concrete use case, then the brand tagline.
++            Text(
++              'A private AI that runs entirely on your phone — chat, analyze '
++              'photos, talk, generate images, and chat with your documents. '
++              'Nothing is sent to any server.',
++              textAlign: TextAlign.center,
++              style: theme.textTheme.bodyMedium?.copyWith(
++                color: theme.colorScheme.onSurfaceVariant,
++              ),
++            ),
++            SizedBox(height: tokens.spacing.sm),
++            Text(
++              'Your AI. Your phone. Nobody else\'s business.',
++              textAlign: TextAlign.center,
++              style: theme.textTheme.titleSmall?.copyWith(
++                fontStyle: FontStyle.italic,
++              ),
++            ),
+             SizedBox(height: tokens.spacing.lg),
+             FilledButton(
+               onPressed: onBrowseModels,
+diff --git a/app/lib/features/models_hub/ui/model_detail_screen.dart b/app/lib/features/models_hub/ui/model_detail_screen.dart
+index 3783b61..55a40af 100644
+--- a/app/lib/features/models_hub/ui/model_detail_screen.dart
++++ b/app/lib/features/models_hub/ui/model_detail_screen.dart
+@@ -27,6 +27,7 @@ import '../state/model_detail_provider.dart';
+ import '../widgets/download_progress_ring.dart';
+ import '../widgets/failure_view.dart';
+ import '../widgets/license_chip.dart';
++import '../widgets/quant_quality.dart';
+ import '../widgets/verdict_chip.dart';
+ 
+ class ModelDetailScreen extends ConsumerWidget {
+@@ -290,6 +291,7 @@ class _QuantTile extends StatelessWidget {
+       quant: quant.label,
+       mmprojSizeBytes: mmprojSizeBytes,
+     );
++    final quality = classifyQuantQuality(quant.label);
+ 
+     return Card(
+       child: Padding(
+@@ -317,6 +319,18 @@ class _QuantTile extends StatelessWidget {
+               ],
+             ),
+             const SizedBox(height: 8),
++            // Quality/effectiveness guidance (heuristic from the quant name,
++            // not a measured benchmark) so the size↔quality tradeoff is
++            // visible, not just the file size.
++            QuantQualityChip(quality: quality),
++            const SizedBox(height: 4),
++            Text(
++              quality.blurb,
++              style: Theme.of(context).textTheme.bodySmall?.copyWith(
++                color: Theme.of(context).colorScheme.onSurfaceVariant,
++              ),
++            ),
++            const SizedBox(height: 8),
+             _QuantDownloadButton(
+               repoId: repoId,
+               quant: quant,
+@@ -418,12 +432,29 @@ class _QuantDownloadButton extends ConsumerWidget {
+       final fraction = total > 0
+           ? (progress.downloadedBytes / total).clamp(0.0, 1.0)
+           : 0.0;
+-      return DownloadProgressRing(
++      final ring = DownloadProgressRing(
+         progress: fraction,
+         onCancel: () => ref
+             .read(downloadsControllerProvider.notifier)
+             .cancel(request.taskId),
+       );
++      // Honest ETA/speed under the ring when the backend has an estimate;
++      // `etaLabel` is null (renders nothing) until it does — no "--:-- left".
++      final eta = progress.etaLabel;
++      if (eta == null) return ring;
++      return Column(
++        mainAxisSize: MainAxisSize.min,
++        children: [
++          ring,
++          const SizedBox(height: 4),
++          Text(
++            eta,
++            style: Theme.of(context).textTheme.labelSmall?.copyWith(
++              color: Theme.of(context).colorScheme.onSurfaceVariant,
++            ),
++          ),
++        ],
++      );
+     }
+     if (state == DownloadState.complete) {
+       return const Row(
+diff --git a/app/test/data/downloads/download_notifications_test.dart b/app/test/data/downloads/download_notifications_test.dart
+index e612b28..e2a4cdd 100644
+--- a/app/test/data/downloads/download_notifications_test.dart
++++ b/app/test/data/downloads/download_notifications_test.dart
+@@ -22,6 +22,9 @@ void main() {
+     // background_downloader substitutes these tokens at runtime.
+     expect(c.running!.title, contains('{filename}'));
+     expect(c.running!.body, contains('{progress}'));
++    // ETA/speed the human saw missing in the video ("--:-- left" only).
++    expect(c.running!.body, contains('{networkSpeed}'));
++    expect(c.running!.body, contains('{timeRemaining}'));
+   });
+ 
+   test('does not try to open the file on tap (GGUF is not user-openable)', () {
+diff --git a/app/test/features/chat/widgets/empty_states_test.dart b/app/test/features/chat/widgets/empty_states_test.dart
+index f4c9920..7a3e87b 100644
+--- a/app/test/features/chat/widgets/empty_states_test.dart
++++ b/app/test/features/chat/widgets/empty_states_test.dart
+@@ -19,6 +19,12 @@ void main() {
+ 
+     expect(find.text('No model installed yet'), findsOneWidget);
+     expect(find.text('Browse models'), findsOneWidget);
++    // Value made explicit + brand tagline (VIDEO_FIXES #6).
++    expect(find.textContaining('runs entirely on your phone'), findsOneWidget);
++    expect(
++      find.text("Your AI. Your phone. Nobody else's business."),
++      findsOneWidget,
++    );
+     await tester.tap(find.text('Browse models'));
+     expect(tapped, isTrue);
+   });

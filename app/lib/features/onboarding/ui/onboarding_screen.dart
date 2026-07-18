@@ -278,11 +278,20 @@ class _PickStep extends ConsumerWidget {
             : a.approxSizeBytes.compareTo(b.approxSizeBytes);
       });
     }
+    // Lead with the recommended pick so the golden-path default is the first
+    // row, not sorted into the middle of the catalog.
+    models
+      ..removeWhere((m) => m.repoId == recommended.repoId)
+      ..insert(0, recommended);
 
     // Default the selection to the recommended pick once RAM is known.
     final active = selected ?? recommended;
 
-    return _Page(
+    // The primary CTA + Skip live in a pinned bottom bar (below), NOT at the
+    // end of the scrolling radio list — so the one action this step exists for
+    // is always visible (PRD: "one obvious next step on every screen").
+    return Padding(
+      padding: EdgeInsets.all(tokens.spacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -296,16 +305,20 @@ class _PickStep extends ConsumerWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.lg),
-          for (final model in models) ...[
-            _ModelOption(
-              model: model,
-              selected: model.repoId == active.repoId,
-              recommended: model.repoId == recommended.repoId,
-              totalRamBytes: ram,
-              onTap: () => onSelect(model),
+          Expanded(
+            child: ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: models.length,
+              separatorBuilder: (_, _) => SizedBox(height: tokens.spacing.sm),
+              itemBuilder: (context, i) => _ModelOption(
+                model: models[i],
+                selected: models[i].repoId == active.repoId,
+                recommended: models[i].repoId == recommended.repoId,
+                totalRamBytes: ram,
+                onTap: () => onSelect(models[i]),
+              ),
             ),
-            SizedBox(height: tokens.spacing.sm),
-          ],
+          ),
           SizedBox(height: tokens.spacing.md),
           SizedBox(
             width: double.infinity,

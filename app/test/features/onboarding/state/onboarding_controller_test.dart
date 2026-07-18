@@ -223,6 +223,26 @@ void main() {
       expect(stateNow().status, OnboardingDownloadStatus.idle);
     });
 
+    test(
+      'cancel during resolve never starts an orphaned background download',
+      () async {
+        await container.read(onboardingDownloadControllerProvider.future);
+        final notifier = container.read(
+          onboardingDownloadControllerProvider.notifier,
+        );
+
+        // Kick off the download but cancel while it is still resolving the
+        // quant (before enqueue). The in-flight resolve must bail rather than
+        // start a real download the user believes they cancelled.
+        final downloading = notifier.download(_repoId);
+        await notifier.cancel();
+        await downloading;
+
+        expect(backend.enqueuedRequests, isEmpty);
+        expect(stateNow().status, OnboardingDownloadStatus.idle);
+      },
+    );
+
     test('a gated model fails gracefully instead of dead-ending', () async {
       container.dispose();
       container = ProviderContainer(

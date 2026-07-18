@@ -171,7 +171,18 @@ class OnboardingDownloadController
           (await ref.read(deviceInfoServiceProvider).getStorageInfo())
               .freeBytes;
       final manager = await ref.read(downloadManagerProvider.future);
+      // Cancelled during the resolve (HF/storage awaits above)? Bail before
+      // starting a real background download the user believes they stopped —
+      // `cancel()` nulls `_activeRepoId`, so this comparison catches it.
+      if (_activeRepoId != repoId) return;
       await manager.enqueue(request, freeBytes: freeBytes);
+      // Cancelled mid-enqueue: the task is now started but `cancel()` couldn't
+      // reach its id yet (we hadn't set `_activeTaskId`) — stop it here so it
+      // doesn't download fully as an orphan.
+      if (_activeRepoId != repoId) {
+        await manager.cancel(request.taskId);
+        return;
+      }
       _activeTaskId = request.taskId;
       state = AsyncData(
         OnboardingDownloadState(
