@@ -16,26 +16,39 @@ The name comes from ध्रुव (Dhruva), the pole star in Hindu astronomy�
 
 **Offline chat** with any quantized GGUF model from Hugging Face (Llama, Qwen, Phi, SmolLM, and more). **Characters** with custom personalities and system prompts. **Vision** for analyzing photos and screenshots. **Image generation** from text. **Voice** with speech-to-text and text-to-speech (both directions). **Document chat** via on-device RAG. **One-tap toolbox** for common tasks—all running 100% locally, with zero external dependencies.
 
-## Status: Pre-Alpha
+## Status: v0.3.1
 
-Dhruva is scaffolding now. We're building in public with a locked roadmap. Think of this as a foundation; features are landing loop by loop.
+Chat, characters, voice, vision, a curated mobile model catalog, guided onboarding,
+and an A/B model playground are **shipped and running on-device**. Building in public,
+loop by loop. Full detail in the [documentation knowledge base](docs/README.md).
 
-| Phase | Name | Status | What Ships |
-|-------|------|--------|-----------|
-| 1 | **Skeleton + org** | 🔄 In progress | Project structure, CI, build system, icon |
-| 2 | **Engine online** | ⏳ Planned | llama_cpp_dart bindings working, first chat |
-| 3 | **Model manager + HF hub** | ⏳ Planned | Download any GGUF from Hugging Face, model browser |
-| 4 | **Chat** | ⏳ Planned | Persistent conversations, reasoning-token transparency, **MVP gate → v0.1.0-alpha** |
-| 5 | **Characters** | ⏳ Planned | Custom personas, system prompts, roleplay |
-| 6 | **Voice** | ⏳ Planned | STT + TTS with proper orchestration, VAD, turn-taking |
-| 7 | **Vision** | ⏳ Planned | Photo & screenshot analysis with SmolVLM2 + mmproj |
-| 8 | **Image generation** | ⏳ Planned | Stable Diffusion on-device |
-| 9 | **Documents + RAG** | ⏳ Planned | Ingest PDFs, chat over them with local embeddings |
-| 10 | **Toolbox** | ⏳ Planned | Alarms, notes, calculator, tool-calling orchestration |
+| Feature | Status |
+|---------|--------|
+| Guided onboarding (pick → download → chat) | ✅ Shipped |
+| Curated mobile model catalog + HF advanced search | ✅ Shipped |
+| Offline streaming chat + reasoning transparency | ✅ Shipped |
+| Characters (custom personas) | ✅ Shipped |
+| Voice (STT + TTS + VAD) | ✅ Shipped |
+| Vision (photo/screenshot analysis) | ✅ Shipped |
+| Playground (A/B model compare) | ✅ Shipped |
+| Image generation | ⏳ Planned (Loop 8) |
+| Documents + RAG | ⏳ Planned (Loop 9) |
+| Toolbox | ⏳ Planned (Loop 10) |
 
-**MVP (Loops 1–4):** install → browse Hugging Face → download a model → genuinely pleasant offline chat. Tagged v0.1.0-alpha.
+See the [Roadmap](docs/roadmap.md) for what's next.
 
-## Features (Coming)
+## Documentation
+
+The full knowledge base lives in [`docs/`](docs/README.md):
+[Getting Started](docs/getting-started.md) ·
+[Privacy](docs/privacy.md) ·
+[Architecture](docs/architecture.md) ·
+[Features](docs/features.md) ·
+[Models](docs/models.md) ·
+[Development & Release](docs/development.md) ·
+[Roadmap](docs/roadmap.md)
+
+## Features
 
 - **Any GGUF model** — Download from Hugging Face without going through a walled garden. If it's quantized, it works.
 - **Reasoning transparency** — See `<think>` blocks from R1/DeepSeek models as collapsible reasoning steps, not tangled output.
