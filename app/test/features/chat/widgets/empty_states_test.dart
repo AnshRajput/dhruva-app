@@ -66,4 +66,74 @@ void main() {
       expect(selected, first);
     },
   );
+
+  testWidgets(
+    'SuggestedPrompts vision hint routes to library when no vision model',
+    (tester) async {
+      var getVision = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: SuggestedPrompts(
+              onSelect: (_) {},
+              onGetVisionModel: () => getVision = true,
+            ),
+          ),
+        ),
+      );
+
+      final hint = find.text('Get a vision model to analyze photos');
+      expect(hint, findsOneWidget);
+      await tester.tap(hint);
+      expect(getVision, isTrue);
+    },
+  );
+
+  testWidgets('SuggestedPrompts vision hint offers to switch when installed', (
+    tester,
+  ) async {
+    var switched = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: SuggestedPrompts(
+            onSelect: (_) {},
+            hasVisionModelInstalled: true,
+            onGetVisionModel: () {},
+            onSwitchModel: () => switched = true,
+          ),
+        ),
+      ),
+    );
+
+    final hint = find.text('Switch to your vision model to analyze photos');
+    expect(hint, findsOneWidget);
+    await tester.tap(hint);
+    expect(switched, isTrue);
+  });
+
+  testWidgets(
+    'SuggestedPrompts vision hint points at attach button when multimodal',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: SuggestedPrompts(
+              onSelect: (_) {},
+              isMultimodal: true,
+              onGetVisionModel: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Tap the photo button below to analyze an image.'),
+        findsOneWidget,
+      );
+    },
+  );
 }

@@ -85,7 +85,34 @@ class SuggestedPrompts extends StatelessWidget {
   /// Called with the prompt text when the user taps a starter. The screen
   /// wires this to `ChatController.sendMessage`.
   final ValueChanged<String> onSelect;
-  const SuggestedPrompts({super.key, required this.onSelect});
+
+  /// True when the loaded model can see images (the composer's attach button
+  /// is showing). Drives the vision hint below — advertised "analyze photos"
+  /// (see `NoModelInstalledView`) needs a reachable path, so the empty chat
+  /// says how to get there for whatever state the user's models are in.
+  final bool isMultimodal;
+
+  /// True when a fully-ready vision model is installed but NOT the one loaded
+  /// — the hint offers to switch to it rather than sending the user to
+  /// download one they already have.
+  final bool hasVisionModelInstalled;
+
+  /// Opens the model library (curated catalog carries a vision card). Null in
+  /// contexts that don't wire the hint (e.g. widget tests); the hint is then
+  /// omitted rather than rendering a dead tap.
+  final VoidCallback? onGetVisionModel;
+
+  /// Opens the model picker to switch to an already-installed vision model.
+  final VoidCallback? onSwitchModel;
+
+  const SuggestedPrompts({
+    super.key,
+    required this.onSelect,
+    this.isMultimodal = false,
+    this.hasVisionModelInstalled = false,
+    this.onGetVisionModel,
+    this.onSwitchModel,
+  });
 
   /// General-purpose, model-agnostic starters. Kept short and concrete so a
   /// small on-device model gives a satisfying first answer. First entry
@@ -142,7 +169,89 @@ class SuggestedPrompts extends StatelessWidget {
             _StarterCard(starter: starter, onTap: () => onSelect(starter.text)),
             SizedBox(height: tokens.spacing.sm),
           ],
+          if (_visionHint case final hint?) ...[
+            SizedBox(height: tokens.spacing.xs),
+            hint,
+          ],
         ],
+      ),
+    );
+  }
+
+  /// The one-line "you can analyze photos" hint, shaped to the user's current
+  /// model state, or null when there's nothing actionable to show (or the
+  /// screen didn't wire the navigation callbacks). Makes the advertised vision
+  /// value reachable from the empty chat instead of a dead promise.
+  Widget? get _visionHint {
+    if (isMultimodal) {
+      // Composer already shows the attach button — just point at it.
+      return const _VisionHint(
+        text: 'Tap the photo button below to analyze an image.',
+      );
+    }
+    if (hasVisionModelInstalled && onSwitchModel != null) {
+      return _VisionHint(
+        text: 'Switch to your vision model to analyze photos',
+        onTap: onSwitchModel,
+      );
+    }
+    if (onGetVisionModel != null) {
+      return _VisionHint(
+        text: 'Get a vision model to analyze photos',
+        onTap: onGetVisionModel,
+      );
+    }
+    return null;
+  }
+}
+
+/// A calm, secondary vision hint under the suggested prompts. Tappable when
+/// [onTap] is set (routes to the library / model picker), otherwise a plain
+/// informational line (the vision model is already loaded).
+class _VisionHint extends StatelessWidget {
+  final String text;
+  final VoidCallback? onTap;
+  const _VisionHint({required this.text, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final row = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.image_outlined,
+          size: 16,
+          color: theme.colorScheme.secondary,
+        ),
+        SizedBox(width: tokens.spacing.xs),
+        Flexible(
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.secondary,
+            ),
+          ),
+        ),
+        if (onTap != null) ...[
+          SizedBox(width: tokens.spacing.xs),
+          Icon(
+            Icons.arrow_forward,
+            size: 14,
+            color: theme.colorScheme.secondary,
+          ),
+        ],
+      ],
+    );
+    if (onTap == null) return row;
+    return InkWell(
+      borderRadius: BorderRadius.circular(tokens.radius.sm),
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+        child: row,
       ),
     );
   }

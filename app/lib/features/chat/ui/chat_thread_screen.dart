@@ -16,6 +16,7 @@ import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
+import '../state/installed_models_provider.dart';
 import '../state/message_info_x.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/chat_error.dart';
@@ -223,6 +224,21 @@ class _ThreadScaffold extends ConsumerWidget {
                               onScrollToBottom();
                               controller.sendMessage(prompt);
                             },
+                            // Vision is advertised ("analyze photos") but has
+                            // no guided path from a loaded text model — surface
+                            // one, shaped to whether a vision model is already
+                            // installed.
+                            isMultimodal: state.isMultimodal,
+                            hasVisionModelInstalled:
+                                ref
+                                    .watch(installedModelsProvider)
+                                    .value
+                                    ?.any(
+                                      (m) => m.isVision && m.mmprojPath != null,
+                                    ) ??
+                                false,
+                            onGetVisionModel: () => context.push('/models'),
+                            onSwitchModel: () => _pickModel(context),
                           ),
                   )
                 : Stack(
