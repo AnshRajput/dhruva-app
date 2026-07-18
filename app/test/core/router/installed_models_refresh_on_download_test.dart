@@ -24,6 +24,8 @@ import 'package:dhruva/features/characters/state/installed_models_provider.dart'
 import 'package:dhruva/features/chat/state/installed_models_provider.dart'
     as chat_installed;
 import 'package:dhruva/features/models_hub/state/storage_controller.dart';
+import 'package:dhruva/features/playground/state/playground_installed_models_provider.dart'
+    as playground_installed;
 import 'package:dhruva/main.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -133,10 +135,20 @@ void main() {
           (await container.read(storageControllerProvider.future)).installed,
           isEmpty,
         );
+        expect(
+          await container.read(
+            playground_installed.playgroundInstalledModelsProvider.future,
+          ),
+          isEmpty,
+        );
       });
       // Hold them alive across the download, like a mounted screen would.
       container.listen(chat_installed.installedModelsProvider, (_, _) {});
       container.listen(char_installed.installedModelsProvider, (_, _) {});
+      container.listen(
+        playground_installed.playgroundInstalledModelsProvider,
+        (_, _) {},
+      );
       container.listen(storageControllerProvider, (_, _) {});
 
       // Real download → complete (writes the DB row, emits DownloadState.complete).
@@ -170,8 +182,12 @@ void main() {
           char_installed.installedModelsProvider.future,
         );
         final storage = await container.read(storageControllerProvider.future);
+        final playgroundModels = await container.read(
+          playground_installed.playgroundInstalledModelsProvider.future,
+        );
         expect(chatModels.map((m) => m.repoId), contains(request.repoId));
         expect(charModels.map((m) => m.repoId), contains(request.repoId));
+        expect(playgroundModels.map((m) => m.repoId), contains(request.repoId));
         expect(
           storage.installed.map((m) => m.repoId),
           contains(request.repoId),

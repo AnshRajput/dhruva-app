@@ -7,6 +7,7 @@ import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
@@ -68,7 +69,7 @@ void main() {
             ),
           ),
         ],
-        child: const MaterialApp(home: DownloadsScreen()),
+        child: MaterialApp(theme: AppTheme.dark, home: const DownloadsScreen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -116,12 +117,42 @@ void main() {
     );
 
     expect(find.text(request.fileName), findsOneWidget);
-    expect(find.textContaining('downloading'), findsOneWidget);
+    expect(find.textContaining('Downloading'), findsOneWidget);
+    // WS4: real percent + speed/ETA are surfaced (40% of 1000 bytes).
+    expect(find.textContaining('40%'), findsOneWidget);
     final progressBar = tester.widget<LinearProgressIndicator>(
       find.byType(LinearProgressIndicator),
     );
     expect(progressBar.value, closeTo(0.4, 0.01));
   });
+
+  testWidgets(
+    'WS4: a completed download surfaces a "Ready — start chatting" card with '
+    'a direct Start-chatting CTA',
+    (tester) async {
+      await pump(tester);
+      await settleAfter(
+        tester,
+        () => manager.enqueue(request, freeBytes: 1 << 30),
+      );
+      // Drive to completion: file on disk + a complete status update.
+      final file = File('${modelsDir.path}/${request.fileName}')
+        ..writeAsBytesSync(List<int>.filled(request.expectedSizeBytes, 7));
+      backend.filePaths[request.taskId] = file.path;
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(request.taskId, status: BackendTaskStatus.complete),
+      );
+
+      expect(find.text('Ready — start chatting'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Start chatting'),
+        findsOneWidget,
+      );
+      // It leaves the "active downloads" list (it's done, not in flight).
+      expect(find.byTooltip('Pause'), findsNothing);
+    },
+  );
 
   testWidgets('cancel calls the backend and removes the row', (tester) async {
     await pump(tester);
@@ -181,7 +212,7 @@ void main() {
     expect(find.text(request.fileName), findsOneWidget);
     expect(find.text('Retry'), findsNothing);
     expect(find.textContaining('failed'), findsNothing);
-    expect(find.textContaining('queued'), findsOneWidget);
+    expect(find.textContaining('Queued'), findsOneWidget);
   });
 
   testWidgets(

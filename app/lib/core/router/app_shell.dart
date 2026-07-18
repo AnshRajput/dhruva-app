@@ -19,6 +19,8 @@
 /// features/chat import would.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +32,8 @@ import '../../features/chat/state/installed_models_provider.dart'
     as chat_installed;
 import '../../features/models_hub/state/downloads_controller.dart';
 import '../../features/models_hub/state/storage_controller.dart';
+import '../../features/playground/state/playground_installed_models_provider.dart'
+    as playground_installed;
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -51,6 +55,7 @@ class AppShell extends ConsumerWidget {
       if (newly.isEmpty) return;
       ref.invalidate(chat_installed.installedModelsProvider);
       ref.invalidate(char_installed.installedModelsProvider);
+      ref.invalidate(playground_installed.playgroundInstalledModelsProvider);
       ref.invalidate(storageControllerProvider);
 
       // A5: an unmissable confirmation that ties the loop back to chatting —
@@ -66,14 +71,28 @@ class AppShell extends ConsumerWidget {
         }
       }
       if (model != null) {
+        final readyRepo = model.repoId;
+        final readyFile = model.fileName;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
               content: Text('${model.fileName} is ready — start chatting.'),
               action: SnackBarAction(
-                label: 'New chat',
-                onPressed: () => navigationShell.goBranch(0),
+                label: 'Start chatting',
+                // Direct CTA into a chat already LOADED with the model that
+                // just finished — resolve its drift row (invalidated fresh
+                // above) and push /chat/new with it, rather than dropping the
+                // user on the chat tab to re-pick it.
+                onPressed: () => unawaited(
+                  _openChatWith(
+                    context,
+                    ref,
+                    navigationShell,
+                    readyRepo,
+                    readyFile,
+                  ),
+                ),
               ),
             ),
           );
@@ -131,6 +150,29 @@ class AppShell extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Opens a chat loaded with the just-downloaded model. Resolves its drift row
+/// (freshly invalidated on completion) by repoId+fileName; falls back to the
+/// chat branch's own new-chat flow if the row can't be resolved yet.
+Future<void> _openChatWith(
+  BuildContext context,
+  WidgetRef ref,
+  StatefulNavigationShell navigationShell,
+  String repoId,
+  String fileName,
+) async {
+  final models = await ref.read(chat_installed.installedModelsProvider.future);
+  final id = models
+      .where((m) => m.repoId == repoId && m.fileName == fileName)
+      .map((m) => m.id)
+      .firstOrNull;
+  if (!context.mounted) return;
+  if (id != null) {
+    unawaited(context.push('/chat/new', extra: id));
+  } else {
+    navigationShell.goBranch(0);
   }
 }
 

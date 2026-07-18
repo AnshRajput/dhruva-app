@@ -1,12 +1,16 @@
 /// Downloads screen (T5 §4): active tasks with progress + pause/resume/
-/// cancel, plus a completed section reading installed models from
-/// `storageManagerProvider`.
+/// cancel, a "Ready — start chatting" section for models that finished this
+/// session (with a direct CTA into a loaded chat — WS4), plus a completed
+/// section reading installed models from `storageManagerProvider`.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/download_manager.dart';
+import '../../../data/downloads/storage_manager.dart';
 import '../state/downloads_controller.dart';
 import '../state/storage_controller.dart';
 import '../widgets/download_progress_tile.dart';
@@ -25,6 +29,7 @@ class DownloadsScreen extends ConsumerWidget {
         AsyncData(:final value) => ListView(
           children: [
             _ActiveSection(progress: value),
+            _ReadySection(progress: value),
             const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -92,6 +97,89 @@ class _ActiveSection extends ConsumerWidget {
               ref.read(downloadsControllerProvider.notifier).cancel(p.taskId),
         );
       }).toList(),
+    );
+  }
+}
+
+/// WS4: models that FINISHED downloading this session get an unmissable
+/// "Ready — start chatting" card with a button that opens a chat already
+/// loaded with that model — closing the download→chat loop without making the
+/// user hunt for the model in a picker. Voice bundles ride the same download
+/// pipeline (`sherpa-voice/` repoId) but aren't a chat pick, so they're
+/// excluded here — they surface in their own Voice tab.
+class _ReadySection extends ConsumerWidget {
+  final Map<String, DownloadProgress> progress;
+  const _ReadySection({required this.progress});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ready = progress.values
+        .where(
+          (p) =>
+              p.state == DownloadState.complete &&
+              !p.repoId.startsWith('sherpa-voice/'),
+        )
+        .toList();
+    if (ready.isEmpty) return const SizedBox.shrink();
+
+    // Resolve each finished download to its installed drift row so the CTA
+    // can open a chat with THAT exact model loaded. The Installed list is kept
+    // fresh by AppShell's invalidate-on-completion, so the row exists by now.
+    final installed =
+        ref.watch(storageControllerProvider).value?.installed ??
+        const <InstalledModelInfo>[];
+
+    return Column(
+      children: ready
+          .map(
+            (p) => _ReadyTile(
+              progress: p,
+              modelId: installed
+                  .where(
+                    (m) => m.repoId == p.repoId && m.fileName == p.fileName,
+                  )
+                  .map((m) => m.id)
+                  .firstOrNull,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _ReadyTile extends StatelessWidget {
+  final DownloadProgress progress;
+  final int? modelId;
+  const _ReadyTile({required this.progress, this.modelId});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Card(
+      margin: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.sm,
+        vertical: tokens.spacing.xs,
+      ),
+      color: tokens.success.withValues(alpha: 0.12),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.radius.md),
+        side: BorderSide(color: tokens.success.withValues(alpha: 0.35)),
+      ),
+      child: ListTile(
+        leading: Icon(Icons.check_circle, color: tokens.success),
+        title: Text(progress.fileName, overflow: TextOverflow.ellipsis),
+        subtitle: const Text('Ready — start chatting'),
+        trailing: FilledButton(
+          onPressed: () => modelId != null
+              ? context.push('/chat/new', extra: modelId)
+              // No resolved id (edge: row not yet visible) — still route into
+              // chat, where the picker lists the freshly-installed model.
+              : context.push('/chat/new'),
+          child: const Text('Start chatting'),
+        ),
+      ),
     );
   }
 }
