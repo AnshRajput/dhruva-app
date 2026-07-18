@@ -59,6 +59,26 @@ MobileSuitability mobileSuitabilityOf(String repoId) {
   return MobileSuitability.neutral;
 }
 
+/// STRICT mobile-runnable filter for the "Search all of Hugging Face
+/// (advanced)" path (PRD v0.3 WS1): drops any repo whose name encodes a
+/// parameter count > [_friendlyMaxB] (~4B). Unknown-size repos are KEPT —
+/// most small community GGUF repos don't encode a size token, so dropping the
+/// unknowns would bury good picks; the model's `filter=gguf` query already
+/// guarantees a GGUF repo, and the remaining WS1 constraints (a Q4-class
+/// quant AND total size within the device tier) are enforced at download time
+/// by `pickDefaultQuant` + the `DownloadManager` storage guard, which need the
+/// per-repo file list an HTTP-per-row filter here can't cheaply afford.
+// ponytail: name-token param cap is the cheap axis; quant/size-within-tier
+// ride the existing download-time guards rather than an HTTP call per row.
+List<T> filterMobileRunnable<T>(List<T> items, String Function(T) repoIdOf) {
+  return items
+      .where((it) {
+        final b = paramBillionsFromName(repoIdOf(it));
+        return b == null || b <= _friendlyMaxB;
+      })
+      .toList(growable: false);
+}
+
 /// Stable re-rank: known-small models float up, known-large sink, everything
 /// else keeps Hugging Face's popularity order. Sorting each page in isolation
 /// is intentional — a heuristic, not a global re-sort.

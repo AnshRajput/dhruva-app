@@ -1,0 +1,23 @@
+[
+  {
+    "id": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+    "likes": 420,
+    "downloads": 123456,
+    "tags": ["gguf", "license:llama3.2", "text-generation"],
+    "pipeline_tag": "text-generation"
+  },
+  {
+    "id": "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
+    "likes": 310,
+    "downloads": 98765,
+    "tags": ["gguf", "license:apache-2.0", "text-generation"],
+    "pipeline_tag": "text-generation"
+  },
+  {
+    "id": "bartowski/SmolLM2-1.7B-Instruct-GGUF",
+    "likes": 210,
+    "downloads": 54321,
+    "tags": ["gguf", "license:apache-2.0", "text-generation"],
+    "pipeline_tag": "text-generation"
+  }
+]

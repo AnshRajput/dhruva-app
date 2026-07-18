@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.text('Models'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Search'), findsOneWidget);
+    expect(find.text('Discover'), findsOneWidget);
     expect(find.text('Installed'), findsOneWidget);
   });
 }

@@ -20,6 +20,7 @@ import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/hf_api/default_quant.dart';
+import 'download_actions_controller.dart';
 import 'storage_controller.dart';
 
 enum ListingModelStatus {
@@ -120,6 +121,22 @@ class ListingDownloadController
             status: ListingModelStatus.failed,
             errorMessage: 'No downloadable GGUF quant in this repo.',
           ),
+        );
+        return;
+      }
+      // A vision model's GGUF is useless without its paired mmproj projector.
+      // The one-tap path must download BOTH — hand off to the existing
+      // model→projector chaining coordinator rather than enqueue the model
+      // file alone (which would leave a "needs projector" half-install). Our
+      // own `_onProgress` still tracks the model file's progress by repoId and
+      // marks the row installed on completion; the projector rides behind it.
+      if (quant.mmprojFile != null) {
+        await ref
+            .read(downloadActionsControllerProvider.notifier)
+            .enqueueVisionQuant(repoId: repoId, quant: quant, license: license);
+        _set(
+          repoId,
+          const ListingModelState(status: ListingModelStatus.downloading),
         );
         return;
       }

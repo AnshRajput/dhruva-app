@@ -30,7 +30,7 @@ ProviderContainer _containerWith(
 void main() {
   test('build() runs an empty-query search on startup', () async {
     final container = _containerWith(
-      (request) => http.Response(_fixture('search_gguf.json'), 200),
+      (request) => http.Response(_fixture('search_mobile.json'), 200),
     );
     final state = await container.read(modelSearchControllerProvider.future);
     expect(state.query, '');
@@ -40,7 +40,7 @@ void main() {
 
   test('search() replaces the results for a new query', () async {
     final container = _containerWith(
-      (request) => http.Response(_fixture('search_gguf.json'), 200),
+      (request) => http.Response(_fixture('search_mobile.json'), 200),
     );
     await container.read(modelSearchControllerProvider.future);
 
@@ -69,7 +69,7 @@ void main() {
       call++;
       if (call == 1) {
         return http.Response(
-          _fixture('search_gguf.json'),
+          _fixture('search_mobile.json'),
           200,
           headers: {
             'link':
@@ -99,7 +99,7 @@ void main() {
       call++;
       if (call == 1) {
         return http.Response(
-          _fixture('search_gguf.json'),
+          _fixture('search_mobile.json'),
           200,
           headers: {
             'link':
@@ -121,7 +121,7 @@ void main() {
 
   test('loadMore() is a no-op when there is no next cursor', () async {
     final container = _containerWith(
-      (request) => http.Response(_fixture('search_gguf.json'), 200),
+      (request) => http.Response(_fixture('search_mobile.json'), 200),
     );
     await container.read(modelSearchControllerProvider.future);
     expect(
@@ -137,12 +137,13 @@ void main() {
   });
 
   test(
-    'results are re-ranked so phone-suitable models sort above huge ones',
+    'WS1: non-mobile models are filtered out; small floats above unknown',
     () async {
       final container = _containerWith(
         (request) => http.Response(
           jsonEncode([
             {'id': 'org/Giant-70B-GGUF', 'downloads': 9999},
+            {'id': 'org/Mid-8B-GGUF', 'downloads': 8000},
             {'id': 'org/Popular-Unknown-GGUF', 'downloads': 5000},
             {'id': 'org/Tiny-1B-GGUF', 'downloads': 10},
           ]),
@@ -150,12 +151,11 @@ void main() {
         ),
       );
       final state = await container.read(modelSearchControllerProvider.future);
-      // Small floats to the top despite fewest downloads; 70B sinks to bottom
-      // despite the most downloads; unknown keeps its middle spot.
+      // 70B and 8B (both > ~4B by name) are dropped entirely; the small 1B
+      // floats above the unknown despite the fewest downloads.
       expect(state.items.map((m) => m.id).toList(), [
         'org/Tiny-1B-GGUF',
         'org/Popular-Unknown-GGUF',
-        'org/Giant-70B-GGUF',
       ]);
     },
   );
@@ -164,7 +164,7 @@ void main() {
     'refresh() re-runs the current query without blanking the list',
     () async {
       final container = _containerWith(
-        (request) => http.Response(_fixture('search_gguf.json'), 200),
+        (request) => http.Response(_fixture('search_mobile.json'), 200),
       );
       await container.read(modelSearchControllerProvider.future);
 

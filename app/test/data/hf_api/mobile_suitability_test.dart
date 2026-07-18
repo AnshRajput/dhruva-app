@@ -102,6 +102,31 @@ void main() {
     });
   });
 
+  group('filterMobileRunnable (WS1 strict ≤ ~4B advanced-search filter)', () {
+    test('drops known > 4B, keeps ≤ 4B and unknown-size repos', () {
+      final input = [
+        'org/Model-70B-GGUF', // heavy — dropped
+        'org/Model-8B-GGUF', // > 4B — dropped
+        'org/Model-4B-GGUF', // exactly 4B — kept
+        'org/Tiny-1B-GGUF', // kept
+        'org/MysteryModel-GGUF', // unknown size — kept
+        'org/Mixtral-8x7B-GGUF', // 56B MoE — dropped
+      ];
+      expect(filterMobileRunnable(input, (s) => s), [
+        'org/Model-4B-GGUF',
+        'org/Tiny-1B-GGUF',
+        'org/MysteryModel-GGUF',
+      ]);
+    });
+
+    test('empty when every model is too large', () {
+      expect(
+        filterMobileRunnable(['a/70B-GGUF', 'b/13B-GGUF'], (s) => s),
+        isEmpty,
+      );
+    });
+  });
+
   test(
     'rankByMobileSuitability floats small up, sinks large, stable middle',
     () {

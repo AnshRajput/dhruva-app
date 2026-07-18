@@ -17,6 +17,7 @@ import '../../features/characters/ui/characters_gallery_screen.dart';
 import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
+import '../../features/models_hub/ui/advanced_search_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
@@ -138,6 +139,10 @@ final appRouter = GoRouter(
         final encoded = state.pathParameters['id']!;
         return ModelDetailScreen(repoId: Uri.decodeComponent(encoded));
       },
+    ),
+    GoRoute(
+      path: '/models/search',
+      builder: (context, state) => const AdvancedSearchScreen(),
     ),
     GoRoute(
       path: '/models/downloads',

@@ -1,6 +1,9 @@
-/// Models hub home (T5 §1-2, §5): search + installed as tabs, downloads
-/// reachable from the app bar. One of the two bottom-nav destinations as of
-/// Loop 4 (see `core/router/app_shell.dart`) — `/chat` is app home now.
+/// Models hub home (PRD v0.3 WS1). The DEFAULT tab is the curated,
+/// phone-verified catalog (`CuratedTab`) — not the raw Hugging Face firehose,
+/// which is demoted to the "Search all of Hugging Face (advanced)" screen the
+/// curated tab links to. Installed + Voice are the other two tabs; downloads
+/// are reachable from the app bar. One of the bottom-nav destinations (see
+/// `core/router/app_shell.dart`).
 library;
 
 import 'dart:io';
@@ -16,16 +19,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../voice/voice_model_catalog.dart' show VoiceModelRole;
 import '../state/failure_message.dart';
-import '../state/model_search_controller.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
+import '../widgets/curated_tab.dart';
 import '../widgets/failure_view.dart';
-import '../widgets/model_list_tile.dart';
-import '../widgets/recommended_rail.dart';
 import '../widgets/voice_model_tile.dart';
 
 class ModelsHubScreen extends StatelessWidget {
@@ -47,14 +47,14 @@ class ModelsHubScreen extends StatelessWidget {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Search'),
+              Tab(text: 'Discover'),
               Tab(text: 'Installed'),
               Tab(text: 'Voice'),
             ],
           ),
         ),
         body: const TabBarView(
-          children: [_SearchTab(), _InstalledTab(), _VoiceTab()],
+          children: [CuratedTab(), _InstalledTab(), _VoiceTab()],
         ),
       ),
     );
@@ -106,170 +106,6 @@ class _VoiceTab extends ConsumerWidget {
     VoiceModelRole.asr => 'Speech-to-text',
     VoiceModelRole.tts => 'Text-to-speech voices',
   };
-}
-
-class _SearchTab extends ConsumerStatefulWidget {
-  const _SearchTab();
-
-  @override
-  ConsumerState<_SearchTab> createState() => _SearchTabState();
-}
-
-class _SearchTabState extends ConsumerState<_SearchTab> {
-  final _queryCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollCtrl.addListener(_maybeLoadMore);
-  }
-
-  @override
-  void dispose() {
-    _scrollCtrl
-      ..removeListener(_maybeLoadMore)
-      ..dispose();
-    _queryCtrl.dispose();
-    super.dispose();
-  }
-
-  void _maybeLoadMore() {
-    if (!_scrollCtrl.hasClients) return;
-    if (_scrollCtrl.position.pixels >
-        _scrollCtrl.position.maxScrollExtent - 200) {
-      ref.read(modelSearchControllerProvider.notifier).loadMore();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(modelSearchControllerProvider);
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    // mk-composer (mock.css): a soft pill on `surfaceVariant` with a hairline
-    // outline — not a boxy outlined field.
-    final pillBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(tokens.radius.full),
-      borderSide: BorderSide(color: theme.colorScheme.outlineVariant),
-    );
-
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(tokens.spacing.md),
-          child: TextField(
-            controller: _queryCtrl,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: 'Search GGUF models on Hugging Face',
-              hintStyle: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              filled: true,
-              fillColor: theme.colorScheme.surfaceContainerHighest,
-              isDense: true,
-              border: pillBorder,
-              enabledBorder: pillBorder,
-              focusedBorder: pillBorder.copyWith(
-                borderSide: BorderSide(color: theme.colorScheme.primary),
-              ),
-            ),
-            textInputAction: TextInputAction.search,
-            onSubmitted: (query) =>
-                ref.read(modelSearchControllerProvider.notifier).search(query),
-          ),
-        ),
-        Expanded(
-          child: switch (state) {
-            AsyncData(:final value) => _ResultsList(
-              state: value,
-              scrollCtrl: _scrollCtrl,
-            ),
-            AsyncError(:final error) => ErrorStateView(
-              error: error,
-              onRetry: () => ref
-                  .read(modelSearchControllerProvider.notifier)
-                  .search(_queryCtrl.text),
-            ),
-            _ => const Center(child: CircularProgressIndicator()),
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _ResultsList extends ConsumerWidget {
-  final ModelSearchState state;
-  final ScrollController scrollCtrl;
-  const _ResultsList({required this.state, required this.scrollCtrl});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Amendment 4c: the recommended rail only makes sense above an
-    // *unfiltered* view — once the user has typed a query, they've told us
-    // what they want, so it stays out of the way of real search results.
-    final showRail = state.query.isEmpty;
-
-    if (state.items.isEmpty) {
-      return Column(
-        children: [
-          if (showRail) const RecommendedRail(),
-          Expanded(
-            child: EmptyStateView(
-              message: showRail
-                  ? 'Try one of the recommended picks above, or search '
-                        'Hugging Face for something specific.'
-                  : 'No models found. Try a different search.',
-            ),
-          ),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        if (showRail) const RecommendedRail(),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () =>
-                ref.read(modelSearchControllerProvider.notifier).refresh(),
-            child: ListView.separated(
-              controller: scrollCtrl,
-              itemCount: state.items.length + (state.hasMore ? 1 : 0),
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, i) {
-                if (i >= state.items.length) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: state.loadMoreError != null
-                          ? TextButton(
-                              onPressed: () => ref
-                                  .read(modelSearchControllerProvider.notifier)
-                                  .loadMore(),
-                              child: Text(
-                                '${describeError(state.loadMoreError!)} · Tap to retry',
-                              ),
-                            )
-                          : const CircularProgressIndicator(),
-                    ),
-                  );
-                }
-                final model = state.items[i];
-                return ModelListTile(
-                  model: model,
-                  onTap: () => context.push(
-                    '/models/repo/${Uri.encodeComponent(model.id)}',
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _InstalledTab extends ConsumerWidget {
@@ -329,7 +165,7 @@ class _InstalledBody extends ConsumerWidget {
               padding: EdgeInsets.only(top: 48),
               child: EmptyStateView(
                 message:
-                    'No models installed yet. Search Hugging Face or import '
+                    'No models installed yet. Pick one from Discover or import '
                     'a local GGUF.',
                 icon: Icons.folder_open,
               ),

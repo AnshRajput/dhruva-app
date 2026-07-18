@@ -61,9 +61,13 @@ class ModelSearchController extends AsyncNotifier<ModelSearchState> {
     final result = await client.searchGgufModels(query: query);
     return ModelSearchState(
       query: query,
-      // Deprioritize obviously-too-large models (70B/34B/13B by name) so
-      // phone-suitable ones rank up within HF's own popularity order.
-      items: rankByMobileSuitability(result.items, (m) => m.id),
+      // WS1: this controller now backs the "Search all of Hugging Face
+      // (advanced)" screen only. STRICTLY drop non-mobile models (> ~4B
+      // params by name) first, then float the smallest of the survivors up.
+      items: rankByMobileSuitability(
+        filterMobileRunnable(result.items, (m) => m.id),
+        (m) => m.id,
+      ),
       nextCursor: result.nextCursor,
     );
   }
@@ -101,7 +105,10 @@ class ModelSearchController extends AsyncNotifier<ModelSearchState> {
         current.copyWith(
           items: [
             ...current.items,
-            ...rankByMobileSuitability(page.items, (m) => m.id),
+            ...rankByMobileSuitability(
+              filterMobileRunnable(page.items, (m) => m.id),
+              (m) => m.id,
+            ),
           ],
           nextCursor: page.nextCursor,
           clearNextCursor: page.nextCursor == null,

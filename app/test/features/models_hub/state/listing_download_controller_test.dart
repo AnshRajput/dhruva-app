@@ -12,6 +12,7 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/downloads/download_backend.dart';
 import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/data/downloads/fake_download_backend.dart';
+import 'package:dhruva/features/models_hub/state/download_actions_controller.dart';
 import 'package:dhruva/features/models_hub/state/listing_download_controller.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
@@ -38,6 +39,15 @@ const _sizeBytes2 = 2000;
 const _repoIdUnknownSize = 'bartowski/Test-Unknown-Size-GGUF';
 const _fileNameUnknownSize = 'Test-Unknown-Size-Q4_K_M.gguf';
 const _taskIdUnknownSize = '$_repoIdUnknownSize::$_fileNameUnknownSize';
+
+// WS1: a vision repo — model GGUF + an mmproj projector — so the one-tap
+// listing download must chain BOTH files, not leave a "needs projector"
+// half-install.
+const _repoIdVision = 'ggml-org/Test-VLM-GGUF';
+const _fileNameVision = 'Test-VLM-Q4_K_M.gguf';
+const _taskIdVision = '$_repoIdVision::$_fileNameVision';
+const _mmprojFileName = 'mmproj-Test-VLM-f16.gguf';
+const _mmprojTaskId = '$_repoIdVision::$_mmprojFileName';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -105,6 +115,26 @@ http.Response _hfResponder(http.Request request) {
       200,
     );
   }
+  // WS1 vision repo: license + a model GGUF paired with an mmproj projector.
+  if (path == '/api/models/$_repoIdVision') {
+    return http.Response(
+      jsonEncode({
+        'id': _repoIdVision,
+        'gated': false,
+        'cardData': {'license': 'apache-2.0'},
+      }),
+      200,
+    );
+  }
+  if (path == '/api/models/$_repoIdVision/tree/main') {
+    return http.Response(
+      jsonEncode([
+        {'type': 'file', 'path': _fileNameVision, 'size': 1500},
+        {'type': 'file', 'path': _mmprojFileName, 'size': 900},
+      ]),
+      200,
+    );
+  }
   return http.Response('not found', 404);
 }
 
@@ -162,6 +192,34 @@ void main() {
     // The Q4_K_M was chosen over the larger Q8_0 in the same repo.
     expect(backend.enqueuedRequests.keys, contains(_taskId));
     expect(stateFor(_repoId).status, ListingModelStatus.downloading);
+  });
+
+  test('download() on a vision repo chains the mmproj projector', () async {
+    await container.read(listingDownloadControllerProvider.future);
+    // Instantiate the pairing coordinator so its progress listener attaches
+    // before the model completes.
+    container.read(downloadActionsControllerProvider);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    await container
+        .read(listingDownloadControllerProvider.notifier)
+        .download(_repoIdVision);
+
+    // The model GGUF is enqueued first, and the row reads as downloading.
+    expect(backend.enqueuedRequests.keys, contains(_taskIdVision));
+    expect(stateFor(_repoIdVision).status, ListingModelStatus.downloading);
+
+    // Completing the model triggers the chained projector download — the fix
+    // for the "vision model downloaded without its projector" half-install.
+    File(
+      '${modelsDir.path}/$_fileNameVision',
+    ).writeAsBytesSync(List.filled(1500, 0));
+    backend.emit(
+      BackendStatusUpdate(_taskIdVision, status: BackendTaskStatus.complete),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(backend.enqueuedRequests.keys, contains(_mmprojTaskId));
   });
 
   test('tile state machine: Download → progress → Installed', () async {

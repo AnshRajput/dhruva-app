@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../data/hf_api/mobile_suitability.dart';
 import '../../../data/hf_api/models/hf_model_summary.dart';
 import '../state/listing_download_controller.dart';
-import 'download_progress_ring.dart';
 import 'license_chip.dart';
+import 'listing_download_button.dart';
 
 /// One search result row: name, downloads/likes, license + gated chips, a
 /// mobile-suitability hint, and an inline download state machine (Phase B,
@@ -68,7 +67,7 @@ class ModelListTile extends ConsumerWidget {
             ),
         ],
       ),
-      trailing: _Trailing(model: model, state: state),
+      trailing: ListingDownloadButton(repoId: model.id, displayName: model.id),
     );
   }
 
@@ -81,95 +80,6 @@ class ModelListTile extends ConsumerWidget {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return '$n';
-  }
-}
-
-class _Trailing extends ConsumerWidget {
-  final HfModelSummary model;
-  final ListingModelState state;
-  const _Trailing({required this.model, required this.state});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(listingDownloadControllerProvider.notifier);
-    switch (state.status) {
-      case ListingModelStatus.notInstalled:
-        return IconButton(
-          icon: const Icon(Icons.download_outlined),
-          tooltip: 'Download',
-          onPressed: () => notifier.download(model.id),
-        );
-      case ListingModelStatus.failed:
-        return IconButton(
-          icon: const Icon(Icons.refresh),
-          tooltip: 'Retry',
-          onPressed: () => notifier.download(model.id),
-        );
-      case ListingModelStatus.resolving:
-        return const SizedBox(
-          width: 40,
-          height: 40,
-          child: Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
-        );
-      case ListingModelStatus.downloading:
-        return DownloadProgressRing(
-          progress: state.progress,
-          onCancel: () => notifier.cancel(model.id),
-        );
-      case ListingModelStatus.installed:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              tooltip: 'Chat',
-              // QA Phase B: carry the installed model so tapping Chat starts a
-              // LOADED conversation, not a bare /chat with no model selected
-              // (the app's own model-picker flow uses `extra: <drift row id>`
-              // → ChatRouteArgs.initialModelId). A null id can't happen in the
-              // installed state, but guard rather than force-unwrap.
-              onPressed: state.installedId == null
-                  ? null
-                  : () => context.push('/chat/new', extra: state.installedId),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
-              onPressed: () => _confirmDelete(context, notifier),
-            ),
-          ],
-        );
-    }
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    ListingDownloadController notifier,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete model?'),
-        content: Text('This removes ${model.id} from this device.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await notifier.delete(model.id);
   }
 }
 
