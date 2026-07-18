@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
@@ -120,6 +121,32 @@ class ListingDownloadController
           const ListingModelState(
             status: ListingModelStatus.failed,
             errorMessage: 'No downloadable GGUF quant in this repo.',
+          ),
+        );
+        return;
+      }
+      // Real per-device RAM-tier guard (WS1). The search rows carry no file
+      // size, so this is the FIRST point we know the actual footprint — the
+      // repo's file tree is now fetched. `DownloadManager.enqueue` only guards
+      // DISK space, so without this a too-big GGUF (e.g. a 12B repo whose name
+      // encodes no "B" token and slips through the name-only search filter)
+      // would download fully and then OOM at chat-load. Refuse it up front.
+      final footprintBytes =
+          quant.file.sizeBytes + (quant.mmprojFile?.sizeBytes ?? 0);
+      final memory = await ref.read(deviceInfoServiceProvider).getMemoryInfo();
+      final tier = classifyModelTier(
+        fileSizeBytes: footprintBytes,
+        totalRamBytes: memory.totalBytes,
+      );
+      if (tier == ModelTier.notRecommended) {
+        final neededGb = (ramFloorBytesFor(footprintBytes) / (1 << 30)).round();
+        _set(
+          repoId,
+          ListingModelState(
+            status: ListingModelStatus.failed,
+            errorMessage:
+                'Too large for this phone — needs about $neededGb GB of RAM. '
+                'It likely won\'t load.',
           ),
         );
         return;

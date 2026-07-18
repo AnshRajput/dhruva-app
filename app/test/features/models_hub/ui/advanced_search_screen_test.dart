@@ -53,7 +53,7 @@ void main() {
     await _pump(tester, client);
 
     expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsOneWidget);
-    expect(find.textContaining('phone-runnable'), findsWidgets);
+    expect(find.textContaining('Fit for your phone'), findsWidgets);
   });
 
   testWidgets('strictly filters out non-mobile (> ~4B) models', (tester) async {

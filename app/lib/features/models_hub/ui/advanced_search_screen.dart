@@ -2,9 +2,11 @@
 /// demoted from the default Models experience to this explicitly-secondary
 /// screen reached from the curated tab. Results are STRICTLY filtered to
 /// mobile-runnable GGUF (`modelSearchControllerProvider` drops any repo whose
-/// name encodes > ~4B params; the Q4-class-quant + size-within-tier
-/// constraints are enforced at download time by `pickDefaultQuant` + the
-/// storage guard). One-tap download per row via `ModelListTile`.
+/// name encodes > ~4B params). The name-only filter can't catch a large repo
+/// that encodes no param token, so the real per-device fit check runs at
+/// download time: `ListingDownloadController.download` classifies the resolved
+/// quant's footprint against the device's RAM tier and refuses a model too big
+/// for this phone. One-tap download per row via `ModelListTile`.
 library;
 
 import 'package:flutter/material.dart';
@@ -118,7 +120,8 @@ class _SearchBodyState extends ConsumerState<_SearchBody> {
               SizedBox(width: tokens.spacing.xs),
               Expanded(
                 child: Text(
-                  'Showing only phone-runnable models (≤ ~4B, GGUF).',
+                  'GGUF models only; very large ones are hidden. '
+                  'Fit for your phone is checked before download.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

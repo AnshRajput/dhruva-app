@@ -164,6 +164,53 @@ void main() {
     expect(withQuant, withoutQuant);
   });
 
+  group('nominalRamBytes — recover marketed capacity from OS-reported RAM', () {
+    // The bug: a nominal 4GB phone reports ~3.6-3.9 GiB (ActivityManager
+    // totalMem), which sits BELOW the 4 GiB 1B-floor, so the whole curated
+    // catalog read "Not recommended". Rounding up to the next whole GiB lands
+    // back on the marketed tier so a 4GB phone clears the 4 GiB floor.
+    test('a 3.7 GiB reading (nominal 4GB) rounds up to 4 GiB', () {
+      final reported = (3.7 * _gib).round();
+      expect(nominalRamBytes(reported), 4 * _gib);
+    });
+
+    test(
+      'a 3.5 GiB reading (worst-case 4GB carve-out) still rounds to 4 GiB',
+      () {
+        final reported = (3.5 * _gib).round();
+        expect(nominalRamBytes(reported), 4 * _gib);
+      },
+    );
+
+    test('a 5.6 GiB reading (nominal 6GB) rounds up to 6 GiB', () {
+      final reported = (5.6 * _gib).round();
+      expect(nominalRamBytes(reported), 6 * _gib);
+    });
+
+    test('a 7.5 GiB reading (nominal 8GB) rounds up to 8 GiB', () {
+      final reported = (7.5 * _gib).round();
+      expect(nominalRamBytes(reported), 8 * _gib);
+    });
+
+    test('an exact whole-GiB reading is unchanged', () {
+      expect(nominalRamBytes(4 * _gib), 4 * _gib);
+    });
+
+    test('after normalization a 4GB phone reads a tiny model as possible', () {
+      const qwenHalfB = 397808192; // ~379 MB, the smallest curated model
+      final ram = nominalRamBytes((3.7 * _gib).round());
+      expect(
+        classifyModelTier(fileSizeBytes: qwenHalfB, totalRamBytes: ram),
+        ModelTier.possible,
+      );
+    });
+
+    test('zero/negative readings pass through untouched', () {
+      expect(nominalRamBytes(0), 0);
+      expect(nominalRamBytes(-1), -1);
+    });
+  });
+
   test('zero-byte file classifies as 1B-class and floor still applies', () {
     expect(
       classifyModelTier(fileSizeBytes: 0, totalRamBytes: 4 * _gib),

@@ -20,6 +20,21 @@ class _StubController extends ListingDownloadController {
   Future<Map<String, ListingModelState>> build() async => {};
 }
 
+/// Seeds a single repo in the `failed` state so the card's error-surface path
+/// is exercised.
+class _FailedController extends ListingDownloadController {
+  _FailedController(this.repoId, this.message);
+  final String repoId;
+  final String message;
+  @override
+  Future<Map<String, ListingModelState>> build() async => {
+    repoId: ListingModelState(
+      status: ListingModelStatus.failed,
+      errorMessage: message,
+    ),
+  };
+}
+
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
@@ -105,6 +120,32 @@ void main() {
     await tester.tap(find.text('Search all of Hugging Face (advanced)'));
     await tester.pumpAndSettle();
     expect(find.text('advanced-search'), findsOneWidget);
+  });
+
+  testWidgets('a failed one-tap download shows its reason on the card', (
+    tester,
+  ) async {
+    final model = starterModelCatalog.first;
+    const reason =
+        'Gated on Hugging Face — requires sign-in, not supported '
+        'yet.';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listingDownloadControllerProvider.overrideWith(
+            () => _FailedController(model.repoId, reason),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: CuratedModelCard(model: model, totalRamBytes: 8000000000),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(reason), findsOneWidget);
   });
 
   testWidgets('a vision entry carries a Vision badge', (tester) async {

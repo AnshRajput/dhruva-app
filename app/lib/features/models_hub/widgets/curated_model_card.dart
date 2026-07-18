@@ -7,15 +7,17 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../state/listing_download_controller.dart';
 import '../state/recommended_models_provider.dart';
 import 'listing_download_button.dart';
 import 'verdict_chip.dart';
 
-class CuratedModelCard extends StatelessWidget {
+class CuratedModelCard extends ConsumerWidget {
   final StarterModel model;
 
   /// Device RAM, or null while the reading is loading — the card still shows
@@ -29,10 +31,21 @@ class CuratedModelCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final ram = totalRamBytes;
+
+    // Surface a failed one-tap download's reason on the card itself — the
+    // trailing button collapses to a bare Retry icon otherwise, leaving a
+    // gated/no-quant/too-big failure with no explanation (the search row
+    // renders this same message; the curated card must not be the dead end).
+    final dl = ref
+        .watch(listingDownloadControllerProvider)
+        .value?[model.repoId];
+    final errorMessage = dl?.status == ListingModelStatus.failed
+        ? dl?.errorMessage
+        : null;
     final tier = ram == null
         ? null
         : classifyModelTier(
@@ -106,6 +119,15 @@ class CuratedModelCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (errorMessage != null) ...[
+                      SizedBox(height: tokens.spacing.xs),
+                      Text(
+                        errorMessage,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

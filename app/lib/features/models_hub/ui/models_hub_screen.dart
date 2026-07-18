@@ -22,6 +22,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../voice/voice_model_catalog.dart' show VoiceModelRole;
 import '../state/failure_message.dart';
+import '../state/recommended_models_provider.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
 import '../widgets/curated_tab.dart';
@@ -173,10 +174,16 @@ class _InstalledBody extends ConsumerWidget {
           else
             ...state.installed.map(
               (m) => ListTile(
-                title: Text(m.repoId, overflow: TextOverflow.ellipsis),
+                // WS1: a model downloaded from the curated Discover catalog must
+                // NOT revert to its cryptic repo id here. Resolve the friendly
+                // name from the starter catalog; fall back to the repo id for
+                // models imported or found via advanced HF search.
+                title: Text(
+                  _friendlyNamesByRepo[m.repoId] ?? m.repoId,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Text(
-                  '${m.fileName} · ${_formatBytes(m.sizeBytes)}'
-                  '${m.quant != null ? ' · ${m.quant}' : ''}',
+                  '${m.quant ?? m.fileName} · ${_formatBytes(m.sizeBytes)}',
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -243,6 +250,13 @@ class _InstalledBody extends ConsumerWidget {
         .importLocal(File(picked.path));
   }
 }
+
+/// Friendly display name per curated repo id, so the Installed tab shows the
+/// same name Discover used instead of the raw HF repo path. Built once from the
+/// const catalog.
+final _friendlyNamesByRepo = {
+  for (final m in starterModelCatalog) m.repoId: m.displayName,
+};
 
 String _formatBytes(int bytes) {
   if (bytes >= 1024 * 1024 * 1024) {

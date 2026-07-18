@@ -290,6 +290,72 @@ void main() {
     expect(backend.enqueuedRequests, isEmpty);
   });
 
+  // WS1: a model too large for the device's RAM is refused at download time —
+  // the real per-device guard the search filter's name-only param cap can't
+  // provide (a big repo encoding no "B" token slips through). Enqueue never
+  // happens, so no multi-GB download lands only to OOM at chat-load.
+  test('download() refuses a model too large for this phone\'s RAM', () async {
+    const bigRepoId = 'bartowski/Huge-Model-GGUF';
+    const bigFileName = 'Huge-Model-Q4_K_M.gguf';
+    const gib = 1024 * 1024 * 1024;
+    container.dispose();
+    container = ProviderContainer(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        deviceInfoServiceProvider.overrideWithValue(
+          const FakeDeviceInfoService(
+            memory: DeviceMemoryInfo(
+              totalBytes: 4 * gib,
+              availableBytes: 2 * gib,
+            ),
+            storage: DeviceStorageInfo(
+              totalBytes: 256000000000,
+              freeBytes: 200000000000,
+            ),
+          ),
+        ),
+        modelsDirectoryProvider.overrideWith((ref) async => modelsDir),
+        downloadManagerProvider.overrideWith((ref) async => manager),
+        hfApiClientProvider.overrideWithValue(
+          mockHfClient(
+            MockClient((r) async {
+              final path = r.url.path;
+              if (path == '/api/models/$bigRepoId') {
+                return http.Response(
+                  jsonEncode({
+                    'id': bigRepoId,
+                    'gated': false,
+                    'cardData': {'license': 'apache-2.0'},
+                  }),
+                  200,
+                );
+              }
+              if (path == '/api/models/$bigRepoId/tree/main') {
+                return http.Response(
+                  jsonEncode([
+                    // ~4.7 GiB → 4B+ class, 8 GiB floor, above the 4 GiB phone.
+                    {'type': 'file', 'path': bigFileName, 'size': 5000000000},
+                  ]),
+                  200,
+                );
+              }
+              return http.Response('not found', 404);
+            }),
+          ),
+        ),
+      ],
+    );
+
+    await container.read(listingDownloadControllerProvider.future);
+    await container
+        .read(listingDownloadControllerProvider.notifier)
+        .download(bigRepoId);
+
+    expect(stateFor(bigRepoId).status, ListingModelStatus.failed);
+    expect(stateFor(bigRepoId).errorMessage, contains('RAM'));
+    expect(backend.enqueuedRequests, isEmpty);
+  });
+
   test('build() seeds Installed for a model already on disk', () async {
     await db.upsertInstalledModel(
       InstalledModelsCompanion.insert(

@@ -66,3 +66,22 @@ int ramFloorBytesFor(int fileSizeBytes) {
   if (fileSizeBytes <= _class3BMaxBytes) return _floor3BBytes;
   return _floor4BPlusBytes;
 }
+
+const _gibBytes = 1024 * 1024 * 1024;
+
+/// Recovers a device's *nominal* RAM capacity from the OS-reported physical
+/// RAM, for use as [classifyModelTier]'s `totalRamBytes`.
+///
+/// `ActivityManager.totalMem` / `NSProcessInfo.physicalMemory` report LESS than
+/// the marketed capacity — the kernel and reserved (GPU/DMA) carve-outs eat
+/// ~5-20% — so a nominal 4GB phone reads only ~3.6-3.9 GiB. The floors above
+/// are written against MARKETED capacity (DECISIONS.md "1B → 4GB"), so a raw
+/// reading sits just under its own floor and classifies EVERY model
+/// `notRecommended`. Round the reading up to the next whole GiB to undo the
+/// carve-out and land back on the marketed tier (4/6/8/12 GiB).
+// ponytail: whole-GiB ceil recovers the standard tiers; only needs a real
+// nominal-capacity table if a device's carve-out ever exceeds ~1 GiB.
+int nominalRamBytes(int reportedBytes) {
+  if (reportedBytes <= 0) return reportedBytes;
+  return ((reportedBytes + _gibBytes - 1) ~/ _gibBytes) * _gibBytes;
+}

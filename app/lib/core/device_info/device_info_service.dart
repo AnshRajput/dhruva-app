@@ -2,6 +2,8 @@ import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
 
+import 'model_tier.dart' show nominalRamBytes;
+
 /// Total + available RAM, in bytes. `availableBytes` is a point-in-time
 /// reading (the OS reclaims/allocates continuously) — only `totalBytes` is
 /// used for [ModelTier] classification; `availableBytes` is informational.
@@ -45,16 +47,21 @@ final class PluginDeviceInfoService implements DeviceInfoService {
 
   @override
   Future<DeviceMemoryInfo> getMemoryInfo() async {
+    // `totalBytes` is rounded up to the marketed capacity via
+    // [nominalRamBytes]: ActivityManager/NSProcessInfo under-report physical
+    // RAM by the kernel + reserved carve-outs, and model_tier's floors are
+    // written against marketed capacity. `availableBytes` stays raw — it's an
+    // informational live reading, not tiered against a floor.
     if (Platform.isAndroid) {
       final info = await _plugin.androidInfo;
       return DeviceMemoryInfo(
-        totalBytes: info.physicalRamSize * _bytesPerMb,
+        totalBytes: nominalRamBytes(info.physicalRamSize * _bytesPerMb),
         availableBytes: info.availableRamSize * _bytesPerMb,
       );
     }
     final info = await _plugin.iosInfo;
     return DeviceMemoryInfo(
-      totalBytes: info.physicalRamSize * _bytesPerMb,
+      totalBytes: nominalRamBytes(info.physicalRamSize * _bytesPerMb),
       availableBytes: info.availableRamSize * _bytesPerMb,
     );
   }

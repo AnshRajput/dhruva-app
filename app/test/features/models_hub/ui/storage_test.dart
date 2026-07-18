@@ -74,7 +74,9 @@ void main() {
     await tester.tap(find.text('Installed'));
     await tester.pumpAndSettle();
 
-    expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsOneWidget);
+    // WS1: a curated repo shows its FRIENDLY name here, not the raw repo id.
+    expect(find.text('Llama 3.2 1B Instruct'), findsOneWidget);
+    expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsNothing);
 
     await tester.tap(find.byIcon(Icons.delete_outline));
     await tester.pumpAndSettle();
@@ -90,7 +92,7 @@ void main() {
     });
     await tester.pumpAndSettle();
 
-    expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsNothing);
+    expect(find.text('Llama 3.2 1B Instruct'), findsNothing);
     expect(await db.select(db.installedModels).get(), isEmpty);
     expect(modelFile.existsSync(), isFalse);
   });
