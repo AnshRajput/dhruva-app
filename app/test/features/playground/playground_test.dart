@@ -35,6 +35,10 @@ Future<ProviderContainer> _pump(
   WidgetTester tester, {
   required List<Override> overrides,
 }) async {
+  // Tall surface so the whole compare column (cards → sliders → result
+  // columns) is built by the lazy ListView; on a real phone this scrolls.
+  await tester.binding.setSurfaceSize(const Size(800, 2400));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
   final container = ProviderContainer(overrides: overrides);
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -71,12 +75,16 @@ void main() {
         ],
       );
 
+      // One-line value explainer is present.
+      expect(find.textContaining('One prompt, two models'), findsOneWidget);
       // Both models named (model cards). At least one occurrence each.
       expect(find.textContaining('Llama-3.2-1B-Instruct'), findsWidgets);
       expect(find.textContaining('Qwen2.5-1.5B-Instruct'), findsWidgets);
       expect(find.text('Run on both'), findsOneWidget);
       expect(find.text('Temperature'), findsOneWidget);
       expect(find.byType(Slider), findsNWidgets(3));
+      // No winner badge before a run.
+      expect(find.text('Fastest'), findsNothing);
     });
 
     testWidgets('runs one prompt through BOTH models', (tester) async {
@@ -98,6 +106,8 @@ void main() {
       // Both columns produced the fake reply and finished.
       expect(find.text('Hi there'), findsNWidgets(2));
       expect(find.textContaining('done'), findsNWidgets(2));
+      // Winner-ish framing: exactly one column is marked fastest once both done.
+      expect(find.text('Fastest'), findsOneWidget);
       final state = container.read(playgroundControllerProvider);
       expect(state.isRunning, isFalse);
       expect(state.runA.status, RunStatus.done);

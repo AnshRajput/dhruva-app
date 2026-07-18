@@ -195,9 +195,27 @@ class _CompareBody extends ConsumerWidget {
       models.firstWhere((m) => m.id != modelA.id, orElse: () => models[1]),
     );
 
+    // Winner-ish framing: once BOTH columns finish, mark the faster one. It's
+    // an honest speed verdict (tok/s), not a quality judgement the app can't
+    // make. Ties (or 0/0) go to A so exactly one badge ever shows.
+    final bothDone =
+        state.runA.status == RunStatus.done &&
+        state.runB.status == RunStatus.done;
+    final aFastest =
+        bothDone && state.runA.finalTokPerSec >= state.runB.finalTokPerSec;
+    final bFastest = bothDone && !aFastest;
+
     return ListView(
       padding: EdgeInsets.all(tokens.spacing.md),
       children: [
+        Text(
+          'One prompt, two models, side by side — compare their speed and '
+          'answers, then keep the one you like.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        SizedBox(height: tokens.spacing.md),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -300,6 +318,7 @@ class _CompareBody extends ConsumerWidget {
                   model: modelA,
                   slot: state.runA,
                   accent: theme.colorScheme.primary,
+                  isFastest: aFastest,
                 ),
               ),
               SizedBox(width: tokens.spacing.sm),
@@ -308,6 +327,7 @@ class _CompareBody extends ConsumerWidget {
                   model: modelB,
                   slot: state.runB,
                   accent: theme.colorScheme.secondary,
+                  isFastest: bFastest,
                 ),
               ),
             ],
@@ -424,10 +444,14 @@ class _ResultColumn extends StatelessWidget {
   final InstalledModelInfo model;
   final RunSlot slot;
   final Color accent;
+
+  /// True on the column that finished with the higher tok/s once both are done.
+  final bool isFastest;
   const _ResultColumn({
     required this.model,
     required this.slot,
     required this.accent,
+    this.isFastest = false,
   });
 
   @override
@@ -440,16 +464,25 @@ class _ResultColumn extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(tokens.radius.md),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        border: Border.all(
+          color: isFastest ? accent : theme.colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _shortName(model),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelMedium?.copyWith(color: accent),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _shortName(model),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(color: accent),
+                ),
+              ),
+              if (isFastest) _FastestBadge(accent: accent),
+            ],
           ),
           SizedBox(height: tokens.spacing.xs),
           Row(
@@ -499,6 +532,42 @@ class _ResultColumn extends StatelessWidget {
     RunStatus.cancelled => 'Stopped',
     RunStatus.error => slot.error ?? 'Error',
   };
+}
+
+/// Small pill on the faster column once both runs finish ("winner-ish").
+class _FastestBadge extends StatelessWidget {
+  final Color accent;
+  const _FastestBadge({required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.xs,
+        vertical: tokens.spacing.xs / 2,
+      ),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(tokens.radius.full),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt, size: 12, color: accent),
+          SizedBox(width: tokens.spacing.xs / 2),
+          Text(
+            'Fastest',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SliderRow extends StatelessWidget {
@@ -570,7 +639,9 @@ class _AiNewsTab extends ConsumerWidget {
       children: [
         switch (digest) {
           AsyncData(:final value) when value == null => _DigestCard(
-            subtitle: 'Fetch a fresh list of small GGUF models · opt-in digest',
+            subtitle:
+                'Discover fresh sub-2B models that run on your phone · '
+                'fetched from Hugging Face only when you tap',
             trailing: FilledButton(
               onPressed: controller.load,
               child: const Text('Load'),
@@ -614,6 +685,20 @@ class _DigestLoaded extends StatelessWidget {
         _DigestCard(subtitle: subtitle),
         SizedBox(height: tokens.spacing.sm),
         for (final m in items) _NewsItem(model: m),
+        if (items.isNotEmpty) ...[
+          SizedBox(height: tokens.spacing.xs),
+          Builder(
+            builder: (context) {
+              final theme = Theme.of(context);
+              return Text(
+                'Tap a model to preview and install it.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              );
+            },
+          ),
+        ],
       ],
     );
   }
