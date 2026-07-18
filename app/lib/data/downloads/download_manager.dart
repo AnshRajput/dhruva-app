@@ -58,6 +58,15 @@ final class DownloadProgress {
   /// `_ReadySection` and `AppShell`'s completion listener.
   final bool registerAsInstalledModel;
 
+  /// Mirrors [DownloadRequest.isVision]: true for a vision model's own GGUF.
+  /// Such a model is NOT chat-ready the instant this file completes — its
+  /// mmproj projector still has to download + attach (see
+  /// `download_actions_controller.dart`'s `enqueueVisionQuant`). The "Ready —
+  /// start chatting" surfaces (`_ReadySection`, `AppShell`) use this to hold
+  /// the Ready announcement until the projector has landed, so a vision model
+  /// never reads "Ready" while its projector is missing (vision broken).
+  final bool isVision;
+
   const DownloadProgress({
     required this.taskId,
     required this.repoId,
@@ -70,6 +79,7 @@ final class DownloadProgress {
     this.networkSpeedMBs = -1,
     this.timeRemaining = const Duration(seconds: -1),
     this.registerAsInstalledModel = true,
+    this.isVision = false,
   });
 
   /// A compact "3.1 MB/s · 0:45 left" line, or null when neither estimate is
@@ -241,9 +251,37 @@ final class DownloadManager {
   /// `enqueue` — `downloadManagerProvider` does this.
   Future<void> init() async {
     final rehydrated = await _backend.rehydrate();
+
+    // Dedup guard (WS4): the plugin's persistent DB keeps EVERY tracked task,
+    // including models installed in prior sessions, and `flushMissedUpdates`
+    // re-delivers their `complete`. Without this, `_handleUpdate` would find
+    // them in `_active` and re-run `_completeDownload` — re-streaming sha256
+    // over the entire multi-GB GGUF on every launch and re-emitting `complete`,
+    // which the UI reads as a brand-new completion (spurious "Ready" cards +
+    // "start chatting" SnackBars for old models). A file is already accounted
+    // for when its `installed_models` row exists (a model), or when it's been
+    // attached as some model's mmproj projector (a projector has no row of its
+    // own). Skip those; genuinely-pending or completed-but-unregistered tasks
+    // (the orphan-file case this whole flow exists to fix) still get tracked.
+    // ponytail: on-device verification of background_downloader's re-delivery
+    // semantics is still owed — see orchestra/RISKS.md.
+    final installedRows = await _db.select(_db.installedModels).get();
+    final installedKeys = installedRows
+        .map((r) => '${r.repoId}::${r.fileName}')
+        .toSet();
+    final attachedProjectors = installedRows
+        .map((r) => r.mmprojPath)
+        .whereType<String>()
+        .map(p.basename)
+        .toSet();
+
     for (final task in rehydrated) {
       final request = DownloadRequest._decodeMetaData(task.metaData);
       if (request == null) continue;
+      final alreadyInstalled = request.registerAsInstalledModel
+          ? installedKeys.contains(request.taskId)
+          : attachedProjectors.contains(request.fileName);
+      if (alreadyInstalled) continue;
       _active[task.taskId] = request;
     }
     await _backend.flushMissedUpdates();
@@ -527,6 +565,7 @@ final class DownloadManager {
         networkSpeedMBs: networkSpeedMBs,
         timeRemaining: timeRemaining,
         registerAsInstalledModel: request.registerAsInstalledModel,
+        isVision: request.isVision,
       ),
     );
   }

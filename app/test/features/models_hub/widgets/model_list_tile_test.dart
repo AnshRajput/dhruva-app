@@ -73,9 +73,10 @@ void main() {
       find.byType(CircularProgressIndicator),
     );
     expect(ring.value, closeTo(0.5, 0.001));
-    // The ring shows the live percentage and taps-to-cancel.
-    expect(find.text('50%'), findsOneWidget);
-    expect(find.byTooltip('Tap to cancel'), findsOneWidget);
+    // The ring shows progress; cancel is a DISTINCT X target, not the whole
+    // ring (WS4: a tap on the progress ring must not silently kill a download).
+    expect(find.byTooltip('Cancel download'), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsOneWidget);
     expect(find.byTooltip('Download'), findsNothing);
   });
 

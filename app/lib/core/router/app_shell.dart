@@ -60,19 +60,40 @@ class AppShell extends ConsumerWidget {
       ref.invalidate(storageControllerProvider);
 
       // A5: an unmissable confirmation that ties the loop back to chatting —
-      // but only for chat-usable GGUF models. Voice bundles ride the same
-      // download pipeline (sherpa-voice/ repoId) yet aren't a chat pick; they
-      // have their own Voice tab, so don't tell the user to "start chatting".
-      // A vision model's mmproj projector rides the pipeline too
-      // (registerAsInstalledModel: false) but has no chat-loadable row — skip
-      // it, else the user gets a second cryptic SnackBar into a model-less chat.
+      // but only for chat-usable GGUF models that are FULLY ready. Voice
+      // bundles ride the same download pipeline (sherpa-voice/ repoId) yet
+      // aren't a chat pick; they have their own Voice tab, so don't tell the
+      // user to "start chatting".
+      //
+      // Vision (WS4): a vision model's GGUF completing does NOT make it
+      // chat-ready — its mmproj projector still has to download + attach. So
+      // announce a vision model only when its PROJECTOR completes (both files
+      // on disk), not when the model file alone finishes. The projector rides
+      // the pipeline with registerAsInstalledModel: false and shares the
+      // model's repoId, so on its completion we resolve the paired,
+      // already-complete model file from the accumulated map.
+      final map = next.value ?? const <String, DownloadProgress>{};
       DownloadProgress? model;
       for (final id in newly) {
-        final p = next.value?[id];
-        if (p != null &&
-            p.registerAsInstalledModel &&
-            !p.repoId.startsWith('sherpa-voice/')) {
+        final p = map[id];
+        if (p == null || p.repoId.startsWith('sherpa-voice/')) continue;
+        if (p.registerAsInstalledModel) {
+          if (p.isVision) continue; // wait for the projector, below.
           model = p;
+          break;
+        }
+        // A projector just landed → the paired vision model is now ready.
+        final paired = map.values
+            .where(
+              (m) =>
+                  m.repoId == p.repoId &&
+                  m.isVision &&
+                  m.registerAsInstalledModel &&
+                  m.state == DownloadState.complete,
+            )
+            .firstOrNull;
+        if (paired != null) {
+          model = paired;
           break;
         }
       }

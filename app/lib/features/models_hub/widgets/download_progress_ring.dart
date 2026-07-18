@@ -9,9 +9,17 @@ import 'package:flutter/material.dart';
 /// through it, don't fix each row):
 ///  - tap target: the cancel button used to collapse to ~16px
 ///    (`EdgeInsets.zero` + empty `BoxConstraints`). A default `IconButton`
-///    inside a 48×48 box keeps the ≥44px hit target.
-///  - a11y: a bare `CircularProgressIndicator` announces nothing.
-///    `Semantics(label/value)` makes a screen reader say "Downloading, 50%".
+///    keeps the ≥44px hit target.
+///  - a11y: a bare `CircularProgressIndicator` announces nothing. A
+///    `Semantics` label on the ring makes a screen reader say "Downloading,
+///    50%", separately from the cancel button.
+///
+/// WS4 fix: cancel is a DISTINCT centred X, not the whole ring. The old
+/// design wired the entire ring's `onTap` straight to cancel and rendered a
+/// passive centred percent, so a first-time user watching progress would tap
+/// the ring and silently kill a several-hundred-MB download with no undo.
+/// Now the ring only shows progress; the explicit X (mirroring the Downloads
+/// screen's cancel affordance) is the sole destructive target.
 class DownloadProgressRing extends StatelessWidget {
   /// 0..1. 0 (or unknown total) renders an indeterminate spinner.
   final double progress;
@@ -25,44 +33,29 @@ class DownloadProgressRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final clamped = progress.clamp(0.0, 1.0);
     final indeterminate = clamped == 0;
     final pct = (clamped * 100).round();
-    return Semantics(
-      button: true,
-      label: 'Cancel download',
-      value: indeterminate ? 'in progress' : '$pct%',
-      child: Tooltip(
-        message: 'Tap to cancel',
-        // The whole 48×48 ring is the cancel target (≥44px). The centre shows
-        // the live percentage so progress is visible on screen, not just to a
-        // screen reader.
-        child: InkWell(
-          onTap: onCancel,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: indeterminate ? null : clamped,
-                  strokeWidth: 3,
-                ),
-                if (!indeterminate)
-                  Text(
-                    '$pct%',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-              ],
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Semantics(
+            label: indeterminate ? 'Downloading' : 'Downloading, $pct%',
+            child: CircularProgressIndicator(
+              value: indeterminate ? null : clamped,
+              strokeWidth: 3,
             ),
           ),
-        ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            iconSize: 18,
+            tooltip: 'Cancel download',
+            onPressed: onCancel,
+          ),
+        ],
       ),
     );
   }

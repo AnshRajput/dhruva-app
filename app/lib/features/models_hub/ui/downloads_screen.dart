@@ -118,22 +118,28 @@ class _ReadySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ready = progress.values
-        .where(
-          (p) =>
-              p.state == DownloadState.complete &&
-              p.registerAsInstalledModel &&
-              !p.repoId.startsWith('sherpa-voice/'),
-        )
-        .toList();
-    if (ready.isEmpty) return const SizedBox.shrink();
-
     // Resolve each finished download to its installed drift row so the CTA
     // can open a chat with THAT exact model loaded. The Installed list is kept
     // fresh by AppShell's invalidate-on-completion, so the row exists by now.
     final installed =
         ref.watch(storageControllerProvider).value?.installed ??
         const <InstalledModelInfo>[];
+
+    final ready = progress.values
+        .where(
+          (p) =>
+              p.state == DownloadState.complete &&
+              p.registerAsInstalledModel &&
+              !p.repoId.startsWith('sherpa-voice/') &&
+              // A vision model's GGUF completing does NOT make it chat-ready —
+              // its mmproj projector still has to land. Hold the "Ready" card
+              // until the installed row shows the projector attached
+              // (!needsProjector); the row re-reads when the projector's own
+              // completion invalidates storageController, flipping this true.
+              _visionProjectorReady(p, installed),
+        )
+        .toList();
+    if (ready.isEmpty) return const SizedBox.shrink();
 
     return Column(
       children: ready
@@ -150,6 +156,20 @@ class _ReadySection extends ConsumerWidget {
           )
           .toList(),
     );
+  }
+
+  /// True unless [p] is a vision model still missing its projector: a
+  /// non-vision download is always ready; a vision one is ready only once its
+  /// installed row exists AND has the mmproj attached.
+  static bool _visionProjectorReady(
+    DownloadProgress p,
+    List<InstalledModelInfo> installed,
+  ) {
+    if (!p.isVision) return true;
+    final row = installed
+        .where((m) => m.repoId == p.repoId && m.fileName == p.fileName)
+        .firstOrNull;
+    return row != null && !row.needsProjector;
   }
 }
 

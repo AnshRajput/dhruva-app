@@ -774,6 +774,55 @@ void main() {
       },
     );
 
+    test('init() does NOT re-track (re-verify + re-emit) a task already '
+        'installed in a prior session — the plugin DB keeps completed records, '
+        'and re-processing would re-sha the multi-GB file + fire a spurious '
+        '"Ready"/complete on every cold start', () async {
+      final r = req();
+      // Model was fully downloaded + registered last session: its plugin
+      // record survives (persistentState) AND its installed_models row does.
+      await manager.enqueue(r, freeBytes: 1 << 30);
+      await db.upsertInstalledModel(
+        InstalledModelsCompanion.insert(
+          repoId: r.repoId,
+          fileName: r.fileName,
+          sizeBytes: 5,
+          localPath: '${modelsDir.path}/${r.fileName}',
+          downloadedAt: DateTime.now(),
+        ),
+      );
+      await manager.dispose();
+
+      final backendB = FakeDownloadBackend(
+        persistentState: backend.persistentState,
+      );
+      // The plugin replays the completion on cold start, as
+      // resumeFromBackground would for a still-tracked terminal task.
+      backend.persistentState.missedUpdates.add(
+        BackendStatusUpdate(r.taskId, status: BackendTaskStatus.complete),
+      );
+      final managerB = DownloadManager(
+        backend: backendB,
+        db: db,
+        modelsDirectory: modelsDir,
+      );
+      addTearDown(managerB.dispose);
+
+      final events = <DownloadProgress>[];
+      final sub = managerB.progress.listen(events.add);
+      await managerB.init();
+      await Future<void>.delayed(Duration.zero);
+      await sub.cancel();
+
+      // No re-emit at all: the already-installed task was never re-added to
+      // _active, so the replayed `complete` is dropped as unrecognized.
+      expect(events.where((e) => e.state == DownloadState.complete), isEmpty);
+      expect(events.where((e) => e.state == DownloadState.verifying), isEmpty);
+      // And no duplicate drift row got written.
+      final rows = await db.select(db.installedModels).get();
+      expect(rows, hasLength(1));
+    });
+
     test(
       'enqueue persists metaData that decodes back to an equivalent request',
       () async {

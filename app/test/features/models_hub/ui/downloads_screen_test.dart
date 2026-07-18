@@ -192,6 +192,42 @@ void main() {
     },
   );
 
+  testWidgets(
+    'WS4: a vision model whose GGUF finished but whose projector has NOT '
+    'landed does NOT read "Ready" — it is still the needs-projector '
+    'half-state (isVision + mmprojPath null), so announcing it would open a '
+    'vision-broken chat',
+    (tester) async {
+      final visionModel = DownloadRequest(
+        repoId: 'ggml-org/SmolVLM2-2.2B-Instruct-GGUF',
+        fileName: 'SmolVLM2-2.2B-Instruct-Q4_K_M.gguf',
+        url: Uri.parse('https://huggingface.co/x/resolve/main/model.gguf'),
+        expectedSizeBytes: 1000,
+        isVision: true,
+      );
+      await pump(tester);
+      await settleAfter(
+        tester,
+        () => manager.enqueue(visionModel, freeBytes: 1 << 30),
+      );
+      final file = File('${modelsDir.path}/${visionModel.fileName}')
+        ..writeAsBytesSync(List<int>.filled(visionModel.expectedSizeBytes, 7));
+      backend.filePaths[visionModel.taskId] = file.path;
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(
+          visionModel.taskId,
+          status: BackendTaskStatus.complete,
+        ),
+      );
+
+      // The model IS installed (row written, needsProjector == true), but the
+      // Ready card is withheld until the projector attaches.
+      expect(find.text('Ready — start chatting'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Start chatting'), findsNothing);
+    },
+  );
+
   testWidgets('cancel calls the backend and removes the row', (tester) async {
     await pump(tester);
     await settleAfter(
