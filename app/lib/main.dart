@@ -46,6 +46,9 @@ class DhruvaApp extends StatelessWidget {
     // Theme.of(context)'s semantic roles, so both modes light up unchanged.
     return MaterialApp.router(
       title: 'Dhruva',
+      // The debug ribbon otherwise lands in every debug-build capture, which
+      // makes store screenshots and design review unusable.
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,

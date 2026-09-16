@@ -1,9 +1,18 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) FileInputStream(keystorePropertiesFile).use { load(it) }
+}
+val hasUploadKey = keystorePropertiesFile.exists()
 
 android {
     namespace = "tech.appuinside.dhruva"
@@ -50,11 +59,26 @@ android {
         }
     }
 
+    signingConfigs {
+        // The Play upload keystore is deliberately kept OUTSIDE this repo (the
+        // repo is public). android/key.properties points at it and is
+        // gitignored along with *.jks. When it is absent -- CI, or anyone who
+        // clones this -- we fall through to the debug key below so the project
+        // still builds; only a machine holding the real key can produce an
+        // uploadable artifact.
+        if (hasUploadKey) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (hasUploadKey) "release" else "debug")
         }
     }
 }
