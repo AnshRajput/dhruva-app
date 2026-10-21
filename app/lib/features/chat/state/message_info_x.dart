@@ -22,6 +22,7 @@ extension MessageInfoCopy on MessageInfo {
     String? errorKind,
     int? tokCount,
     int? genMs,
+    bool? reported,
   }) {
     return MessageInfo(
       id: id,
@@ -37,6 +38,7 @@ extension MessageInfoCopy on MessageInfo {
       genMs: genMs ?? this.genMs,
       createdAt: createdAt,
       parentMessageId: parentMessageId,
+      reported: reported ?? this.reported,
     );
   }
 }

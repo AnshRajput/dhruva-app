@@ -24,6 +24,7 @@ import '../../features/models_hub/ui/models_hub_screen.dart';
 import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
+import '../../features/settings/ui/safety_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
@@ -183,6 +184,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/models/downloads',
       builder: (context, state) => const DownloadsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/safety',
+      builder: (context, state) => const SafetyScreen(),
     ),
     GoRoute(
       path: '/settings/about',

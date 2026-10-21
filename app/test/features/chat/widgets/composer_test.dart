@@ -106,6 +106,16 @@ void main() {
     },
   );
 
+  testWidgets('shows the AI-can-be-wrong disclaimer under the input', (
+    tester,
+  ) async {
+    await pumpComposer(tester, isGenerating: false, onSend: (_, _) {});
+    expect(
+      find.text('AI can be wrong. Everything runs on your phone.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('tapping send fires onSend and clears the field', (tester) async {
     String? sent;
     await pumpComposer(

@@ -30,6 +30,8 @@ class SettingsScreen extends StatelessWidget {
           _StorageTile(),
           _SectionHeader('Data'),
           _ClearHistoryTile(),
+          _SectionHeader('Safety'),
+          _SafetyTile(),
           _SectionHeader('About'),
           _AboutTile(),
           CreditRow(),
@@ -163,6 +165,21 @@ class _ClearHistoryTile extends ConsumerWidget {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Chat history cleared.')));
+  }
+}
+
+class _SafetyTile extends StatelessWidget {
+  const _SafetyTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.flag_outlined),
+      title: const Text('Safety & reports'),
+      subtitle: const Text('Report a reply, see your reports'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push('/settings/safety'),
+    );
   }
 }
 

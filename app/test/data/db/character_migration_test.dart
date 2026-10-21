@@ -32,6 +32,7 @@ class _V2Database extends AppDatabase {
       await m.createTable(folders);
       await m.createTable(conversations);
       await m.createTable(messages);
+      await customStatement('ALTER TABLE messages DROP COLUMN reported');
       await customStatement(
         'ALTER TABLE conversations DROP COLUMN character_id',
       );
@@ -94,10 +95,10 @@ void main() {
     await v2.close();
 
     // Reopen with the real (current, v4) AppDatabase over the same file —
-    // this must trigger the real onUpgrade(2, 4), running both the v2->v3
+    // this must trigger the real onUpgrade(2, 5), running both the v2->v3
     // and v3->v4 branches in one jump.
     final v3 = AppDatabase(NativeDatabase(dbFile));
-    expect(v3.schemaVersion, 4);
+    expect(v3.schemaVersion, 5);
 
     final conversations = await v3.select(v3.conversations).get();
     expect(conversations, hasLength(1));

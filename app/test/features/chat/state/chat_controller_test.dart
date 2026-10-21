@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/safety/safety_guard.dart';
 import 'package:dhruva/data/chat/models/sampling_params.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
@@ -961,7 +962,7 @@ void main() {
         sentMessages!.first,
         isA<ChatTurn>()
             .having((t) => t.role, 'role', EngineRole.system)
-            .having((t) => t.content, 'content', persona),
+            .having((t) => t.content, 'content', endsWith(persona)),
       );
       // The greeting and the new user turn both rode along too.
       expect(
@@ -1040,7 +1041,7 @@ void main() {
           engine.lastMessages!.first,
           isA<ChatTurn>()
               .having((t) => t.role, 'role', EngineRole.system)
-              .having((t) => t.content, 'content', persona),
+              .having((t) => t.content, 'content', endsWith(persona)),
         );
       },
     );
@@ -1069,14 +1070,15 @@ void main() {
       final notifier = container.read(chatControllerProvider(args).notifier);
       await notifier.sendMessage('hi');
 
-      final sentMessages = engine.lastMessages!;
+      final systemTurns = engine.lastMessages!
+          .where((t) => t.role == EngineRole.system)
+          .toList();
       expect(
-        sentMessages.any((t) => t.role == EngineRole.system),
-        isFalse,
+        systemTurns.map((t) => t.content),
+        [SafetyGuard.systemInstruction],
         reason:
-            '_historyTurns only adds a system ChatTurn when '
-            'systemPrompt.trim().isNotEmpty — a blank persona must not '
-            'become an empty system turn',
+            'a blank persona must not become an empty system turn: only the '
+            'safety instruction is emitted',
       );
     });
 
@@ -1128,7 +1130,11 @@ void main() {
         engine.lastMessages!.first,
         isA<ChatTurn>()
             .having((t) => t.role, 'role', EngineRole.system)
-            .having((t) => t.content, 'content', 'Persona v1: be terse.'),
+            .having(
+              (t) => t.content,
+              'content',
+              endsWith('Persona v1: be terse.'),
+            ),
         reason:
             'a live/open conversation keeps its persona snapshot; only a '
             'NEW conversation started with the character would pick up '
@@ -1439,7 +1445,7 @@ void main() {
         sent.first,
         isA<ChatTurn>()
             .having((t) => t.role, 'role', EngineRole.system)
-            .having((t) => t.content, 'content', persona),
+            .having((t) => t.content, 'content', endsWith(persona)),
       );
       final userTurn = sent.firstWhere((t) => t.role == EngineRole.user);
       expect(userTurn.images, [imageBytes]);
