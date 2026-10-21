@@ -34,7 +34,11 @@ Future<void> main() async {
   );
 
   // Android share / text-selection / shortcut entry points -> router.
-  unawaited(IntentInbox(navigate: appRouter.push).start());
+  // After the first frame, so the router has consumed its initial location
+  // and a cold-start share/selection isn't overwritten by it.
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => unawaited(IntentInbox(navigate: appRouter.push).start()),
+  );
 }
 
 class DhruvaApp extends StatelessWidget {

@@ -30,10 +30,25 @@ abstract final class SafetyGuard {
     if (text.length < 4) return false;
     final lower = text.toLowerCase().replaceAll(_benignPhrases, ' ');
     for (final sentence in lower.split(_sentenceBreak)) {
-      if (_sexual.hasMatch(sentence) && _mentionsMinor(sentence)) return true;
+      final sexual =
+          _sexual.hasMatch(sentence) ||
+          (_nudity.hasMatch(sentence) && _depict.hasMatch(sentence));
+      if (sexual && _mentionsMinor(sentence)) return true;
     }
     return false;
   }
+
+  /// [blocks] for streamed model output. A reply that opens as a refusal
+  /// ("I can't write sexual content involving minors") is the system
+  /// instruction working, not a violation, so it's let through.
+  static bool blocksOutput(String text) =>
+      !_refusal.hasMatch(text.trimLeft().toLowerCase()) && blocks(text);
+
+  static final _refusal = RegExp(
+    r"^(?:i can't|i cannot|i can not|i won't|i will not|i'm not able|"
+    r"i am not able|i'm sorry|i am sorry|sorry|i must decline|i'm unable|"
+    r'i am unable)',
+  );
 
   static bool _mentionsMinor(String s) {
     if (_minor.hasMatch(s)) return true;
@@ -49,7 +64,8 @@ abstract final class SafetyGuard {
   // Phrases that contain a sexual term but are protective/educational.
   static final _benignPhrases = RegExp(
     r'sex(?:ual)? education|sexual (?:abuse|assault|harassment|health|'
-    r'development|orientation|maturation)|sex ed\b',
+    r'development|orientation|maturation|consent|safety)|sex ed\b|'
+    r'sexuality',
   );
 
   static final _minor = RegExp(
@@ -66,11 +82,26 @@ abstract final class SafetyGuard {
     r'\bage[d]?\s+(\d{1,2})\b',
   );
 
+  // Only terms that sexualize. Anatomy (breasts, genitals), bare nudity,
+  // profanity and words describing abuse (rape, molest) are deliberately
+  // absent: they appear in parenting, medical and news text ("my infant
+  // won't latch", "my toddler's genitals are red"), and blocking those
+  // helps nobody. Explicit-image requests are matched by phrase instead.
   static final _sexual = RegExp(
-    r'\b(?:sexual|sexually|sex scene|sex act|have sex|having sex|'
-    r'sex with|sex tape|nude|nudes|naked|nudity|erotic|erotica|porn|'
-    r'porno|pornographic|nsfw|fuck|fucking|orgasm|intercourse|masturbat\w*|'
-    r'blowjob|handjob|genitals?|penis|vagina|breasts|topless|seduce|'
-    r'seduction|molest\w*|rape|fetish|lewd|horny|cumshot|xxx)\b',
+    r'\b(?:sexual|sexually|sexy|sex scene|sex act|have sex|having sex|'
+    r'sex with|sex tape|nudes|(?:nude|naked|topless) (?:photos?|pics?|'
+    r'pictures?|images?|videos?|selfies?)|erotic|erotica|porn|porno|'
+    r'pornographic|nsfw|orgasm|intercourse|masturbat\w*|blowjob|handjob|'
+    r'seduce|seduction|fetish|lewd|horny|cumshot|xxx)\b',
+  );
+
+  // Nudity counts only when the user asks to depict it ("describe a 12 year
+  // old naked"), not in ordinary parenting text ("runs around naked").
+  static final _nudity = RegExp(
+    r'\b(?:naked|nude|nudity|topless|undress\w*)\b',
+  );
+  static final _depict = RegExp(
+    r'\b(?:describe|draw|write|show|picture|imagine|generate|create|'
+    r'depict|roleplay|role-play|story)\b',
   );
 }

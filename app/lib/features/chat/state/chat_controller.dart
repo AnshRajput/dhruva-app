@@ -880,8 +880,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // Safety: stop a reply that sexualizes a minor mid-stream and replace
     // everything shown so far with the notice.
     if (!_outputBlocked &&
-        (SafetyGuard.blocks(split.content) ||
-            SafetyGuard.blocks(split.reasoning))) {
+        (SafetyGuard.blocksOutput(split.content) ||
+            SafetyGuard.blocksOutput(split.reasoning))) {
       _outputBlocked = true;
       unawaited(ref.read(engineServiceProvider).cancel());
       _rawBuffer = SafetyGuard.blockedNotice;

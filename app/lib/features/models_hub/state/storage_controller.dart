@@ -131,6 +131,11 @@ class StorageController extends AsyncNotifier<StorageState> {
     } on AppFailure catch (e) {
       state = await AsyncValue.guard(_load);
       _setActionError(e);
+    } catch (e) {
+      // Anything unexpected (device-info / DB errors) must still clear the
+      // "importing" banner, or the UI sticks mid-import forever.
+      state = await AsyncValue.guard(_load);
+      _setActionError(StorageUnknownFailure('import failed: $e'));
     } finally {
       _cancel = null;
     }

@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 
 class IntentInbox {
   static const channelName = 'dhruva/intents';
+  static const _maxSharedChars = 16000;
 
   /// Navigates to a router location (injected so tests need no router).
   final void Function(String location) navigate;
@@ -24,7 +25,12 @@ class IntentInbox {
   /// nothing actionable. Shared text wins over a shortcut route.
   static String? locationFor(Map<Object?, Object?>? payload) {
     if (payload == null) return null;
-    final text = (payload['text'] as String?)?.trim() ?? '';
+    var text = (payload['text'] as String?)?.trim() ?? '';
+    // Bound the router URL for huge shares. Above the workflow sheet's own
+    // 12k limit on purpose, so the sheet still trims and says so.
+    if (text.length > _maxSharedChars) {
+      text = text.substring(0, _maxSharedChars);
+    }
     if (text.isNotEmpty) {
       return '/workflows?text=${Uri.encodeQueryComponent(text)}';
     }
