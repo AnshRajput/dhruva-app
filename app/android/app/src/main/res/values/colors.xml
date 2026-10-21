@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Adaptive icon background (flutter_launcher_icons adaptive_icon_background). -->
     <color name="ic_launcher_background">#0E1220</color>
+    <!-- design-tokens.json color.dark.background: the app is dark-only, so the
+         launch screen matches it instead of flashing white. -->
+    <color name="splash_background">#0E1220</color>
 </resources>

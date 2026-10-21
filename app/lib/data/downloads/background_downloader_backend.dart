@@ -14,9 +14,9 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   BackgroundDownloaderBackend({bg.FileDownloader? downloader})
     : _downloader = downloader ?? bg.FileDownloader();
 
-  /// Registers the global download notification (D4) and asks for the
-  /// Android-13+ POST_NOTIFICATIONS permission. Call once at startup, before
-  /// any `enqueue`. Platform-channel only — a no-op on desktop and safe to
+  /// Registers the global download notification (D4). Call once at startup,
+  /// before any `enqueue`; the permission itself is requested on the first
+  /// [enqueue]. Platform-channel only — a no-op on desktop and safe to
   /// call regardless (a denied/skipped permission just means no notification
   /// shows, not a crash). Not covered by `flutter test` (needs the plugin's
   /// native side); the config values it applies are asserted in
@@ -41,11 +41,28 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
       progressBar: c.progressBar,
       tapOpensFile: c.tapOpensFile,
     );
-    final status = await _downloader.permissions.status(
-      bg.PermissionType.notifications,
-    );
-    if (status != bg.PermissionStatus.granted) {
-      await _downloader.permissions.request(bg.PermissionType.notifications);
+  }
+
+  bool _askedNotifications = false;
+
+  /// Asks for notification permission on the first real download, not at
+  /// startup: the manager is built as soon as any models screen renders, so
+  /// asking in [configureNotifications] put a context-free system prompt on
+  /// top of the app at first launch (and in front of App Review).
+  Future<void> _ensureNotificationPermission() async {
+    if (_askedNotifications) return;
+    _askedNotifications = true;
+    try {
+      final status = await _downloader.permissions.status(
+        bg.PermissionType.notifications,
+      );
+      if (status != bg.PermissionStatus.granted) {
+        await _downloader.permissions.request(bg.PermissionType.notifications);
+      }
+    } catch (_) {
+      // Notifications are optional: a failed check must never block the
+      // download itself. Allow another ask on the next download.
+      _askedNotifications = false;
     }
   }
 
@@ -57,6 +74,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
 
   @override
   Future<bool> enqueue(BackendDownloadRequest request) async {
+    await _ensureNotificationPermission();
     final task = bg.DownloadTask(
       taskId: request.taskId,
       url: request.url.toString(),

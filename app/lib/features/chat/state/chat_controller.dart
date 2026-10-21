@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../../../core/di/providers.dart';
+import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
 import '../../../data/downloads/storage_manager.dart';
@@ -289,6 +290,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// cleared on every exit path — so exactly one turn is ever in flight.
   bool _turnInFlight = false;
 
+  /// Set when the streamed reply tripped [SafetyGuard.blocks]: further
+  /// tokens are dropped and the reply is replaced by the notice.
+  bool _outputBlocked = false;
+
   /// Raw failure text for the "Copy error details" affordance
   /// (`EngineUnknownFailure`, chat-spec.md §8) — not persisted (`Messages`
   /// has no free-text-detail column beyond `errorKind`'s label), so a
@@ -309,11 +314,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       if (args.characterId != null) {
         return _buildFromCharacter(args.characterId!, args.initialModelId);
       }
+      final storage = ref.read(storageManagerProvider);
+      // No explicit model (workflows, share / "Ask Dhruva AI", the New chat
+      // shortcut): use the most-recently-used installed model rather than
+      // dead-ending on "No model installed yet" when one is installed.
       final model = args.initialModelId == null
-          ? null
-          : await ref
-                .read(storageManagerProvider)
-                .getInstalledModel(args.initialModelId!);
+          ? (await storage.listInstalledModels()).firstOrNull
+          : await storage.getInstalledModel(args.initialModelId!);
       return ChatThreadState(modelId: model?.id, model: model);
     }
 
@@ -743,6 +750,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // it here too so a future caller of this method can't forget. Cleared on
     // both early returns below and in `_resetStreamState` once a stream ends.
     _turnInFlight = true;
+    // Safety: a prompt that sexualizes a minor never reaches the model.
+    final lastUser = historyMessages
+        .where((m) => m.role == MessageRole.user)
+        .lastOrNull;
+    if (lastUser != null && SafetyGuard.blocks(lastUser.content)) {
+      await _replyWithBlockedNotice(conversationId, parentMessageId);
+      return;
+    }
     await ensureModelLoaded();
     var current = state.value!;
     if (current.modelLoadError != null) {
@@ -799,6 +814,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
     _activeAssistantId = assistantId;
     _rawBuffer = '';
+    _outputBlocked = false;
     _pushedContent = '';
     _pushedReasoning = '';
     _reasoningStartedAt = null;
@@ -832,6 +848,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           (event) {
             switch (event) {
               case EngineToken():
+                if (_outputBlocked) break;
                 _rawBuffer += event.text;
                 _tokenArrivals.add(DateTime.now());
               case EngineHistoryTrimmed():
@@ -859,8 +876,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _flush({required bool isFinal}) {
     final id = _activeAssistantId;
     if (id == null) return;
-    final safeRaw = safeThinkPrefix(_rawBuffer, isFinal: isFinal);
-    final split = splitThinkContent(safeRaw);
+    var split = splitThinkContent(
+      safeThinkPrefix(_rawBuffer, isFinal: isFinal),
+    );
+    // Safety: stop a reply that sexualizes a minor mid-stream and replace
+    // everything shown so far with the notice.
+    if (!_outputBlocked &&
+        (SafetyGuard.blocksOutput(split.content) ||
+            SafetyGuard.blocksOutput(split.reasoning))) {
+      _outputBlocked = true;
+      unawaited(ref.read(engineServiceProvider).cancel());
+      _rawBuffer = SafetyGuard.blockedNotice;
+      split = splitThinkContent(_rawBuffer);
+    }
 
     if (_reasoningStartedAt == null &&
         (split.reasoningOpen || split.reasoning.isNotEmpty)) {
@@ -950,12 +978,63 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
   }
 
+  /// Appends the assistant-styled "can't help" reply for a blocked prompt
+  /// and releases the turn latch: no model load, no generation.
+  Future<void> _replyWithBlockedNotice(
+    int conversationId,
+    int? parentMessageId,
+  ) async {
+    final id = await _repo.appendMessage(
+      conversationId: conversationId,
+      role: MessageRole.assistant,
+      content: SafetyGuard.blockedNotice,
+      parentMessageId: parentMessageId,
+    );
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          messages: [
+            ...current.messages,
+            MessageInfo(
+              id: id,
+              conversationId: conversationId,
+              role: MessageRole.assistant,
+              content: SafetyGuard.blockedNotice,
+              status: MessageStatus.complete,
+              createdAt: DateTime.now(),
+              parentMessageId: parentMessageId,
+            ),
+          ],
+        ),
+      );
+    }
+    _keepAliveLink?.close();
+    _keepAliveLink = null;
+    _turnInFlight = false;
+  }
+
+  /// Mirrors a persisted report (`ReportRepository.submit` already set the
+  /// row's flag) into the in-memory list so the bubble collapses at once.
+  void markReported(int messageId) {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        messages: [
+          for (final m in current.messages)
+            if (m.id == messageId) m.copyWith(reported: true) else m,
+        ],
+      ),
+    );
+  }
+
   void _onCompletion(EngineCompletion event) {
     _flushTimer?.cancel();
     _flush(isFinal: true);
     final id = _activeAssistantId;
     if (id == null) return;
-    final status = event.reason == EngineStopReason.cancelled
+    final status = event.reason == EngineStopReason.cancelled && !_outputBlocked
         ? MessageStatus.cancelled
         : MessageStatus.complete;
     unawaited(
@@ -1048,6 +1127,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   void _resetStreamState() {
     _activeAssistantId = null;
+    _outputBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';
@@ -1080,10 +1160,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     String systemPrompt,
     Map<int, Uint8List> attachedImages,
   ) {
+    // Safety instruction rides on the system turn (prepended to the
+    // persona/system prompt, or emitted alone) for every path.
+    final system = systemPrompt.trim().isEmpty
+        ? SafetyGuard.systemInstruction
+        : '${SafetyGuard.systemInstruction}\n\n$systemPrompt';
     return [
-      if (systemPrompt.trim().isNotEmpty) ChatTurn.system(systemPrompt),
+      ChatTurn.system(system),
       for (final m in messages)
-        if (m.status != MessageStatus.error)
+        // Blocked prompts and their notices are dropped from model history.
+        if (m.status != MessageStatus.error &&
+            !(m.role == MessageRole.user && SafetyGuard.blocks(m.content)) &&
+            !(m.role == MessageRole.assistant &&
+                m.content == SafetyGuard.blockedNotice))
           switch (m.role) {
             MessageRole.user => ChatTurn.user(
               m.content,

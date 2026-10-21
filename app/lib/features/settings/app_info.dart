@@ -9,10 +9,18 @@
 /// alongside `pubspec.yaml` on release.
 library;
 
-const appVersion = '0.4.2';
-const appBuildNumber = '78';
+const appVersion = '0.6.0';
+const appBuildNumber = '103';
 
 const githubUrl = 'https://github.com/AnshRajput/dhruva-app';
 const websiteUrl = 'https://dhruvaai.vercel.app';
 const licenseUrl = 'https://github.com/AnshRajput/dhruva-app/blob/main/LICENSE';
 const creatorUrl = 'https://anshgandharva.in';
+
+/// "Version 0.6.0 (build 100) \u00b7 patch 2" - patch 0 is the bare release.
+String versionLine(int patch) =>
+    'Version $appVersion (build $appBuildNumber) \u00b7 patch $patch';
+
+/// What long-press copies for support: "0.6.0+100 \u00b7 patch 2".
+String versionCopyText(int patch) =>
+    '$appVersion+$appBuildNumber \u00b7 patch $patch';

@@ -65,7 +65,8 @@ void main() {
     expect(
       loadFailure,
       isNull,
-      reason: 'engine.load() threw EngineLoadFailure on the iOS Simulator — '
+      reason:
+          'engine.load() threw EngineLoadFailure on the iOS Simulator — '
           'the vendored xcframework did not dyld-load from the process',
     );
     expect(engine.isLoaded, isTrue);
@@ -74,8 +75,10 @@ void main() {
     await engine
         .generate(
           messages: const [
-            ChatTurn.user('Reply with exactly one word: the capital of '
-                'France.'),
+            ChatTurn.user(
+              'Reply with exactly one word: the capital of '
+              'France.',
+            ),
           ],
           // Default (non-greedy, temperature 0.7) params — same as
           // production. Greedy decoding on this raw un-templated single-turn

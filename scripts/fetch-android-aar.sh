@@ -26,7 +26,7 @@ set -euo pipefail
 REPO="netdur/llama_cpp_dart"
 TAG="v0.9.0-dev.9"
 ASSET="llama-cpp-dart.aar"
-SHA256="73ab5e755c57ae4c3e06fc728c9e649152e89db99e2b2deba99f3a5fcff41028"
+SHA256="589481508f4fa6241b4a0676520135143b865ffb305e3cfd031b8b89fae3b94c"  # 16 KB rebuild, see build-android-aar.sh
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBS_DIR="$ROOT/app/android/app/libs"
@@ -47,10 +47,8 @@ if [[ -f "$AAR" && "$(sha_of "$AAR")" == "$SHA256" ]]; then
   exit 0
 fi
 
-mkdir -p "$LIBS_DIR"
-echo "downloading $ASSET from $REPO@$TAG ..."
-gh release download "$TAG" --repo "$REPO" --pattern "$ASSET" --dir "$LIBS_DIR" --clobber
-
-got="$(sha_of "$AAR")"
-[[ "$got" == "$SHA256" ]] || { echo "error: sha256 mismatch (expected $SHA256, got $got)" >&2; exit 1; }
-echo "AAR fetched + verified: $ASSET ($SHA256)"
+# The $TAG release asset is 4 KB page-aligned (Play rejects it), so the
+# committed AAR is a 16 KB source rebuild. Missing/corrupt? Rebuild it.
+# A rebuild isn't byte-reproducible; re-pin SHA256 above afterwards.
+echo "AAR missing or sha mismatch — rebuilding from $REPO@$TAG source ..."
+exec "$ROOT/scripts/build-android-aar.sh"

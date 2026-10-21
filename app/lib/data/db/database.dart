@@ -139,6 +139,10 @@ class Messages extends Table {
   /// just stores whatever label the caller passed.
   TextColumn get errorKind => text().nullable()();
   IntColumn get tokCount => integer().nullable()();
+
+  /// True once the user reported this reply (v5); the UI hides it behind a
+  /// "Show" placeholder. The report itself lives in [ContentReports].
+  BoolColumn get reported => boolean().withDefault(const Constant(false))();
   IntColumn get genMs => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
@@ -191,15 +195,41 @@ class Characters extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 }
 
+/// A user's report of an offensive/unsafe assistant reply (v5). Stays on
+/// the device unless the user chooses "Report & email developer". Plain int
+/// ids with no FKs on purpose: a report must outlive the conversation or
+/// message it refers to (deleting a chat must not erase the report).
+class ContentReports extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  DateTimeColumn get createdAt => dateTime()();
+  IntColumn get conversationId => integer()();
+  IntColumn get messageId => integer()();
+  TextColumn get modelName => text().nullable()();
+
+  /// `ReportReason.name` (see `data/safety/report_repository.dart`).
+  TextColumn get reason => text()();
+  TextColumn get note => text().nullable()();
+
+  /// The reported reply's text, capped at 2000 chars.
+  TextColumn get excerpt => text()();
+}
+
 @DriftDatabase(
-  tables: [InstalledModels, Folders, Conversations, Messages, Characters],
+  tables: [
+    InstalledModels,
+    Folders,
+    Conversations,
+    Messages,
+    Characters,
+    ContentReports,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -233,6 +263,16 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await m.addColumn(installedModels, installedModels.mmprojPath);
         await m.addColumn(installedModels, installedModels.isVision);
+      }
+      // v4 -> v5: in-app content reporting (Play AI-Generated Content policy).
+      if (from < 5) {
+        await m.createTable(contentReports);
+        // `messages` is created fresh from the CURRENT definition (already
+        // with `reported`) when `from < 2` — only add the column to a
+        // pre-existing table, same guard as the v3 `characterId` step.
+        if (from >= 2) {
+          await m.addColumn(messages, messages.reported);
+        }
       }
     },
     beforeOpen: (details) async {

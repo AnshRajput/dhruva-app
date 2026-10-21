@@ -36,6 +36,10 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
 
+  /// Opens the report flow for this (assistant) reply. Null hides the
+  /// action (e.g. previews/tests that don't wire it).
+  final VoidCallback? onReport;
+
   const MessageBubble({
     super.key,
     required this.message,
@@ -45,6 +49,7 @@ class MessageBubble extends StatelessWidget {
     this.attachedImage,
     this.onRegenerate,
     this.onEdit,
+    this.onReport,
   });
 
   @override
@@ -52,7 +57,15 @@ class MessageBubble extends StatelessWidget {
     if (message.role == MessageRole.system) {
       return _SystemBanner(message: message);
     }
+    // A reported reply collapses behind a placeholder until the user taps
+    // "Show" (local, per-bubble state; the report itself stays saved).
+    if (message.reported && message.role == MessageRole.assistant) {
+      return _ReportedGate(child: _buildBubble(context));
+    }
+    return _buildBubble(context);
+  }
 
+  Widget _buildBubble(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final isUser = message.role == MessageRole.user;
@@ -130,13 +143,72 @@ class MessageBubble extends StatelessWidget {
             ),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
-              _MetadataRow(message: message, onRegenerate: onRegenerate),
+              _MetadataRow(
+                message: message,
+                onRegenerate: onRegenerate,
+                onReport: onReport,
+              ),
             ],
             if (isUser && onEdit != null) ...[
               SizedBox(height: tokens.spacing.xs),
               _EditAffordance(onEdit: onEdit!),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportedGate extends StatefulWidget {
+  final Widget child;
+  const _ReportedGate({required this.child});
+
+  @override
+  State<_ReportedGate> createState() => _ReportedGateState();
+}
+
+class _ReportedGateState extends State<_ReportedGate> {
+  bool _shown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_shown) return widget.child;
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: 0.84,
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: EdgeInsets.only(
+            left: tokens.spacing.md,
+            right: tokens.spacing.xs,
+            top: tokens.spacing.xs,
+            bottom: tokens.spacing.xs,
+          ),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(tokens.radius.lg),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.flag_outlined, size: 16, color: muted),
+              SizedBox(width: tokens.spacing.sm),
+              Expanded(
+                child: Text(
+                  "You reported this reply. It's hidden.",
+                  style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                ),
+              ),
+              TextButton(
+                onPressed: () => setState(() => _shown = true),
+                child: const Text('Show'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -181,8 +253,9 @@ class _SystemBanner extends StatelessWidget {
 class _MetadataRow extends StatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
+  final VoidCallback? onReport;
 
-  const _MetadataRow({required this.message, this.onRegenerate});
+  const _MetadataRow({required this.message, this.onRegenerate, this.onReport});
 
   @override
   State<_MetadataRow> createState() => _MetadataRowState();
@@ -233,6 +306,18 @@ class _MetadataRowState extends State<_MetadataRow> {
               size: 16,
               color: _copied ? tokens.success : color,
             ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+        if (widget.onReport != null && message.content.isNotEmpty) ...[
+          SizedBox(width: tokens.spacing.xs),
+          // Play AI-Generated Content policy: in-app report on every reply.
+          IconButton(
+            onPressed: widget.onReport,
+            tooltip: 'Report this reply',
+            icon: Icon(Icons.flag_outlined, size: 16, color: color),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             visualDensity: VisualDensity.compact,

@@ -249,7 +249,13 @@ final class LlamaEngineService implements EngineService {
           libraryPath: libraryPath,
           modelParams: llama.ModelParams(
             path: modelPath,
-            gpuLayers: params.gpuLayers,
+            // ponytail: iOS runs CPU-only. Metal offload produced garbage
+            // tokens on the iOS Simulator (integration_test/
+            // ios_gpu_cpu_ab_test.dart: CPU "The capital of France is
+            // Paris." vs Metal ")HG&%>-*=…") and is unverified on a real
+            // iPhone. Re-enable (Dart-only, shippable as a Shorebird patch)
+            // once the A/B passes on a physical device.
+            gpuLayers: Platform.isIOS ? 0 : params.gpuLayers,
           ),
           contextParams: llama.ContextParams(
             nCtx: params.contextSize,

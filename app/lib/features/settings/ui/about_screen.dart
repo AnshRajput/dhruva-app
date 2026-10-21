@@ -11,6 +11,7 @@ import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../app_info.dart';
 import '../widgets/credit_row.dart';
+import '../widgets/version_text.dart';
 
 /// Drawn from the ratified brand narrative (orchestra/research/
 /// brand-proposal.md §a/§d) — the pole-star myth, the privacy conviction
@@ -68,8 +69,7 @@ class AboutScreen extends StatelessWidget {
             ),
             SizedBox(height: tokens.spacing.xs),
             Center(
-              child: Text(
-                'Version $appVersion (build $appBuildNumber)',
+              child: VersionText(
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -106,8 +106,9 @@ class AboutScreen extends StatelessWidget {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
               child: Text(
-                'Zero telemetry — downloads are the only network calls this '
-                'app makes.',
+                'Zero telemetry — model downloads and app-update checks are the '
+                'only network calls this app makes. Update checks send only '
+                'the app version and patch number, never your chats.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

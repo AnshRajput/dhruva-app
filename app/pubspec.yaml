@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.5.0+94
+version: 0.6.0+103
 
 environment:
   sdk: ^3.11.0
@@ -101,6 +101,7 @@ dependencies:
   # Loop 4 (chat export, chat-spec.md §9): the OS share sheet. First-party
   # (flutter/packages federated plugin), BSD-3, macOS/iOS/Android supported —
   # the lightest correct way to hand a formatted string to "Share as .md/.json".
+  restart_app: ^1.10.1
   share_plus: ^13.2.1
   # Loop 6 (voice, ADR-001-style abstraction). STT + TTS + Silero VAD in ONE
   # Apache-2.0 package with prebuilt native libs for Android/iOS/macOS/Windows/
@@ -112,6 +113,7 @@ dependencies:
   # the About section's GitHub link. First-party (flutter/packages
   # federated plugin), BSD-3 — same license family as share_plus/
   # path_provider/device_info_plus already in this file.
+  shorebird_code_push: ^2.0.7
   url_launcher: ^6.3.2
 
 dev_dependencies:
@@ -160,6 +162,7 @@ flutter:
   # itself is ever missing.
   assets:
     - assets/characters/starter_pack.json
+    - shorebird.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:

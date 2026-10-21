@@ -48,3 +48,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Play Store upload signing -- secrets, never commit (real key lives in ~/secrets)
+/android/key.properties
+*.jks
+*.keystore

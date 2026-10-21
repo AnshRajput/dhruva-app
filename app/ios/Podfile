@@ -35,7 +35,7 @@ target 'Runner' do
   # never finds its podspec. Wire it manually, pointing at the vendored copy
   # (scripts/fetch-ios-xcframework.sh) instead of the pub-cache checkout,
   # which lacks the prebuilt xcframework build artifact.
-  pod 'llama_cpp', :path => File.expand_path('../Vendor/llama_cpp', __FILE__)
+  pod 'llama_cpp', :path => 'Vendor/llama_cpp' # relative: keeps Podfile.lock checkout-independent
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do

@@ -2499,6 +2499,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _reportedMeta = const VerificationMeta(
+    'reported',
+  );
+  @override
+  late final GeneratedColumn<bool> reported = GeneratedColumn<bool>(
+    'reported',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("reported" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _genMsMeta = const VerificationMeta('genMs');
   @override
   late final GeneratedColumn<int> genMs = GeneratedColumn<int>(
@@ -2543,6 +2558,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     status,
     errorKind,
     tokCount,
+    reported,
     genMs,
     createdAt,
     parentMessageId,
@@ -2598,6 +2614,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
       context.handle(
         _tokCountMeta,
         tokCount.isAcceptableOrUnknown(data['tok_count']!, _tokCountMeta),
+      );
+    }
+    if (data.containsKey('reported')) {
+      context.handle(
+        _reportedMeta,
+        reported.isAcceptableOrUnknown(data['reported']!, _reportedMeta),
       );
     }
     if (data.containsKey('gen_ms')) {
@@ -2668,6 +2690,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.int,
         data['${effectivePrefix}tok_count'],
       ),
+      reported: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}reported'],
+      )!,
       genMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}gen_ms'],
@@ -2711,6 +2737,10 @@ class Message extends DataClass implements Insertable<Message> {
   /// just stores whatever label the caller passed.
   final String? errorKind;
   final int? tokCount;
+
+  /// True once the user reported this reply (v5); the UI hides it behind a
+  /// "Show" placeholder. The report itself lives in [ContentReports].
+  final bool reported;
   final int? genMs;
   final DateTime createdAt;
 
@@ -2728,6 +2758,7 @@ class Message extends DataClass implements Insertable<Message> {
     required this.status,
     this.errorKind,
     this.tokCount,
+    required this.reported,
     this.genMs,
     required this.createdAt,
     this.parentMessageId,
@@ -2755,6 +2786,7 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || tokCount != null) {
       map['tok_count'] = Variable<int>(tokCount);
     }
+    map['reported'] = Variable<bool>(reported);
     if (!nullToAbsent || genMs != null) {
       map['gen_ms'] = Variable<int>(genMs);
     }
@@ -2781,6 +2813,7 @@ class Message extends DataClass implements Insertable<Message> {
       tokCount: tokCount == null && nullToAbsent
           ? const Value.absent()
           : Value(tokCount),
+      reported: Value(reported),
       genMs: genMs == null && nullToAbsent
           ? const Value.absent()
           : Value(genMs),
@@ -2809,6 +2842,7 @@ class Message extends DataClass implements Insertable<Message> {
       ),
       errorKind: serializer.fromJson<String?>(json['errorKind']),
       tokCount: serializer.fromJson<int?>(json['tokCount']),
+      reported: serializer.fromJson<bool>(json['reported']),
       genMs: serializer.fromJson<int?>(json['genMs']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       parentMessageId: serializer.fromJson<int?>(json['parentMessageId']),
@@ -2830,6 +2864,7 @@ class Message extends DataClass implements Insertable<Message> {
       ),
       'errorKind': serializer.toJson<String?>(errorKind),
       'tokCount': serializer.toJson<int?>(tokCount),
+      'reported': serializer.toJson<bool>(reported),
       'genMs': serializer.toJson<int?>(genMs),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'parentMessageId': serializer.toJson<int?>(parentMessageId),
@@ -2845,6 +2880,7 @@ class Message extends DataClass implements Insertable<Message> {
     MessageStatus? status,
     Value<String?> errorKind = const Value.absent(),
     Value<int?> tokCount = const Value.absent(),
+    bool? reported,
     Value<int?> genMs = const Value.absent(),
     DateTime? createdAt,
     Value<int?> parentMessageId = const Value.absent(),
@@ -2859,6 +2895,7 @@ class Message extends DataClass implements Insertable<Message> {
     status: status ?? this.status,
     errorKind: errorKind.present ? errorKind.value : this.errorKind,
     tokCount: tokCount.present ? tokCount.value : this.tokCount,
+    reported: reported ?? this.reported,
     genMs: genMs.present ? genMs.value : this.genMs,
     createdAt: createdAt ?? this.createdAt,
     parentMessageId: parentMessageId.present
@@ -2879,6 +2916,7 @@ class Message extends DataClass implements Insertable<Message> {
       status: data.status.present ? data.status.value : this.status,
       errorKind: data.errorKind.present ? data.errorKind.value : this.errorKind,
       tokCount: data.tokCount.present ? data.tokCount.value : this.tokCount,
+      reported: data.reported.present ? data.reported.value : this.reported,
       genMs: data.genMs.present ? data.genMs.value : this.genMs,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       parentMessageId: data.parentMessageId.present
@@ -2898,6 +2936,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('status: $status, ')
           ..write('errorKind: $errorKind, ')
           ..write('tokCount: $tokCount, ')
+          ..write('reported: $reported, ')
           ..write('genMs: $genMs, ')
           ..write('createdAt: $createdAt, ')
           ..write('parentMessageId: $parentMessageId')
@@ -2915,6 +2954,7 @@ class Message extends DataClass implements Insertable<Message> {
     status,
     errorKind,
     tokCount,
+    reported,
     genMs,
     createdAt,
     parentMessageId,
@@ -2931,6 +2971,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.status == this.status &&
           other.errorKind == this.errorKind &&
           other.tokCount == this.tokCount &&
+          other.reported == this.reported &&
           other.genMs == this.genMs &&
           other.createdAt == this.createdAt &&
           other.parentMessageId == this.parentMessageId);
@@ -2945,6 +2986,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<MessageStatus> status;
   final Value<String?> errorKind;
   final Value<int?> tokCount;
+  final Value<bool> reported;
   final Value<int?> genMs;
   final Value<DateTime> createdAt;
   final Value<int?> parentMessageId;
@@ -2957,6 +2999,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.status = const Value.absent(),
     this.errorKind = const Value.absent(),
     this.tokCount = const Value.absent(),
+    this.reported = const Value.absent(),
     this.genMs = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.parentMessageId = const Value.absent(),
@@ -2970,6 +3013,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     required MessageStatus status,
     this.errorKind = const Value.absent(),
     this.tokCount = const Value.absent(),
+    this.reported = const Value.absent(),
     this.genMs = const Value.absent(),
     required DateTime createdAt,
     this.parentMessageId = const Value.absent(),
@@ -2986,6 +3030,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<int>? status,
     Expression<String>? errorKind,
     Expression<int>? tokCount,
+    Expression<bool>? reported,
     Expression<int>? genMs,
     Expression<DateTime>? createdAt,
     Expression<int>? parentMessageId,
@@ -2999,6 +3044,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (status != null) 'status': status,
       if (errorKind != null) 'error_kind': errorKind,
       if (tokCount != null) 'tok_count': tokCount,
+      if (reported != null) 'reported': reported,
       if (genMs != null) 'gen_ms': genMs,
       if (createdAt != null) 'created_at': createdAt,
       if (parentMessageId != null) 'parent_message_id': parentMessageId,
@@ -3014,6 +3060,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<MessageStatus>? status,
     Value<String?>? errorKind,
     Value<int?>? tokCount,
+    Value<bool>? reported,
     Value<int?>? genMs,
     Value<DateTime>? createdAt,
     Value<int?>? parentMessageId,
@@ -3027,6 +3074,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       status: status ?? this.status,
       errorKind: errorKind ?? this.errorKind,
       tokCount: tokCount ?? this.tokCount,
+      reported: reported ?? this.reported,
       genMs: genMs ?? this.genMs,
       createdAt: createdAt ?? this.createdAt,
       parentMessageId: parentMessageId ?? this.parentMessageId,
@@ -3064,6 +3112,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (tokCount.present) {
       map['tok_count'] = Variable<int>(tokCount.value);
     }
+    if (reported.present) {
+      map['reported'] = Variable<bool>(reported.value);
+    }
     if (genMs.present) {
       map['gen_ms'] = Variable<int>(genMs.value);
     }
@@ -3087,9 +3138,517 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('status: $status, ')
           ..write('errorKind: $errorKind, ')
           ..write('tokCount: $tokCount, ')
+          ..write('reported: $reported, ')
           ..write('genMs: $genMs, ')
           ..write('createdAt: $createdAt, ')
           ..write('parentMessageId: $parentMessageId')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ContentReportsTable extends ContentReports
+    with TableInfo<$ContentReportsTable, ContentReport> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ContentReportsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<int> conversationId = GeneratedColumn<int>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<int> messageId = GeneratedColumn<int>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modelNameMeta = const VerificationMeta(
+    'modelName',
+  );
+  @override
+  late final GeneratedColumn<String> modelName = GeneratedColumn<String>(
+    'model_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _excerptMeta = const VerificationMeta(
+    'excerpt',
+  );
+  @override
+  late final GeneratedColumn<String> excerpt = GeneratedColumn<String>(
+    'excerpt',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    createdAt,
+    conversationId,
+    messageId,
+    modelName,
+    reason,
+    note,
+    excerpt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'content_reports';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ContentReport> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('model_name')) {
+      context.handle(
+        _modelNameMeta,
+        modelName.isAcceptableOrUnknown(data['model_name']!, _modelNameMeta),
+      );
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('excerpt')) {
+      context.handle(
+        _excerptMeta,
+        excerpt.isAcceptableOrUnknown(data['excerpt']!, _excerptMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_excerptMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ContentReport map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ContentReport(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message_id'],
+      )!,
+      modelName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model_name'],
+      ),
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      excerpt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}excerpt'],
+      )!,
+    );
+  }
+
+  @override
+  $ContentReportsTable createAlias(String alias) {
+    return $ContentReportsTable(attachedDatabase, alias);
+  }
+}
+
+class ContentReport extends DataClass implements Insertable<ContentReport> {
+  final int id;
+  final DateTime createdAt;
+  final int conversationId;
+  final int messageId;
+  final String? modelName;
+
+  /// `ReportReason.name` (see `data/safety/report_repository.dart`).
+  final String reason;
+  final String? note;
+
+  /// The reported reply's text, capped at 2000 chars.
+  final String excerpt;
+  const ContentReport({
+    required this.id,
+    required this.createdAt,
+    required this.conversationId,
+    required this.messageId,
+    this.modelName,
+    required this.reason,
+    this.note,
+    required this.excerpt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['conversation_id'] = Variable<int>(conversationId);
+    map['message_id'] = Variable<int>(messageId);
+    if (!nullToAbsent || modelName != null) {
+      map['model_name'] = Variable<String>(modelName);
+    }
+    map['reason'] = Variable<String>(reason);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['excerpt'] = Variable<String>(excerpt);
+    return map;
+  }
+
+  ContentReportsCompanion toCompanion(bool nullToAbsent) {
+    return ContentReportsCompanion(
+      id: Value(id),
+      createdAt: Value(createdAt),
+      conversationId: Value(conversationId),
+      messageId: Value(messageId),
+      modelName: modelName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(modelName),
+      reason: Value(reason),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      excerpt: Value(excerpt),
+    );
+  }
+
+  factory ContentReport.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ContentReport(
+      id: serializer.fromJson<int>(json['id']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      conversationId: serializer.fromJson<int>(json['conversationId']),
+      messageId: serializer.fromJson<int>(json['messageId']),
+      modelName: serializer.fromJson<String?>(json['modelName']),
+      reason: serializer.fromJson<String>(json['reason']),
+      note: serializer.fromJson<String?>(json['note']),
+      excerpt: serializer.fromJson<String>(json['excerpt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'conversationId': serializer.toJson<int>(conversationId),
+      'messageId': serializer.toJson<int>(messageId),
+      'modelName': serializer.toJson<String?>(modelName),
+      'reason': serializer.toJson<String>(reason),
+      'note': serializer.toJson<String?>(note),
+      'excerpt': serializer.toJson<String>(excerpt),
+    };
+  }
+
+  ContentReport copyWith({
+    int? id,
+    DateTime? createdAt,
+    int? conversationId,
+    int? messageId,
+    Value<String?> modelName = const Value.absent(),
+    String? reason,
+    Value<String?> note = const Value.absent(),
+    String? excerpt,
+  }) => ContentReport(
+    id: id ?? this.id,
+    createdAt: createdAt ?? this.createdAt,
+    conversationId: conversationId ?? this.conversationId,
+    messageId: messageId ?? this.messageId,
+    modelName: modelName.present ? modelName.value : this.modelName,
+    reason: reason ?? this.reason,
+    note: note.present ? note.value : this.note,
+    excerpt: excerpt ?? this.excerpt,
+  );
+  ContentReport copyWithCompanion(ContentReportsCompanion data) {
+    return ContentReport(
+      id: data.id.present ? data.id.value : this.id,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      modelName: data.modelName.present ? data.modelName.value : this.modelName,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      note: data.note.present ? data.note.value : this.note,
+      excerpt: data.excerpt.present ? data.excerpt.value : this.excerpt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContentReport(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('messageId: $messageId, ')
+          ..write('modelName: $modelName, ')
+          ..write('reason: $reason, ')
+          ..write('note: $note, ')
+          ..write('excerpt: $excerpt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    createdAt,
+    conversationId,
+    messageId,
+    modelName,
+    reason,
+    note,
+    excerpt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ContentReport &&
+          other.id == this.id &&
+          other.createdAt == this.createdAt &&
+          other.conversationId == this.conversationId &&
+          other.messageId == this.messageId &&
+          other.modelName == this.modelName &&
+          other.reason == this.reason &&
+          other.note == this.note &&
+          other.excerpt == this.excerpt);
+}
+
+class ContentReportsCompanion extends UpdateCompanion<ContentReport> {
+  final Value<int> id;
+  final Value<DateTime> createdAt;
+  final Value<int> conversationId;
+  final Value<int> messageId;
+  final Value<String?> modelName;
+  final Value<String> reason;
+  final Value<String?> note;
+  final Value<String> excerpt;
+  const ContentReportsCompanion({
+    this.id = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.modelName = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.note = const Value.absent(),
+    this.excerpt = const Value.absent(),
+  });
+  ContentReportsCompanion.insert({
+    this.id = const Value.absent(),
+    required DateTime createdAt,
+    required int conversationId,
+    required int messageId,
+    this.modelName = const Value.absent(),
+    required String reason,
+    this.note = const Value.absent(),
+    required String excerpt,
+  }) : createdAt = Value(createdAt),
+       conversationId = Value(conversationId),
+       messageId = Value(messageId),
+       reason = Value(reason),
+       excerpt = Value(excerpt);
+  static Insertable<ContentReport> custom({
+    Expression<int>? id,
+    Expression<DateTime>? createdAt,
+    Expression<int>? conversationId,
+    Expression<int>? messageId,
+    Expression<String>? modelName,
+    Expression<String>? reason,
+    Expression<String>? note,
+    Expression<String>? excerpt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (createdAt != null) 'created_at': createdAt,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (messageId != null) 'message_id': messageId,
+      if (modelName != null) 'model_name': modelName,
+      if (reason != null) 'reason': reason,
+      if (note != null) 'note': note,
+      if (excerpt != null) 'excerpt': excerpt,
+    });
+  }
+
+  ContentReportsCompanion copyWith({
+    Value<int>? id,
+    Value<DateTime>? createdAt,
+    Value<int>? conversationId,
+    Value<int>? messageId,
+    Value<String?>? modelName,
+    Value<String>? reason,
+    Value<String?>? note,
+    Value<String>? excerpt,
+  }) {
+    return ContentReportsCompanion(
+      id: id ?? this.id,
+      createdAt: createdAt ?? this.createdAt,
+      conversationId: conversationId ?? this.conversationId,
+      messageId: messageId ?? this.messageId,
+      modelName: modelName ?? this.modelName,
+      reason: reason ?? this.reason,
+      note: note ?? this.note,
+      excerpt: excerpt ?? this.excerpt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<int>(conversationId.value);
+    }
+    if (messageId.present) {
+      map['message_id'] = Variable<int>(messageId.value);
+    }
+    if (modelName.present) {
+      map['model_name'] = Variable<String>(modelName.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (excerpt.present) {
+      map['excerpt'] = Variable<String>(excerpt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContentReportsCompanion(')
+          ..write('id: $id, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('messageId: $messageId, ')
+          ..write('modelName: $modelName, ')
+          ..write('reason: $reason, ')
+          ..write('note: $note, ')
+          ..write('excerpt: $excerpt')
           ..write(')'))
         .toString();
   }
@@ -3104,6 +3663,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CharactersTable characters = $CharactersTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
+  late final $ContentReportsTable contentReports = $ContentReportsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3114,6 +3674,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     characters,
     conversations,
     messages,
+    contentReports,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([

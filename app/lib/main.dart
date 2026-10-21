@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/intents/intent_inbox.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/onboarding/state/onboarding_controller.dart';
@@ -29,6 +32,13 @@ Future<void> main() async {
   runApp(
     UncontrolledProviderScope(container: container, child: const DhruvaApp()),
   );
+
+  // Android share / text-selection / shortcut entry points -> router.
+  // After the first frame, so the router has consumed its initial location
+  // and a cold-start share/selection isn't overwritten by it.
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => unawaited(IntentInbox(navigate: appRouter.push).start()),
+  );
 }
 
 class DhruvaApp extends StatelessWidget {
@@ -46,6 +56,9 @@ class DhruvaApp extends StatelessWidget {
     // Theme.of(context)'s semantic roles, so both modes light up unchanged.
     return MaterialApp.router(
       title: 'Dhruva',
+      // The debug ribbon otherwise lands in every debug-build capture, which
+      // makes store screenshots and design review unusable.
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
