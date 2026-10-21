@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/intents/intent_inbox.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/onboarding/state/onboarding_controller.dart';
@@ -29,6 +32,9 @@ Future<void> main() async {
   runApp(
     UncontrolledProviderScope(container: container, child: const DhruvaApp()),
   );
+
+  // Android share / text-selection / shortcut entry points -> router.
+  unawaited(IntentInbox(navigate: appRouter.push).start());
 }
 
 class DhruvaApp extends StatelessWidget {

@@ -20,6 +20,7 @@ import '../state/conversation_list_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/conversation_tile.dart';
 import '../widgets/empty_states.dart';
+import '../widgets/workflow_strip.dart';
 import 'model_picker_sheet.dart';
 import 'voice_launch.dart';
 
@@ -131,6 +132,11 @@ class _ConversationListScreenState
             icon: const Icon(Icons.record_voice_over_outlined, size: 18),
             label: const Text('Talk'),
           ),
+          IconButton(
+            tooltip: 'Workflows',
+            onPressed: () => context.push('/workflows'),
+            icon: const Icon(Icons.auto_awesome_outlined),
+          ),
           SizedBox(width: tokens.spacing.xs),
         ],
       ),
@@ -237,6 +243,7 @@ class _ConversationBody extends ConsumerWidget {
               ],
             ),
           ),
+          const WorkflowStrip(),
           Expanded(
             child: state.conversations.isEmpty
                 ? (hasAnyModel

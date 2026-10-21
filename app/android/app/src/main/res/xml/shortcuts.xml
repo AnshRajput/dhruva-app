@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcuts. MainActivity maps the "route" extra onto the
+     dhruva/intents channel (see IntentInbox). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/shortcut_new_chat">
+        <intent
+            android:action="tech.appuinside.dhruva.SHORTCUT"
+            android:targetPackage="app.dhruva.mobile"
+            android:targetClass="tech.appuinside.dhruva.MainActivity">
+            <extra android:name="route" android:value="new_chat"/>
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="workflows"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/shortcut_workflows">
+        <intent
+            android:action="tech.appuinside.dhruva.SHORTCUT"
+            android:targetPackage="app.dhruva.mobile"
+            android:targetClass="tech.appuinside.dhruva.MainActivity">
+            <extra android:name="route" android:value="workflows"/>
+        </intent>
+    </shortcut>
+</shortcuts>

@@ -47,7 +47,33 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Share sheet: "Dhruva AI" appears when sharing plain text from any
+                 app; opens Workflows with the text prefilled (IntentInbox). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <!-- Static launcher shortcuts (long-press the app icon). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts"/>
         </activity>
+        <!-- Text-selection menu: "Ask Dhruva AI" shows up next to Copy/Paste in
+             every app. An alias (not a second filter on MainActivity) gives the
+             menu its own label; it forwards to MainActivity, which reads
+             EXTRA_PROCESS_TEXT. -->
+        <activity-alias
+            android:name=".ProcessTextAlias"
+            android:targetActivity=".MainActivity"
+            android:label="Ask Dhruva AI"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity-alias>
         <!-- background_downloader runs its download via a WorkManager worker that
              promotes itself to a foreground service (Config.runInForeground). On
              API 34+, WorkManager's SystemForegroundService starts foreground with
