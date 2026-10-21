@@ -5,6 +5,7 @@
 
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/features/settings/ui/about_screen.dart';
+import 'package:dhruva/features/settings/app_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';
@@ -61,7 +62,10 @@ void main() {
     expect(find.text('Dhruva AI'), findsOneWidget);
     // DESIGNER BLOCKING #3: the name's own meaning, in its own script.
     expect(find.text('ध्रुव'), findsOneWidget);
-    expect(find.text('Version 0.4.2 (build 78)'), findsOneWidget);
+    expect(
+      find.text('Version $appVersion (build $appBuildNumber)'),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('Your AI. Your phone. Nobody else’s business.'),
       findsOneWidget,

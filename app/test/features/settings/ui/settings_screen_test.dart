@@ -8,6 +8,7 @@ import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/features/settings/app_info.dart';
 import 'package:dhruva/features/settings/ui/settings_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -154,7 +155,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('About Dhruva AI'), findsOneWidget);
-      expect(find.text('Version 0.4.2'), findsOneWidget);
+      expect(find.text('Version $appVersion'), findsOneWidget);
     },
   );
 }
