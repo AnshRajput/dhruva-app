@@ -12,6 +12,7 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/main.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -73,6 +74,11 @@ void main() {
     appRouter.go('/workflows?text=${Uri.encodeComponent(_bill)}');
     await tester.pumpAndSettle();
     await shot('02_workflows');
+    await tester.scrollUntilVisible(
+      find.text('Understand a document'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Understand a document').first);
     await tester.pumpAndSettle();
     var n = await replies();
