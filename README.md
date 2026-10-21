@@ -1,3 +1,5 @@
+<img src="docs/media/icon.png" width="96" alt="Dhruva AI icon" />
+
 # Dhruva AI
 
 **Your AI. Your phone. Nobody else's business.**
