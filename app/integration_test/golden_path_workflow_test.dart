@@ -13,6 +13,7 @@ import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/main.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -72,6 +73,20 @@ void main() {
       }
       // ignore: avoid_print
       print('DHRUVA WORKFLOW PROOF: "${reply?.content}"');
+      if (reply == null) {
+        // Diagnostics: every message row + what's on screen.
+        for (final m in await db.select(db.messages).get()) {
+          // ignore: avoid_print
+          print('ROW ${m.role} ${m.status} ${m.errorKind} "${m.content}"');
+        }
+        final texts = tester
+            .widgetList<Text>(find.byType(Text))
+            .map((t) => t.data)
+            .whereType<String>()
+            .join(' | ');
+        // ignore: avoid_print
+        print('SCREEN: $texts');
+      }
       expect(reply, isNotNull, reason: 'no completed assistant reply in 90s');
     },
     timeout: const Timeout(Duration(minutes: 5)),

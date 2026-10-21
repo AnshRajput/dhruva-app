@@ -314,11 +314,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       if (args.characterId != null) {
         return _buildFromCharacter(args.characterId!, args.initialModelId);
       }
+      final storage = ref.read(storageManagerProvider);
+      // No explicit model (workflows, share / "Ask Dhruva AI", the New chat
+      // shortcut): use the most-recently-used installed model rather than
+      // dead-ending on "No model installed yet" when one is installed.
       final model = args.initialModelId == null
-          ? null
-          : await ref
-                .read(storageManagerProvider)
-                .getInstalledModel(args.initialModelId!);
+          ? (await storage.listInstalledModels()).firstOrNull
+          : await storage.getInstalledModel(args.initialModelId!);
       return ChatThreadState(modelId: model?.id, model: model);
     }
 
