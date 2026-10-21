@@ -4,8 +4,8 @@
 // settings_screen_test.dart.
 
 import 'package:dhruva/core/theme/app_theme.dart';
-import 'package:dhruva/features/settings/ui/about_screen.dart';
 import 'package:dhruva/features/settings/app_info.dart';
+import 'package:dhruva/features/settings/ui/about_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';

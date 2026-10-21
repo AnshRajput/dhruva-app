@@ -1,6 +1,6 @@
 /// Conversation list (chat-spec.md §6.2) — the app's `/chat` home tab.
 /// Pinned-first ordering straight from `ChatRepository.listConversations`,
-/// folder chip filter, debounced search, swipe/menu actions, FAB new-chat
+/// folder chip filter, swipe/menu actions, FAB new-chat
 /// flow (model picker if multiple installed / auto if one / models-hub CTA
 /// if none).
 library;
@@ -14,12 +14,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
-import '../../../data/chat/chat_repository.dart';
 import '../state/chat_controller.dart' show ChatRouteArgs;
 import '../state/conversation_list_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/conversation_tile.dart';
 import '../widgets/empty_states.dart';
+import 'chat_search_screen.dart';
 import 'model_picker_sheet.dart';
 import 'voice_launch.dart';
 
@@ -33,26 +33,6 @@ class ConversationListScreen extends ConsumerStatefulWidget {
 
 class _ConversationListScreenState
     extends ConsumerState<ConversationListScreen> {
-  final _searchCtrl = TextEditingController();
-  Timer? _debounce;
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    // chat-spec.md §6.2: "debounced 300ms (motion.moderate-adjacent but
-    // this is a debounce not an animation — reuse the number, don't invent
-    // a new one)" — a literal here, per that note, not a token lookup.
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      ref.read(conversationListControllerProvider.notifier).search(value);
-    });
-  }
-
   Future<void> _startNewChat() async {
     final models = await ref.read(installedModelsProvider.future);
     if (models.isEmpty) {
@@ -123,6 +103,7 @@ class _ConversationListScreenState
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
+          const ChatSearchAction(),
           // WS5: a labelled, always-present voice entry — not an unlabelled
           // waveform glyph. Visible on every state of the home (empty or full),
           // so voice is findable before any conversation exists.
@@ -136,33 +117,13 @@ class _ConversationListScreenState
       ),
       body: Column(
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              tokens.spacing.md,
-              tokens.spacing.sm,
-              tokens.spacing.md,
-              0,
-            ),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search conversations',
-                isDense: true,
-              ),
-            ),
-          ),
           Expanded(
             child: switch (state) {
-              AsyncData(:final value) =>
-                value.isSearching
-                    ? _SearchResults(hits: value.searchResults)
-                    : _ConversationBody(
-                        state: value,
-                        hasAnyModel: hasAnyModel,
-                        onNewChat: _startNewChat,
-                      ),
+              AsyncData(:final value) => _ConversationBody(
+                state: value,
+                hasAnyModel: hasAnyModel,
+                onNewChat: _startNewChat,
+              ),
               AsyncError(:final error) => ErrorStateView(
                 error: error,
                 onRetry: () =>
@@ -301,40 +262,6 @@ class _FolderChip extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-    );
-  }
-}
-
-class _SearchResults extends StatelessWidget {
-  final List<ConversationSearchHit> hits;
-  const _SearchResults({required this.hits});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (hits.isEmpty) {
-      return const Center(child: Text('No conversations match your search.'));
-    }
-    return ListView.builder(
-      itemCount: hits.length,
-      itemBuilder: (context, i) {
-        final hit = hits[i];
-        return ListTile(
-          title: Text(
-            hit.title.isEmpty ? 'Untitled conversation' : hit.title,
-            style: theme.textTheme.titleSmall,
-          ),
-          subtitle: Text(
-            hit.snippet,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          onTap: () => context.push('/chat/${hit.conversationId}'),
-        );
-      },
     );
   }
 }
