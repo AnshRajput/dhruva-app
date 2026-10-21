@@ -31,7 +31,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
-  - llama_cpp (from `/Users/ansh/engineering/dhruva-app/app/ios/Vendor/llama_cpp`)
+  - llama_cpp (from `Vendor/llama_cpp`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - sherpa_onnx_ios (from `.symlinks/plugins/sherpa_onnx_ios/ios`)
@@ -53,7 +53,7 @@ EXTERNAL SOURCES:
   integration_test:
     :path: ".symlinks/plugins/integration_test/ios"
   llama_cpp:
-    :path: "/Users/ansh/engineering/dhruva-app/app/ios/Vendor/llama_cpp"
+    :path: Vendor/llama_cpp
   record_ios:
     :path: ".symlinks/plugins/record_ios/ios"
   share_plus:
@@ -77,6 +77,6 @@ SPEC CHECKSUMS:
   sherpa_onnx_ios: 32af18abd5c776d5f425d2abe0903471d26db221
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: a226630f91804d3999a708b9f4e2a90da927185b
+PODFILE CHECKSUM: a6eaf6bdfc72569233d6fcc6864323a78b5f7b53
 
 COCOAPODS: 1.17.0
