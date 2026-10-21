@@ -160,6 +160,7 @@ flutter:
   # itself is ever missing.
   assets:
     - assets/characters/starter_pack.json
+    - shorebird.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:
