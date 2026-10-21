@@ -1016,6 +1016,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.7"
+  restart_app:
+    dependency: "direct main"
+    description:
+      name: restart_app
+      sha256: "398550c5c0438b15c6062c7cb7e5c234498584aa9ba1b28910e77d4ff43bfef6"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.10.2"
   riverpod:
     dependency: transitive
     description:
@@ -1144,6 +1152,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.13.4"
+  shorebird_code_push:
+    dependency: "direct main"
+    description:
+      name: shorebird_code_push
+      sha256: "32df9946782c6ca95d7065c7f2156df74675e931b816d0dc391a3d8f8917930f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
   sky_engine:
     dependency: transitive
     description: flutter

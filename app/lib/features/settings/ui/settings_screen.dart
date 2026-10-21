@@ -11,9 +11,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
-import '../app_info.dart';
+import '../../../core/update/shorebird_update_banner.dart' show updIosReady;
+import '../../../core/update/shorebird_update_service.dart';
 import '../state/storage_summary_provider.dart';
 import '../widgets/credit_row.dart';
+import '../widgets/version_text.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -33,6 +35,7 @@ class SettingsScreen extends StatelessWidget {
           _SectionHeader('Safety'),
           _SafetyTile(),
           _SectionHeader('About'),
+          _UpdateTile(),
           _AboutTile(),
           CreditRow(),
         ],
@@ -183,6 +186,53 @@ class _SafetyTile extends StatelessWidget {
   }
 }
 
+/// "Check for updates": tap forces a check, or downloads / restarts per phase.
+class _UpdateTile extends ConsumerWidget {
+  const _UpdateTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(shorebirdUpdateProvider);
+    final n = ref.read(shorebirdUpdateProvider.notifier);
+    void say(String m) =>
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    final (String sub, VoidCallback? tap) = switch (s.phase) {
+      ShorebirdPhase.unavailable => (
+        "Updates aren't available in this build",
+        null,
+      ),
+      ShorebirdPhase.available => ('Update available', n.download),
+      ShorebirdPhase.downloading => ('Downloading update\u2026', null),
+      ShorebirdPhase.readyToRestart =>
+        s.reopenByHand
+            ? (updIosReady, null)
+            : ('Update ready. Tap to restart', n.restart),
+      ShorebirdPhase.failed => ('Update failed. Tap to retry', n.download),
+      ShorebirdPhase.idle => (
+        s.patch == null ? 'Up to date' : 'Patch ${s.patch}',
+        () async {
+          final ok = await n.check(force: true);
+          if (!context.mounted) return;
+          if (!ok) {
+            say("Couldn't check for updates.");
+          } else if (ref.read(shorebirdUpdateProvider).phase ==
+              ShorebirdPhase.idle) {
+            say("You're up to date.");
+          }
+        },
+      ),
+    };
+    return ListTile(
+      key: const ValueKey('update-row'),
+      leading: const Icon(Icons.system_update_alt_rounded),
+      title: const Text('Check for updates'),
+      subtitle: Text(sub),
+      enabled: tap != null || s.phase == ShorebirdPhase.downloading,
+      onTap: tap,
+    );
+  }
+}
+
 class _AboutTile extends StatelessWidget {
   const _AboutTile();
 
@@ -191,7 +241,7 @@ class _AboutTile extends StatelessWidget {
     return ListTile(
       leading: const Icon(Icons.info_outline),
       title: const Text('About Dhruva AI'),
-      subtitle: const Text('Version $appVersion'),
+      subtitle: const VersionText(),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/settings/about'),
     );

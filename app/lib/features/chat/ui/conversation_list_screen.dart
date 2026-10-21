@@ -13,6 +13,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/update/shorebird_update_banner.dart';
+import '../../../core/update/shorebird_update_service.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../state/chat_controller.dart' show ChatRouteArgs;
 import '../state/conversation_list_controller.dart';
@@ -94,6 +96,7 @@ class _ConversationListScreenState
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final state = ref.watch(conversationListControllerProvider);
+    ref.watch(shorebirdUpdateProvider); // starts the manual code-push check
     final modelsAsync = ref.watch(installedModelsProvider);
     // UX-hardening A4: default false while loading so the honest "No model
     // installed → Browse models" empty state shows on a fresh install, instead
@@ -204,6 +207,7 @@ class _ConversationBody extends ConsumerWidget {
               ],
             ),
           ),
+          const ShorebirdUpdateBanner(),
           const WorkflowStrip(),
           Expanded(
             child: state.conversations.isEmpty

@@ -52,7 +52,7 @@ Every cloud chatbot sees what you type. That's fine for trivia and wrong for a m
 
 - All inference happens on the device. There is no cloud path, and no fallback.
 - No analytics, crash reporters, ads or tracking SDKs. No account.
-- Network use: Hugging Face model browsing/downloads you initiate. That's it.
+- Network use: Hugging Face model browsing/downloads you initiate, plus app-update checks that contact Shorebird (app version + patch info only, never your chats). That's it.
 - Apache-2.0 and fully open source, so every line above is auditable, not just asserted. iOS ships a privacy manifest declaring zero collected data.
 
 ## Under the hood

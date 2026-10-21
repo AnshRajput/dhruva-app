@@ -40,7 +40,7 @@ PRIVACY, CONCRETELY
 • All inference happens on your device
 • No analytics, crash reporters, tracking SDKs or ads
 • No account, no sign-in, no profile
-• The only network use is model downloads you start
+• Network use: model downloads you start, plus app-update checks (app version and patch info only, never your chats)
 • Apache-2.0 open source, so every claim is auditable
 
 WHAT YOUR PHONE NEEDS
