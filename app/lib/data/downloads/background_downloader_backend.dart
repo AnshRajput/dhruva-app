@@ -52,11 +52,17 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   Future<void> _ensureNotificationPermission() async {
     if (_askedNotifications) return;
     _askedNotifications = true;
-    final status = await _downloader.permissions.status(
-      bg.PermissionType.notifications,
-    );
-    if (status != bg.PermissionStatus.granted) {
-      await _downloader.permissions.request(bg.PermissionType.notifications);
+    try {
+      final status = await _downloader.permissions.status(
+        bg.PermissionType.notifications,
+      );
+      if (status != bg.PermissionStatus.granted) {
+        await _downloader.permissions.request(bg.PermissionType.notifications);
+      }
+    } catch (_) {
+      // Notifications are optional: a failed check must never block the
+      // download itself. Allow another ask on the next download.
+      _askedNotifications = false;
     }
   }
 

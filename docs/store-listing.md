@@ -65,7 +65,9 @@ Dhruva runs open-weight language models fully on-device via llama.cpp. No
 account or login is required. To test: open the app → Models → download
 "Qwen2.5 0.5B Instruct" (the smallest, ~400 MB) → Chat → tap a suggested prompt, or open Workflows
 → Summarize. Downloaded model files are inert data (GGUF weights) executed
-by the app's own bundled engine; no code is downloaded (2.5.2). Every AI
+by the app's own bundled engine, so model downloads add no code (2.5.2).
+Dart-only bug fixes ship via Shorebird code push, which runs interpreted
+code and never changes the app's primary purpose (3.3.1(B)). Every AI
 reply has a Report action (Settings → Safety & reports lists reports and the
 developer contact) per guideline 1.2. Microphone/camera/photos are used
 only for user-initiated voice and image questions, processed on-device.

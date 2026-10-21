@@ -7,6 +7,9 @@
 # Output: app/build/app/outputs/bundle/release/app-release.aab
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../app"
+# Without key.properties Gradle silently falls back to the debug key, and
+# Shorebird would publish a release Play can never accept.
+[[ -f android/key.properties ]] || { echo "error: app/android/key.properties (upload key) missing" >&2; exit 1; }
 SHOREBIRD_TOKEN="$(cat ~/secrets/shorebird-token)" ~/.shorebird/bin/shorebird \
   release android --flutter-version=3.41.2 --target-platform=android-arm64 --no-confirm
 # Patch later (Dart-only changes):

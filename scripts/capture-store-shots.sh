@@ -3,8 +3,10 @@
 # and grabs a frame whenever the test prints `SHOT <name>`.
 # Usage: scripts/capture-store-shots.sh <simulator-udid> <model.gguf> <out-dir>
 set -euo pipefail
-UDID="$1"; MODEL="$2"; OUT="$3"
-mkdir -p "$OUT"
+UDID="$1"
+mkdir -p "$3"
+# Absolute paths: the script cd's into app/ below.
+MODEL="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; OUT="$(cd "$3" && pwd)"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged \
   --batteryLevel 100 --cellularBars 4 --wifiBars 3 2>/dev/null || true
