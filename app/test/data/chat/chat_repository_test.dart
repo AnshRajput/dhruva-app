@@ -643,6 +643,37 @@ void main() {
       },
     );
 
+    test(
+      'message match is case-insensitive and the snippet is one line',
+      () async {
+        final id = await repo.createConversation(title: 'Chat');
+        await repo.appendMessage(
+          conversationId: id,
+          role: MessageRole.user,
+          content: 'first line\n\nSomething about SOURDOUGH starters\nmore',
+        );
+        final hit = (await repo.search('sourdough')).single;
+        expect(hit.snippet, contains('SOURDOUGH'));
+        expect(hit.snippet, isNot(contains('\n')));
+      },
+    );
+
+    test('underscore is literal, not a single-char wildcard', () async {
+      await repo.createConversation(title: 'a_b');
+      await repo.createConversation(title: 'axb');
+      expect((await repo.search('a_b')), hasLength(1));
+    });
+
+    test('results are ordered most recently updated first', () async {
+      final older = await repo.createConversation(title: 'rust notes old');
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      final newer = await repo.createConversation(title: 'rust notes new');
+      expect((await repo.search('rust')).map((h) => h.conversationId), [
+        newer,
+        older,
+      ]);
+    });
+
     test('no matches returns an empty list', () async {
       await repo.createConversation(title: 'something');
       expect(await repo.search('nonexistent-term-xyz'), isEmpty);

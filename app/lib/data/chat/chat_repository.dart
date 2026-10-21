@@ -469,7 +469,14 @@ final class ChatRepository {
             _db.conversations.title.like(pattern, escapeChar: r'\') |
                 _db.messages.content.like(pattern, escapeChar: r'\'),
           )
-          ..orderBy([OrderingTerm.desc(_db.conversations.updatedAt)]);
+          ..orderBy([
+            OrderingTerm.desc(_db.conversations.updatedAt),
+            OrderingTerm.desc(_db.conversations.id), // tie-break
+            // So the first row per conversation is its earliest matching
+            // message — the snippet source.
+            OrderingTerm.asc(_db.messages.createdAt),
+            OrderingTerm.asc(_db.messages.id),
+          ]);
 
     final rows = await joined.get();
     final seenConversations = <int>{};
@@ -478,7 +485,7 @@ final class ChatRepository {
       final convo = row.readTable(_db.conversations);
       if (!seenConversations.add(convo.id)) continue;
       final message = row.readTableOrNull(_db.messages);
-      final snippet = message != null && message.content.contains(trimmed)
+      final snippet = message != null
           ? _snippet(message.content, trimmed)
           : convo.title;
       hits.add(
@@ -499,7 +506,9 @@ final class ChatRepository {
 
   static const _snippetContext = 30;
 
-  static String _snippet(String content, String query) {
+  static String _snippet(String raw, String query) {
+    // One line: newlines/runs of whitespace collapse before windowing.
+    final content = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
     final index = content.toLowerCase().indexOf(query.toLowerCase());
     if (index < 0) return content;
     final start = (index - _snippetContext).clamp(0, content.length);

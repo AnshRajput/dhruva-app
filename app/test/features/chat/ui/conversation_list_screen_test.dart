@@ -162,25 +162,52 @@ void main() {
     },
   );
 
-  testWidgets('search filters to matching conversations', (tester) async {
-    await insertModel();
-    await db
-        .into(db.conversations)
-        .insert(
-          ConversationsCompanion.insert(
-            title: const Value('Trip planning'),
-            createdAt: DateTime.utc(2026, 7, 17),
-            updatedAt: DateTime.utc(2026, 7, 17),
-          ),
-        );
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
+  testWidgets(
+    'search icon opens search; shows snippet, opens chat, empty state',
+    (tester) async {
+      await insertModel();
+      final id = await db
+          .into(db.conversations)
+          .insert(
+            ConversationsCompanion.insert(
+              title: const Value('Trip planning'),
+              createdAt: DateTime.utc(2026, 7, 17),
+              updatedAt: DateTime.utc(2026, 7, 17),
+            ),
+          );
+      await db
+          .into(db.messages)
+          .insert(
+            MessagesCompanion.insert(
+              conversationId: id,
+              role: MessageRole.user,
+              status: MessageStatus.complete,
+              content: const Value('Which hotel near the Louvre is best?'),
+              createdAt: DateTime.utc(2026, 7, 17),
+            ),
+          );
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'Trip');
-    await tester.pump(const Duration(milliseconds: 350)); // debounce
+      await tester.tap(find.byTooltip('Search chats'));
+      await tester.pumpAndSettle();
 
-    // The snippet falls back to the title when no message body matched, so
-    // both the title Text and the snippet Text render "Trip planning".
-    expect(find.text('Trip planning'), findsWidgets);
-  });
+      await tester.enterText(find.byType(TextField), 'louvre');
+      await tester.pump(const Duration(milliseconds: 300)); // debounce
+      await tester.pumpAndSettle();
+      expect(find.textContaining('hotel near the Louvre'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'zzzz-nothing');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('No chats match'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'trip');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Trip planning'));
+      await tester.pumpAndSettle();
+      expect(find.text('thread:$id'), findsOneWidget);
+    },
+  );
 }
