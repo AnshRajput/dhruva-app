@@ -22,6 +22,7 @@ import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
 import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
+import '../../data/safety/report_repository.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
 import '../../vision/image_attach_source.dart';
@@ -166,6 +167,15 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository(db: ref.watch(appDatabaseProvider));
+});
+
+final reportRepositoryProvider = Provider<ReportRepository>((ref) {
+  return ReportRepository(db: ref.watch(appDatabaseProvider));
+});
+
+/// Saved content reports, newest first (Settings -> Safety & reports).
+final contentReportsProvider = StreamProvider<List<ContentReportInfo>>((ref) {
+  return ref.watch(reportRepositoryProvider).watchAll();
 });
 
 /// Cross-feature "the conversation list changed outside its own controller"

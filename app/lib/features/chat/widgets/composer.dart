@@ -277,6 +277,12 @@ class _ComposerState extends ConsumerState<Composer> {
                   ),
                 ],
               ),
+              Text(
+                'AI can be wrong. Everything runs on your phone.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),

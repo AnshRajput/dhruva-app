@@ -24,6 +24,7 @@ import '../widgets/composer.dart';
 import '../widgets/empty_states.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
+import '../widgets/report_sheet.dart';
 import 'model_picker_sheet.dart';
 import 'sampling_settings_sheet.dart';
 import 'voice_launch.dart';
@@ -377,6 +378,17 @@ class _ThreadScaffold extends ConsumerWidget {
           : null,
       onEdit: message.role == MessageRole.user && canAct
           ? () => _editMessage(context, message)
+          : null,
+      onReport:
+          message.role == MessageRole.assistant &&
+              !isStreamingMessage &&
+              message.status != MessageStatus.error
+          ? () => showReportSheet(
+              context,
+              message: message,
+              modelName: state.model?.fileName,
+              onReported: () => controller.markReported(message.id),
+            )
           : null,
     );
   }

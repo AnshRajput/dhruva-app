@@ -68,6 +68,9 @@ final class MessageInfo {
   final DateTime createdAt;
   final int? parentMessageId;
 
+  /// The user reported this reply (see `data/safety/report_repository.dart`).
+  final bool reported;
+
   const MessageInfo({
     required this.id,
     required this.conversationId,
@@ -80,6 +83,7 @@ final class MessageInfo {
     this.genMs,
     required this.createdAt,
     this.parentMessageId,
+    this.reported = false,
   });
 }
 
@@ -611,5 +615,6 @@ final class ChatRepository {
     genMs: row.genMs,
     createdAt: row.createdAt,
     parentMessageId: row.parentMessageId,
+    reported: row.reported,
   );
 }
