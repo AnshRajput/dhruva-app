@@ -150,4 +150,99 @@ void main() {
 
     expect(File(info.localPath).existsSync(), isTrue);
   });
+
+  test('rejects a non-GGUF file without writing anything', () async {
+    final bad = File('${sourceDir.path}/bad.gguf')
+      ..writeAsBytesSync([1, 2, 3, 4, 5]);
+    await expectLater(
+      importLocalGguf(
+        sourceFile: bad,
+        modelsDirectory: modelsDir,
+        db: db,
+        repoId: 'local/bad',
+      ),
+      throwsA(isA<StorageCorruptFileFailure>()),
+    );
+    expect(modelsDir.listSync(), isEmpty);
+  });
+
+  test('localImportExists detects a duplicate by file name', () async {
+    expect(localImportExists(modelsDir, 'dup.gguf'), isFalse);
+    await importLocalGguf(
+      sourceFile: ggufFile('dup.gguf'),
+      modelsDirectory: modelsDir,
+      db: db,
+      repoId: 'local/dup',
+    );
+    expect(localImportExists(modelsDir, 'dup.gguf'), isTrue);
+  });
+
+  test('insufficient free space throws and writes nothing', () async {
+    await expectLater(
+      importLocalGguf(
+        sourceFile: ggufFile('big.gguf'),
+        modelsDirectory: modelsDir,
+        db: db,
+        repoId: 'local/big',
+        freeBytes: 3,
+      ),
+      throwsA(isA<StorageInsufficientSpaceFailure>()),
+    );
+    expect(modelsDir.listSync(), isEmpty);
+  });
+
+  test(
+    'cancel mid-copy removes the partial file and registers nothing',
+    () async {
+      final token = ImportCancelToken();
+      final source = ggufFile('cancel.gguf', extra: List.filled(200000, 1));
+      await expectLater(
+        importLocalGguf(
+          sourceFile: source,
+          modelsDirectory: modelsDir,
+          db: db,
+          repoId: 'local/cancel',
+          cancel: token,
+          onProgress: (_, _) => token.cancel(),
+        ),
+        throwsA(isA<ImportCancelled>()),
+      );
+      expect(modelsDir.listSync(), isEmpty);
+      expect(await db.select(db.installedModels).get(), isEmpty);
+    },
+  );
+
+  test(
+    'copy failure cleans the partial file and keeps an existing model',
+    () async {
+      // Existing model at the destination; a directory squatting on the .part
+      // path makes openWrite fail -> StorageIoFailure, existing file intact.
+      final existing = File('${modelsDir.path}/f.gguf')
+        ..writeAsStringSync('old');
+      Directory('${modelsDir.path}/f.gguf.part').createSync();
+      await expectLater(
+        importLocalGguf(
+          sourceFile: ggufFile('f.gguf'),
+          modelsDirectory: modelsDir,
+          db: db,
+          repoId: 'local/f',
+        ),
+        throwsA(isA<StorageIoFailure>()),
+      );
+      expect(existing.readAsStringSync(), 'old');
+      expect(await db.select(db.installedModels).get(), isEmpty);
+    },
+  );
+
+  test('reports progress up to the full size', () async {
+    var last = 0;
+    await importLocalGguf(
+      sourceFile: ggufFile('p.gguf'),
+      modelsDirectory: modelsDir,
+      db: db,
+      repoId: 'local/p',
+      onProgress: (copied, total) => last = copied,
+    );
+    expect(last, 7);
+  });
 }

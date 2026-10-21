@@ -18,7 +18,9 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -293,17 +295,31 @@ class _InstalledBody extends ConsumerWidget {
                 ),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('Import GGUF'),
-                  onPressed: () => _importFile(ref),
+                  label: const Text('Import .gguf file'),
+                  onPressed: state.importingName != null
+                      ? null
+                      : () => _importFile(context, ref),
                 ),
               ],
             ),
           ),
+          if (state.importingName != null)
+            _ImportProgress(
+              name: state.importingName!,
+              progress: state.importProgress,
+              onCancel: () =>
+                  ref.read(storageControllerProvider.notifier).cancelImport(),
+            ),
           if (state.actionError != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Text(
-                friendlyFailureMessage(state.actionError!),
+                // The generic corrupt-file copy says "removed" (download
+                // case); an import is rejected before anything is written.
+                state.actionError is StorageCorruptFileFailure
+                    ? "That isn't a GGUF model file — pick a .gguf exported "
+                          'for llama.cpp.'
+                    : friendlyFailureMessage(state.actionError!),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
@@ -387,13 +403,79 @@ class _InstalledBody extends ConsumerWidget {
     }
   }
 
-  Future<void> _importFile(WidgetRef ref) async {
+  Future<void> _importFile(BuildContext context, WidgetRef ref) async {
     const typeGroup = XTypeGroup(label: 'GGUF', extensions: ['gguf']);
     final picked = await openFile(acceptedTypeGroups: [typeGroup]);
     if (picked == null) return;
-    await ref
-        .read(storageControllerProvider.notifier)
-        .importLocal(File(picked.path));
+    final notifier = ref.read(storageControllerProvider.notifier);
+    if (await notifier.importExists(p.basename(picked.path))) {
+      if (!context.mounted) return;
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Model already imported'),
+          content: Text(
+            '${p.basename(picked.path)} is already on this device. Replace '
+            'it with the selected file?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Skip'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Replace'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true) return;
+    }
+    await notifier.importLocal(File(picked.path));
+  }
+}
+
+/// Copy progress for a sideloaded GGUF — multi-GB files take a while, so the
+/// user gets a determinate bar and a way out.
+class _ImportProgress extends StatelessWidget {
+  final String name;
+  final double progress;
+  final VoidCallback onCancel;
+  const _ImportProgress({
+    required this.name,
+    required this.progress,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 4, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Importing $name · ${(progress * 100).round()}%',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 6),
+                LinearProgressIndicator(value: progress),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Cancel import',
+            onPressed: onCancel,
+          ),
+        ],
+      ),
+    );
   }
 }
 

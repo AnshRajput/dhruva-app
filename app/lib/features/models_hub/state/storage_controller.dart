@@ -22,10 +22,16 @@ final class StorageState {
   /// Cleared on the next successful action.
   final AppFailure? actionError;
 
+  /// File name + 0..1 progress of an in-flight import, null when idle.
+  final String? importingName;
+  final double importProgress;
+
   const StorageState({
     required this.installed,
     required this.totalBytes,
     this.actionError,
+    this.importingName,
+    this.importProgress = 0,
   });
 }
 
@@ -66,22 +72,67 @@ class StorageController extends AsyncNotifier<StorageState> {
     }
   }
 
+  ImportCancelToken? _cancel;
+
+  /// True if importing [fileName] would overwrite a file already in the
+  /// models directory (UI offers replace-or-skip first).
+  Future<bool> importExists(String fileName) async {
+    final dir = await ref.read(modelsDirectoryProvider.future);
+    return localImportExists(dir, fileName);
+  }
+
+  void cancelImport() => _cancel?.cancel();
+
   /// [sourceFile] is a user-picked GGUF (picked in the UI layer via
-  /// `file_selector` — selection itself is a UI concern). Validates via
-  /// `importLocalGguf` and surfaces its typed failures instead of crashing.
+  /// `file_selector` — selection itself is a UI concern). Validates, streams
+  /// the copy with progress, and surfaces typed failures instead of crashing.
+  /// A user cancel is silent (the partial file is already removed).
   Future<void> importLocal(File sourceFile) async {
+    final current = state.value;
+    if (current == null || _cancel != null) return;
+    final token = _cancel = ImportCancelToken();
+    final name = p.basename(sourceFile.path);
+    var lastPct = -1;
+    void publish(double progress) {
+      state = AsyncData(
+        StorageState(
+          installed: current.installed,
+          totalBytes: current.totalBytes,
+          importingName: name,
+          importProgress: progress,
+        ),
+      );
+    }
+
+    publish(0);
     try {
       final db = ref.read(appDatabaseProvider);
       final modelsDirectory = await ref.read(modelsDirectoryProvider.future);
+      final storage = await ref
+          .read(deviceInfoServiceProvider)
+          .getStorageInfo();
       await importLocalGguf(
         sourceFile: sourceFile,
         modelsDirectory: modelsDirectory,
         db: db,
         repoId: 'local/${p.basenameWithoutExtension(sourceFile.path)}',
+        freeBytes: storage.freeBytes,
+        cancel: token,
+        onProgress: (copied, total) {
+          final pct = total == 0 ? 100 : copied * 100 ~/ total;
+          if (pct == lastPct) return; // don't rebuild per 64KB chunk
+          lastPct = pct;
+          publish(pct / 100);
+        },
       );
       state = await AsyncValue.guard(_load);
+    } on ImportCancelled {
+      state = await AsyncValue.guard(_load);
     } on AppFailure catch (e) {
+      state = await AsyncValue.guard(_load);
       _setActionError(e);
+    } finally {
+      _cancel = null;
     }
   }
 
