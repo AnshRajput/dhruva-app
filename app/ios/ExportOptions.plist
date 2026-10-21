@@ -2,22 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Ad-hoc export for Firebase App Distribution. Signing is automatic so
+	     Xcode's signed-in account manages the profile (pass
+	     -allowProvisioningUpdates); ExportOptions-AppStore.plist is the
+	     TestFlight/App Store twin. -->
 	<key>method</key>
-	<string>ad-hoc</string>
+	<string>release-testing</string>
 	<key>teamID</key>
 	<string>9AA3ASU85Q</string>
 	<key>signingStyle</key>
-	<string>manual</string>
-	<key>signingCertificate</key>
-	<string>iPhone Distribution</string>
-	<key>provisioningProfiles</key>
-	<dict>
-		<key>app.dhruva.mobile</key>
-		<string>dhruva</string>
-	</dict>
+	<string>automatic</string>
 	<key>uploadSymbols</key>
-	<false/>
-	<key>uploadBitcode</key>
 	<false/>
 	<key>compileBitcode</key>
 	<false/>
