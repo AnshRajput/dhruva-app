@@ -10,7 +10,7 @@
 library;
 
 const appVersion = '0.6.0';
-const appBuildNumber = '101';
+const appBuildNumber = '102';
 
 const githubUrl = 'https://github.com/AnshRajput/dhruva-app';
 const websiteUrl = 'https://dhruvaai.vercel.app';

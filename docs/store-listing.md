@@ -48,6 +48,8 @@ WHAT YOUR PHONE NEEDS
 
 ध्रुव (Dhruva) is the pole star. This app is independent and not affiliated with AI4Bharat's Dhruva speech platform.
 
+Source code: https://github.com/AnshRajput/dhruva-app
+
 ## What's new (0.6.0)
 
 • One-tap Workflows: summarize, translate, rewrite, extract to-dos and more

@@ -59,6 +59,17 @@ android {
         }
     }
 
+    // abiFilters alone is not enough for App Bundles: Flutter's Gradle plugin
+    // resets it for `appbundle`, so plugin jniLibs (sherpa-onnx, onnxruntime,
+    // sqlite, dartjni) leaked armeabi-v7a/x86_64 folders into the AAB with no
+    // libflutter/libllama — Play would then serve the app to devices where it
+    // can't even start. Drop every non-arm64 native lib at packaging time.
+    packaging {
+        jniLibs {
+            excludes += listOf("lib/armeabi-v7a/**", "lib/armeabi/**", "lib/x86/**", "lib/x86_64/**")
+        }
+    }
+
     signingConfigs {
         // The Play upload keystore is deliberately kept OUTSIDE this repo (the
         // repo is public). android/key.properties points at it and is
