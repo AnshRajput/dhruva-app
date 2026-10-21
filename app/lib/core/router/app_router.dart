@@ -26,6 +26,7 @@ import '../../features/playground/ui/playground_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
+import '../../features/workflows/ui/workflows_screen.dart';
 import 'app_shell.dart';
 
 final appRouter = GoRouter(
@@ -126,6 +127,17 @@ final appRouter = GoRouter(
           args: ChatRouteArgs(conversationId: conversationId),
         );
       },
+    ),
+    // Workflows: `?text=` prefills the input (share sheet / text-selection
+    // intents via `IntentInbox`), `?id=` opens one workflow's sheet directly
+    // (chat quick strip) — query params so `features/chat` never imports
+    // `features/workflows` (ADR-002).
+    GoRoute(
+      path: '/workflows',
+      builder: (context, state) => WorkflowsScreen(
+        initialText: state.uri.queryParameters['text'],
+        initialWorkflowId: state.uri.queryParameters['id'],
+      ),
     ),
     GoRoute(
       path: '/characters/new',

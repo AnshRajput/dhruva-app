@@ -105,6 +105,9 @@ class SuggestedPrompts extends StatelessWidget {
   /// Opens the model picker to switch to an already-installed vision model.
   final VoidCallback? onSwitchModel;
 
+  /// Opens the Workflows screen. Null omits the "Try a workflow" link.
+  final VoidCallback? onOpenWorkflows;
+
   const SuggestedPrompts({
     super.key,
     required this.onSelect,
@@ -112,6 +115,7 @@ class SuggestedPrompts extends StatelessWidget {
     this.hasVisionModelInstalled = false,
     this.onGetVisionModel,
     this.onSwitchModel,
+    this.onOpenWorkflows,
   });
 
   /// General-purpose, model-agnostic starters. Kept short and concrete so a
@@ -169,6 +173,12 @@ class SuggestedPrompts extends StatelessWidget {
             _StarterCard(starter: starter, onTap: () => onSelect(starter.text)),
             SizedBox(height: tokens.spacing.sm),
           ],
+          if (onOpenWorkflows != null)
+            _TextLink(
+              icon: Icons.auto_awesome_outlined,
+              text: 'Try a workflow: summarize, translate, rewrite',
+              onTap: onOpenWorkflows,
+            ),
           if (_visionHint case final hint?) ...[
             SizedBox(height: tokens.spacing.xs),
             hint,
@@ -257,6 +267,49 @@ class _VisionHint extends StatelessWidget {
   }
 }
 
+/// A calm tappable one-liner (icon, text, arrow) in the secondary color.
+class _TextLink extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback? onTap;
+  const _TextLink({required this.icon, required this.text, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return InkWell(
+      borderRadius: BorderRadius.circular(tokens.radius.sm),
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: theme.colorScheme.secondary),
+            SizedBox(width: tokens.spacing.xs),
+            Flexible(
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+            ),
+            SizedBox(width: tokens.spacing.xs),
+            Icon(
+              Icons.arrow_forward,
+              size: 14,
+              color: theme.colorScheme.secondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Starter {
   final IconData icon;
   final String text;
@@ -314,33 +367,45 @@ class NoConversationsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DhruvaStar(size: 72, color: theme.colorScheme.primary),
-            SizedBox(height: tokens.spacing.lg),
-            Text(
-              'Start your first conversation',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.headlineSmall,
-            ),
-            SizedBox(height: tokens.spacing.sm),
-            Text(
-              'Your chats stay on this device — no account, no cloud, no '
-              'one watching.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    // Scroll-safe: the quick-workflows strip above shrinks this area, so on a
+    // short viewport it scrolls instead of overflowing.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(tokens.spacing.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DhruvaStar(size: 72, color: theme.colorScheme.primary),
+                  SizedBox(height: tokens.spacing.lg),
+                  Text(
+                    'Start your first conversation',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                  SizedBox(height: tokens.spacing.sm),
+                  Text(
+                    'Your chats stay on this device — no account, no cloud, no '
+                    'one watching.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  SizedBox(height: tokens.spacing.sm),
+                  TrustMark(style: theme.textTheme.bodyMedium),
+                  SizedBox(height: tokens.spacing.lg),
+                  FilledButton(
+                    onPressed: onNewChat,
+                    child: const Text('New chat'),
+                  ),
+                ],
               ),
             ),
-            SizedBox(height: tokens.spacing.sm),
-            TrustMark(style: theme.textTheme.bodyMedium),
-            SizedBox(height: tokens.spacing.lg),
-            FilledButton(onPressed: onNewChat, child: const Text('New chat')),
-          ],
+          ),
         ),
       ),
     );
