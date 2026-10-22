@@ -293,6 +293,9 @@ void main() {
 
   group('settings', () {
     testWidgets('unavailable row + version line + copy', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await pump(
         tester,
         const SettingsScreen(),

@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/crash/crash_log.dart';
 import 'core/intents/intent_inbox.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/onboarding/state/onboarding_controller.dart';
+import 'features/settings/app_info.dart';
 
 Future<void> main() async {
   // Loop 3: ProviderScope wraps the app so core/di/providers.dart's
@@ -21,7 +23,12 @@ Future<void> main() async {
   // live router redirect — see app_router.dart) via a container we then hand
   // to the app so the flag store isn't rebuilt. A read failure never blocks
   // launch: default to chat.
-  final container = ProviderContainer();
+  // Opt-in local crash log: records to disk, never sends anything.
+  final crashLog = CrashLog(appVersion: appVersion, appBuild: appBuildNumber)
+    ..install();
+  final container = ProviderContainer(
+    overrides: [crashLogProvider.overrideWithValue(crashLog)],
+  );
   try {
     final done = await container.read(onboardingCompleteProvider.future);
     if (!done) appRouter.go('/onboarding');

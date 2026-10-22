@@ -34,6 +34,7 @@ class SettingsScreen extends StatelessWidget {
           _ClearHistoryTile(),
           _SectionHeader('Safety'),
           _SafetyTile(),
+          _CrashReportsTile(),
           _SectionHeader('About'),
           _UpdateTile(),
           _AboutTile(),
@@ -182,6 +183,21 @@ class _SafetyTile extends StatelessWidget {
       subtitle: const Text('Report a reply, see your reports'),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/settings/safety'),
+    );
+  }
+}
+
+class _CrashReportsTile extends StatelessWidget {
+  const _CrashReportsTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.bug_report_outlined),
+      title: const Text('Crash reports'),
+      subtitle: const Text('Stay on your phone unless you share them'),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push('/settings/crash-reports'),
     );
   }
 }

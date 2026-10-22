@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/crash/crash_banner.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/update/shorebird_update_banner.dart';
@@ -208,6 +209,7 @@ class _ConversationBody extends ConsumerWidget {
             ),
           ),
           const ShorebirdUpdateBanner(),
+          const CrashReportBanner(),
           const WorkflowStrip(),
           Expanded(
             child: state.conversations.isEmpty
