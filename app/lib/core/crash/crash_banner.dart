@@ -47,7 +47,7 @@ class CrashReportBanner extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.bug_report_outlined, size: 20, color: tokens.warning),
+          Icon(Icons.error_outline, size: 20, color: tokens.warning),
           SizedBox(width: tokens.spacing.sm),
           Expanded(
             child: Padding(
