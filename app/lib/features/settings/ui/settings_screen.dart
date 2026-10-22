@@ -193,7 +193,7 @@ class _CrashReportsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: const Icon(Icons.bug_report_outlined),
+      leading: const Icon(Icons.error_outline),
       title: const Text('Crash reports'),
       subtitle: const Text('Stay on your phone unless you share them'),
       trailing: const Icon(Icons.chevron_right),
