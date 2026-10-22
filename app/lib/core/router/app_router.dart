@@ -61,11 +61,7 @@ final appRouter = GoRouter(
               // `?tab=voice` deep-links straight to the Voice tab (WS5:
               // hands-free's "Set up voice" must land on voice models, not the
               // default Discover tab — now the curated catalog, not a firehose).
-              builder: (context, state) => ModelsHubScreen(
-                initialTabIndex: state.uri.queryParameters['tab'] == 'voice'
-                    ? 2
-                    : 0,
-              ),
+              builder: (context, state) => _modelsHub(state),
             ),
           ],
         ),
@@ -178,6 +174,14 @@ final appRouter = GoRouter(
         return ModelDetailScreen(repoId: Uri.decodeComponent(encoded));
       },
     ),
+    // Full-screen Models hub for screens OUTSIDE the tab shell (chat thread,
+    // hands-free, model picker). Pushing the shell's own `/models` from there
+    // builds a second shell whose Models branch renders blank (0.6.0 bug:
+    // chat → mic → empty page). Push this instead; back returns to the caller.
+    GoRoute(
+      path: '/models/hub',
+      builder: (context, state) => _modelsHub(state),
+    ),
     GoRoute(
       path: '/models/search',
       builder: (context, state) => const AdvancedSearchScreen(),
@@ -212,4 +216,9 @@ final appRouter = GoRouter(
       ),
     ),
   ],
+);
+
+/// `?tab=voice` opens straight on the Voice tab.
+ModelsHubScreen _modelsHub(GoRouterState state) => ModelsHubScreen(
+  initialTabIndex: state.uri.queryParameters['tab'] == 'voice' ? 2 : 0,
 );

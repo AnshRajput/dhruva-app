@@ -193,4 +193,33 @@ void main() {
       );
     },
   );
+
+  // 0.6.0 bug: chat → mic (no voice model) pushed the shell's `/models` from
+  // the full-screen chat route and the Models page rendered blank.
+  testWidgets('Models hub pushed from a chat thread renders and pops back', (
+    tester,
+  ) async {
+    final id = await repo.createConversation(title: 'Hello');
+    await pumpApp(tester);
+    appRouter.go('/chat/$id');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    unawaited(appRouter.push('/models/hub?tab=voice'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Models'), findsOneWidget);
+    expect(find.text('Voice'), findsOneWidget);
+    final tabs = tester.widget<TabBar>(find.byType(TabBar));
+    expect(
+      DefaultTabController.of(tester.element(find.byWidget(tabs))).index,
+      2,
+    );
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(TabBar), findsNothing);
+  });
 }

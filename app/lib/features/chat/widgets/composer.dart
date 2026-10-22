@@ -180,7 +180,7 @@ class _ComposerState extends ConsumerState<Composer> {
     );
   }
 
-  void _onNoModel() => context.push('/models');
+  void _onNoModel() => context.push('/models/hub?tab=voice');
 
   void _onPermissionDenied() {
     ScaffoldMessenger.of(context).showSnackBar(

@@ -218,7 +218,7 @@ class _ThreadScaffold extends ConsumerWidget {
                 ? Center(
                     child: state.model == null
                         ? NoModelInstalledView(
-                            onBrowseModels: () => context.push('/models'),
+                            onBrowseModels: () => context.push('/models/hub'),
                           )
                         : SuggestedPrompts(
                             onSelect: (prompt) {
@@ -238,7 +238,7 @@ class _ThreadScaffold extends ConsumerWidget {
                                       (m) => m.isVision && m.mmprojPath != null,
                                     ) ??
                                 false,
-                            onGetVisionModel: () => context.push('/models'),
+                            onGetVisionModel: () => context.push('/models/hub'),
                             onSwitchModel: () => _pickModel(context),
                             onOpenWorkflows: () => context.push('/workflows'),
                           ),
