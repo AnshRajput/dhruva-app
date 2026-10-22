@@ -96,7 +96,7 @@ class _ModelPickerSheet extends ConsumerWidget {
                 child: InkWell(
                   onTap: () {
                     Navigator.of(context).pop();
-                    context.push('/models');
+                    context.push('/models/hub');
                   },
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),

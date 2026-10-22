@@ -62,7 +62,7 @@ class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
   /// screen — automatically re-check so hands-free just starts, no exit/re-
   /// enter dance.
   Future<void> _openVoiceModels() async {
-    await context.push('/models?tab=voice');
+    await context.push('/models/hub?tab=voice');
     if (mounted) await _retry();
   }
 

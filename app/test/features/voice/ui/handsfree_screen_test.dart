@@ -59,7 +59,7 @@ void main() {
               HandsFreeScreen(onUserUtterance: onUserUtterance),
         ),
         GoRoute(
-          path: '/models',
+          path: '/models/hub',
           builder: (context, state) =>
               const Scaffold(body: Text('models hub stand-in')),
         ),

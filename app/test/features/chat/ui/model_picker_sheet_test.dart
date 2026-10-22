@@ -178,7 +178,7 @@ void main() {
             ),
           ),
           GoRoute(
-            path: '/models',
+            path: '/models/hub',
             builder: (context, state) =>
                 const Scaffold(body: Text('models hub stand-in')),
           ),
