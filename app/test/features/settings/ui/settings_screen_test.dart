@@ -140,6 +140,9 @@ void main() {
   });
 
   testWidgets('credit row launches the portfolio URL', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await pump(tester);
 
     await tester.tap(find.textContaining('Ansh Singh Rajput'));

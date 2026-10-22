@@ -12,6 +12,9 @@ This is the point of the whole project. Everything else is downstream of it.
 - **Zero telemetry.** No analytics SDKs, no crash reporters that phone home, no
   feature flags that call out, no A/B endpoints. Nothing about how you use the app
   leaves the app.
+- **Crash reports stay on the phone.** If Dhruva crashes, the error and stack trace
+  (no chats, prompts or files) are saved locally. They leave the phone only if you
+  tap Send / Share / Email yourself. Delete them anytime in Settings → Crash reports.
 - **Network use is narrow.** A user-initiated model download from Hugging Face, and
   app-update checks (Shorebird code push) that send only the app version and patch
   number — never your chats or prompts. No background sync, no license check, no
