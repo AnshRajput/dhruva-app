@@ -90,6 +90,12 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(if (hasUploadKey) "release" else "debug")
+            // Bundle native symbol tables into the AAB so Play Console's
+            // Android vitals shows readable native stack traces (llama.cpp,
+            // sherpa-onnx, Flutter engine). No SDK, nothing sent from the app.
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
         }
     }
 }
