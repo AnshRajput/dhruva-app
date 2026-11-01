@@ -35,7 +35,14 @@ import 'voice_launch.dart';
 
 class ChatThreadScreen extends ConsumerStatefulWidget {
   final ChatRouteArgs args;
-  const ChatThreadScreen({super.key, required this.args});
+
+  /// Opens hands-free voice once the model is known (Android widget "Talk").
+  final bool openVoiceOnStart;
+  const ChatThreadScreen({
+    super.key,
+    required this.args,
+    this.openVoiceOnStart = false,
+  });
 
   @override
   ConsumerState<ChatThreadScreen> createState() => _ChatThreadScreenState();
@@ -106,7 +113,15 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           // replaces the plain `ensureModelLoaded` open here rather than
           // racing a second load. Only on an empty draft.
           final seed = widget.args.initialPrompt?.trim();
-          if (seed != null && seed.isNotEmpty && state.messages.isEmpty) {
+          if (widget.openVoiceOnStart) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                unawaited(openHandsFreeVoice(context, ref, widget.args));
+              }
+            });
+          } else if (seed != null &&
+              seed.isNotEmpty &&
+              state.messages.isEmpty) {
             WidgetsBinding.instance.addPostFrameCallback(
               (_) => controller.sendMessage(seed),
             );

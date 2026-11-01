@@ -37,6 +37,8 @@ class IntentInbox {
     return switch (payload['route']) {
       'new_chat' => '/chat/new',
       'workflows' => '/workflows',
+      // Widget "Talk" button: a fresh chat that opens hands-free on arrival.
+      'talk' => '/chat/new?talk=1',
       _ => null,
     };
   }
