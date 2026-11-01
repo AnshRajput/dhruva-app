@@ -2,15 +2,16 @@
 // <event>" builds the location with `askNewLocation`; the route turns it back
 // into a prefilled composer with sources pinned.
 
+import 'dart:async';
+
 import 'package:dhruva/core/di/ask_providers.dart';
+import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/db/database.dart';
-import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
-import 'package:dhruva/core/di/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -87,10 +88,12 @@ void main() {
           ),
         );
 
-    appRouter.push(
-      askNewLocation(
-        q: 'Prep me for Budget review',
-        sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
+    unawaited(
+      appRouter.push(
+        askNewLocation(
+          q: 'Prep me for Budget review',
+          sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
+        ),
       ),
     );
     await tester.pumpAndSettle();

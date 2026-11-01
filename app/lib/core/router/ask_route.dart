@@ -18,8 +18,9 @@
 ///   chips arrive pinned (Auto off). Unknown ids are ignored; missing or empty
 ///   means Auto.
 ///
-/// `/ask/new` is a full-screen route outside the shell, so callers `push` it
-/// (never `push('/ask')`, which is a shell branch; see `app_router.dart`).
+/// `/ask/new` is a full-screen route outside the shell, so callers `push` it.
+/// The Ask TAB (the plain `/ask` shell branch) is never pushed; see
+/// `app_router.dart`.
 library;
 
 import '../../data/connectors/ask_sources.dart';
