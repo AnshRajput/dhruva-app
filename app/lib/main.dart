@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/crash/crash_log.dart';
+import 'core/di/connector_providers.dart';
 import 'core/di/speed_providers.dart';
 import 'core/identity/app_identity.dart';
 import 'core/intents/intent_inbox.dart';
@@ -56,9 +57,17 @@ Future<void> main() async {
   // Android share / text-selection / shortcut entry points -> router.
   // After the first frame, so the router has consumed its initial location
   // and a cold-start share/selection isn't overwritten by it.
-  WidgetsBinding.instance.addPostFrameCallback(
-    (_) => unawaited(IntentInbox(navigate: navigateFromIntent).start()),
-  );
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(IntentInbox(navigate: navigateFromIntent).start());
+    // Connectors (Wave 2A): pick the search engine, refresh statuses, sync
+    // what is stale, schedule the Android background job. Never blocks or
+    // breaks launch.
+    unawaited(
+      container
+          .read(connectorBootstrapProvider.future)
+          .then((_) {}, onError: (Object _) {}),
+    );
+  });
 }
 
 /// Intent targets that are shell branches (`/today`, `/ask`, ...) must `go`:

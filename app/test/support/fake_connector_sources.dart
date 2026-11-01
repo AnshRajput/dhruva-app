@@ -5,6 +5,7 @@ import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_hub.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/docs/document_extractor.dart';
 import 'package:path/path.dart' as p;
 
 class FakeCalendarSource implements CalendarSource {
@@ -83,6 +84,8 @@ class FakeFolderSource implements FolderSource {
   FolderGrant? nextPick;
   bool reachable = true;
   bool failList = false;
+  bool failRelease = false;
+  bool ignoreMaxFiles = false;
   final Map<String, Uint8List> files = {};
   final Map<String, FolderEntry> entries = {};
   final List<String> released = [];
@@ -116,7 +119,9 @@ class FakeFolderSource implements FolderSource {
   }) async {
     listCalls++;
     if (failList) throw StateError('listing failed');
-    return entries.values.take(maxFiles).toList();
+    return entries.values
+        .take(ignoreMaxFiles ? entries.length : maxFiles)
+        .toList();
   }
 
   @override
@@ -137,7 +142,10 @@ class FakeFolderSource implements FolderSource {
   }
 
   @override
-  Future<void> release(String grantId) async => released.add(grantId);
+  Future<void> release(String grantId) async {
+    released.add(grantId);
+    if (failRelease) throw StateError('release failed');
+  }
 
   @override
   Future<void> openSettings() async => settingsOpened++;
@@ -202,6 +210,7 @@ class ConnectorTestKit {
     AppDatabase db, {
     DateTime Function()? clock,
     bool notificationsSupported = true,
+    DocumentExtractor? extractor,
   }) {
     final temp = Directory.systemTemp.createTempSync('dhruva_connector_kit');
     final queue = Directory(p.join(temp.path, 'queue'))..createSync();
@@ -219,8 +228,9 @@ class ConnectorTestKit {
       contacts: con,
       folder: fol,
       notifications: not,
-      isCharging: () async => charging.value,
+      isCharging: () async => charging.next(),
       folderCache: Directory(p.join(temp.path, 'cache')),
+      extractor: extractor,
       clock: clock,
     );
     return ConnectorTestKit._(hub, cal, con, fol, not, temp, charging);
@@ -234,6 +244,15 @@ class ConnectorTestKit {
 
 class ChargingState {
   bool value = false;
+
+  /// If set, successive checks consume it (the last value then repeats).
+  List<bool>? script;
+
+  bool next() {
+    final s = script;
+    if (s == null || s.isEmpty) return value;
+    return s.length > 1 ? s.removeAt(0) : s.first;
+  }
 }
 
 DeviceCalendarEvent calEvent(

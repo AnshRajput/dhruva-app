@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../db/database.dart';
+import '../docs/document_extractor.dart' show DocumentExtractor;
 import 'calendar_connector.dart';
 import 'connector.dart';
 import 'connector_sources.dart';
@@ -29,6 +30,7 @@ final class ConnectorHub {
     required this.notifications,
   }) : sync = SyncService(
          connectors: [calendar, contacts, folder, notifications],
+         clock: () => store.now,
        );
 
   final ConnectorStore store;
@@ -71,6 +73,7 @@ final class ConnectorHub {
     required NotificationAccess notifications,
     required ChargingProbe isCharging,
     required Directory folderCache,
+    DocumentExtractor? extractor,
     DateTime Function()? clock,
   }) {
     final store = ConnectorStore(db: db, clock: clock);
@@ -83,6 +86,7 @@ final class ConnectorHub {
         source: folder,
         cacheDirectory: folderCache,
         isCharging: isCharging,
+        extractor: extractor,
       ),
       notifications: NotificationConnector(store: store, access: notifications),
     );
