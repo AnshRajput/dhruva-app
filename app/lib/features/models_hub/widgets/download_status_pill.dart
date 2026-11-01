@@ -31,11 +31,7 @@ class DownloadStatusPill extends ConsumerWidget {
     if (active == 0) return const SizedBox.shrink();
     return ActionChip(
       key: const ValueKey('download-status-pill'),
-      avatar: const SizedBox(
-        width: 14,
-        height: 14,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
+      avatar: const Icon(Icons.downloading_rounded, size: 18),
       label: Text(active == 1 ? 'Downloading a model' : '$active downloads'),
       // Downloads is a full-screen route, safe to push from the shell.
       onPressed: () => context.push('/models/downloads'),

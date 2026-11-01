@@ -1,11 +1,13 @@
-// App-shell smoke test: `/chat` is home (Loop 4 — chat-spec.md §1), `/models`
-// is reachable via the bottom nav (app_shell.dart). `debug_chat` (Loop 2/3's
+// App-shell smoke test: `/today` is home (daily-assistant redesign), Ask is the
+// old Chat tab, and `/settings/models` is reachable via Today's gear. `debug_chat` (Loop 2/3's
 // dev harness) was deleted in Loop 4 and no longer has a route.
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/main.dart';
+import 'package:flutter/material.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +17,9 @@ import 'package:http/testing.dart';
 import 'support/mock_hf_client.dart';
 
 void main() {
+  // appRouter is a process-wide singleton: start every test on Today.
+  setUp(() => appRouter.go('/today'));
+
   Future<void> pumpApp(WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -52,20 +57,52 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('chat is the app home, reached via the bottom nav', (
+  testWidgets(
+    'Today is the app home with Today / Ask / Library tabs (no Inbox)',
+    (tester) async {
+      await pumpApp(tester);
+
+      expect(find.text('Your brief'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Today'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Ask'), findsOneWidget);
+      expect(find.text('Library'), findsOneWidget);
+      // Inbox tab stays hidden until an inbox source exists.
+      expect(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Inbox'),
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('Ask tab shows the conversation list (formerly Chat)', (
     tester,
   ) async {
     await pumpApp(tester);
 
-    expect(find.text('Chats'), findsOneWidget);
-    expect(find.text('Chat'), findsOneWidget);
-    expect(find.text('Models'), findsOneWidget);
+    await tester.tap(find.text('Ask'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Personas'), findsOneWidget);
+    expect(find.byTooltip('Actions'), findsOneWidget);
   });
 
-  testWidgets('models hub is reachable from the bottom nav', (tester) async {
+  testWidgets('models hub is reachable from Today > Settings > Models', (
+    tester,
+  ) async {
     await pumpApp(tester);
 
-    await tester.tap(find.text('Models'));
+    await tester.tap(find.byKey(const ValueKey('today-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-models')));
     await tester.pumpAndSettle();
 
     expect(find.text('Discover'), findsOneWidget);

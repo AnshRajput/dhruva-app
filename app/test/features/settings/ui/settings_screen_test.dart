@@ -59,7 +59,16 @@ void main() {
     UrlLauncherPlatform.instance = realLauncher;
   });
 
+  // Settings is a long list now (Appearance, Models, ...); a tall surface keeps
+  // every lazily-built row on screen.
+  void tallSurface(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 3200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
   Future<void> pump(WidgetTester tester) async {
+    tallSurface(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -76,6 +85,7 @@ void main() {
     tester,
   ) async {
     final store = MemoryGuardStore();
+    tallSurface(tester);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [

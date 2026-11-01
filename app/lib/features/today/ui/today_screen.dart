@@ -266,6 +266,7 @@ class _QuickActionsRow extends StatelessWidget {
     return SizedBox(
       height: 48,
       child: ListView(
+        key: const ValueKey('today-quick-actions'),
         scrollDirection: Axis.horizontal,
         children: [
           for (final (id, icon, label) in _actions) ...[

@@ -1,0 +1,67 @@
+// Shared harness for tests that drive the real `DhruvaApp` + `appRouter`
+// singleton (shell, redirects, placeholder surfaces, appearance).
+
+import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/router/app_router.dart';
+import 'package:dhruva/core/settings/prefs_store.dart';
+import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/main.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'mock_hf_client.dart';
+
+const harnessDeviceInfo = FakeDeviceInfoService(
+  memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
+  storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
+);
+
+/// Pumps the whole app on [location] with an in-memory DB and prefs.
+///
+/// [prefs] defaults to a store where the "what moved" sheet is already
+/// dismissed, so tests not about that sheet are not blocked by it.
+Future<AppDatabase> pumpDhruvaApp(
+  WidgetTester tester, {
+  String location = '/today',
+  PrefsStore? prefs,
+  List<Override> overrides = const [],
+  // Wide enough for flutter_test's Ahem font (much wider than Manrope).
+  Size surface = const Size(800, 2400),
+  bool settle = true,
+}) async {
+  await tester.binding.setSurfaceSize(surface);
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  final db = AppDatabase(NativeDatabase.memory());
+  addTearDown(db.close);
+  appRouter.go(location);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
+        prefsStoreProvider.overrideWith(
+          (ref) async =>
+              prefs ?? MemoryPrefsStore({'what_moved_dismissed': 'true'}),
+        ),
+        hfApiClientProvider.overrideWithValue(
+          mockHfClient(MockClient((r) async => http.Response('[]', 200))),
+        ),
+        ...overrides,
+      ],
+      child: const DhruvaApp(),
+    ),
+  );
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+  }
+  return db;
+}
