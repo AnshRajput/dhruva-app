@@ -22,6 +22,7 @@
 /// For a text-only model the button opens the document picker directly.
 library;
 
+import 'dart:async' show unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
@@ -251,10 +253,14 @@ class _ComposerState extends ConsumerState<Composer> {
 
   void _onPermissionDenied() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Microphone access is required for voice input — enable it in '
-          "your device's app settings.",
+      SnackBar(
+        content: const Text(
+          'Microphone access is off, so voice input cannot '
+          'hear you.',
+        ),
+        action: SnackBarAction(
+          label: 'Open settings',
+          onPressed: () => unawaited(ref.read(openAppSettingsProvider)()),
         ),
       ),
     );

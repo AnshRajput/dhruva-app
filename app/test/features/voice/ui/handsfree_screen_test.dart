@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/intents/app_settings.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/features/voice/ui/handsfree_screen.dart';
 import 'package:dhruva/voice/fake_audio_sink.dart';
@@ -38,6 +39,7 @@ void main() {
   Future<void> pumpScreen(
     WidgetTester tester, {
     required Future<String?> Function(String) onUserUtterance,
+    Future<bool> Function()? openSettings,
   }) {
     final router = GoRouter(
       initialLocation: '/',
@@ -74,6 +76,8 @@ void main() {
           voiceServiceProvider.overrideWithValue(voice),
           micSourceProvider.overrideWithValue(mic),
           audioSinkProvider.overrideWithValue(sink),
+          if (openSettings != null)
+            openAppSettingsProvider.overrideWithValue(openSettings),
         ],
         child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
       ),
@@ -109,6 +113,34 @@ void main() {
     }
 
     expect(find.text('Microphone access needed'), findsOneWidget);
+  });
+
+  testWidgets('D15: mic permission denied offers Open settings, and when it '
+      'cannot open says where to go', (tester) async {
+    installAllVoiceModels(tmp);
+    mic.permissionGranted = false;
+    var opened = 0;
+    await pumpScreen(
+      tester,
+      onUserUtterance: (t) async => 'reply',
+      openSettings: () async {
+        opened++;
+        return false;
+      },
+    );
+    await tester.tap(find.text('start'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+
+    expect(find.text('Open settings'), findsOneWidget);
+    // Close stays available, as the quiet second option.
+    expect(find.text('Close'), findsOneWidget);
+    await tester.tap(find.text('Open settings'));
+    await tester.pump();
+    expect(opened, 1);
+    // The OS refused: plain words instead of a dead tap.
+    expect(find.textContaining("Couldn't open Settings"), findsWidgets);
   });
 
   testWidgets(

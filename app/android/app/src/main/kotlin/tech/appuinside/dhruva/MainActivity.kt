@@ -3,9 +3,11 @@ package tech.appuinside.dhruva
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -53,6 +55,7 @@ open class MainActivity : FlutterActivity() {
                             initial = null
                         }
                         "setProcessTextResult" -> returnProcessText(call.arguments, result)
+                        "openAppSettings" -> result.success(openAppSettings())
                         else -> result.notImplemented()
                     }
                 }
@@ -94,6 +97,21 @@ open class MainActivity : FlutterActivity() {
             finish()
         }
     }
+
+    /**
+     * Opens this app's page in system Settings (the fix for a denied
+     * permission, which an app cannot re-request). False if the OS refuses.
+     */
+    private fun openAppSettings(): Boolean =
+        try {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
 
     private fun isReplaceableProcessText(intent: Intent?): Boolean =
         intent?.action == Intent.ACTION_PROCESS_TEXT &&

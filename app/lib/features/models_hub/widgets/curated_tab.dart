@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../state/listing_download_controller.dart';
 import '../state/recommended_models_provider.dart';
 import 'curated_model_card.dart';
 
@@ -57,6 +58,12 @@ class CuratedTab extends ConsumerWidget {
       larger.sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
     }
     final recommended = fitting.isNotEmpty ? fitting.first : null;
+    // D12: "Recommended" means "start here". Once that model is installed the
+    // pill is noise above an Installed card, so it goes away.
+    final listing = ref.watch(listingDownloadControllerProvider).value;
+    final recommendedInstalled =
+        recommended != null &&
+        listing?[recommended.repoId]?.status == ListingModelStatus.installed;
 
     return ListView(
       padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
@@ -95,7 +102,7 @@ class CuratedTab extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (identical(model, recommended)) ...[
+                if (identical(model, recommended) && !recommendedInstalled) ...[
                   _RecommendedBadge(),
                   SizedBox(height: tokens.spacing.xs),
                 ],

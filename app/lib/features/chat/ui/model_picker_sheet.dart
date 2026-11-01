@@ -18,6 +18,7 @@ import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/speed_label_chip.dart';
 import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../state/installed_models_provider.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/model_chip.dart';
@@ -208,7 +209,7 @@ class _ModelList extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${model.quant ?? 'unknown quant'} · ${_formatBytes(model.sizeBytes)}',
+                '${plainQuantName(model.quant)} · ${_formatBytes(model.sizeBytes)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

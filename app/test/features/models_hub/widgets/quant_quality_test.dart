@@ -39,4 +39,38 @@ void main() {
       expect(q.blurb, isNotEmpty);
     }
   });
+
+  group('plain labels (D6)', () {
+    test('plainQuantName maps quants to Smaller / Balanced / Sharper', () {
+      expect(plainQuantName('Q3_K_M'), 'Smaller');
+      expect(plainQuantName('IQ2_XS'), 'Smaller');
+      expect(plainQuantName('Q4_K_M'), 'Balanced');
+      expect(plainQuantName('Q5_K_M'), 'Sharper');
+      expect(plainQuantName('Q6_K'), 'Sharper');
+      expect(plainQuantName('Q8_0'), 'Sharpest');
+      expect(plainQuantName('F16'), 'Sharpest');
+      // Unknown / imported: never the word "unknown quant".
+      expect(plainQuantName(null), 'Custom file');
+      expect(plainQuantName('  '), 'Custom file');
+      expect(plainQuantName('weird'), 'Balanced');
+    });
+
+    test('no plain label leaks quant jargon', () {
+      for (final q in QuantQuality.values) {
+        expect(q.plainName, isNot(matches(RegExp(r'Q\d|GGUF|quant'))));
+      }
+    });
+
+    test('humanModelName drops the owner and the -GGUF suffix', () {
+      expect(
+        humanModelName('bartowski/Llama-3.2-1B-Instruct-GGUF'),
+        'Llama-3.2-1B-Instruct',
+      );
+      expect(
+        humanModelName('Qwen/Qwen2.5-1.5B-Instruct'),
+        'Qwen2.5-1.5B-Instruct',
+      );
+      expect(humanModelName('plain'), 'plain');
+    });
+  });
 }
