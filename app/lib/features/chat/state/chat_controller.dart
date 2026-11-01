@@ -479,7 +479,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (question == null) return null;
     // The sections most relevant to the question first, so a long file keeps
     // the part that answers it inside the size budget.
-    final index = Bm25Index([for (final i in _pinned) '${i.title} ${i.body}']);
+    final index = Bm25Index([for (final i in _pinned) i.body]);
     final order = <int>{
       for (final h in index.search(question)) h.index,
       for (var i = 0; i < _pinned.length; i++) i,

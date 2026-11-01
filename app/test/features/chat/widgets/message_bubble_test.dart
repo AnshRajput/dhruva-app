@@ -395,4 +395,65 @@ void main() {
       });
     });
   });
+
+  group('Wave 3B: Save and Add to to-dos', () {
+    testWidgets('Save keeps the reply, then shows it as saved', (tester) async {
+      var saved = 0;
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(role: MessageRole.assistant, content: 'A reply'),
+          onSave: () async => saved++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Save to Library'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('save-reply')));
+      await tester.pumpAndSettle();
+      expect(saved, 1);
+      expect(find.byTooltip('Saved to Library'), findsOneWidget);
+      // A second tap does nothing.
+      await tester.tap(find.byKey(const ValueKey('save-reply')));
+      await tester.pumpAndSettle();
+      expect(saved, 1);
+    });
+
+    testWidgets('no Save without a handler; no to-do button without tasks', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(role: MessageRole.assistant, content: 'A reply'),
+          onAddTodos: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('save-reply')), findsNothing);
+      expect(find.byKey(const ValueKey('add-todos')), findsNothing);
+    });
+
+    testWidgets('the to-do button names how many tasks it adds', (
+      tester,
+    ) async {
+      var added = 0;
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(
+            role: MessageRole.assistant,
+            content: '- [ ] a\n- [ ] b',
+          ),
+          todoCount: 2,
+          onAddTodos: () async => added++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Add 2 to your to-dos'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('add-todos')));
+      await tester.pumpAndSettle();
+      expect(added, 1);
+      expect(find.byTooltip('Added to to-dos'), findsOneWidget);
+    });
+  });
 }

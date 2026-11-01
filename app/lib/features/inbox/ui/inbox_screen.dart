@@ -65,10 +65,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         (notifications.status.state == ConnectorState.needsAttention ||
             notifications.status.state == ConnectorState.permissionDenied);
 
+    // The tab only exists once an inbox source is connected, so the list is
+    // loaded by the time anyone sees it; the set-up route and a deep link can
+    // arrive first, and for them "set up" is the honest answer meanwhile.
     Widget body;
-    if (list == null) {
-      body = const _InboxSkeleton();
-    } else if (!connected && !needsFix) {
+    if (!connected && !needsFix) {
       body = _Padded(
         child: NextStepCard(
           icon: Icons.inbox_outlined,
