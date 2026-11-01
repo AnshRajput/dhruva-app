@@ -30,6 +30,7 @@ import '../../features/characters/ui/characters_gallery_screen.dart';
 import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
+import '../../features/inbox/ui/inbox_item_screen.dart';
 import '../../features/inbox/ui/inbox_screen.dart';
 import '../../features/library/ui/file_search_screen.dart';
 import '../../features/library/ui/library_lists_screen.dart';
@@ -188,6 +189,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/inbox/connect',
       builder: (context, state) => const InboxScreen(standalone: true),
+    ),
+    // One notification in full (opened from an Inbox row).
+    GoRoute(
+      path: '/inbox/item/:id',
+      builder: (context, state) {
+        final id = int.tryParse(state.pathParameters['id']!);
+        return id == null
+            ? const InboxScreen(standalone: true)
+            : InboxItemScreen(itemId: id);
+      },
     ),
     GoRoute(
       path: '/day',
