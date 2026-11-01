@@ -338,11 +338,16 @@ class _MetadataRowState extends State<_MetadataRow> {
         message.tokCount != null && message.genMs != null && message.genMs! > 0
         ? (message.tokCount! / (message.genMs! / 1000)).toStringAsFixed(1)
         : null;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    // A Wrap, not a Row: with Save, to-dos, report and regenerate beside the
+    // time and speed, a narrow phone would overflow by a few pixels.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(_relativeTime(message.createdAt), style: style),
-        if (tokPerSec != null) Text(' · $tokPerSec tok/s', style: style),
+        Text(
+          '${_relativeTime(message.createdAt)}'
+          '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
+          style: style,
+        ),
         if (message.content.isNotEmpty) ...[
           SizedBox(width: tokens.spacing.xs),
           TtsButton(messageId: message.id, text: message.content),

@@ -17,7 +17,7 @@
 /// * `focus`: connector item id(s) this thread is ABOUT (repeatable); how
 ///   Library "Ask about this file" and Inbox "Ask about this" start a thread.
 ///   Their text leads the sources block; the thread opens with no Auto, only
-///   the `sources` pinned (Files for a file, none for a notification).
+///   the `sources` pinned (none for the Library and Inbox entry points).
 /// * `sources`: comma-separated `calendar,contacts,files,mail,docs`; those
 ///   chips arrive pinned (Auto off). Unknown ids are ignored; missing or empty
 ///   means Auto.

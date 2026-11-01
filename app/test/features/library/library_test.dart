@@ -3,7 +3,6 @@
 
 import 'package:dhruva/core/di/library_providers.dart';
 import 'package:dhruva/core/router/ask_route.dart';
-import 'package:dhruva/data/connectors/ask_sources.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/connectors/search_index.dart';
@@ -233,14 +232,14 @@ void main() {
       await tester.pumpAndSettle();
       final sections = await ui.kit.hub.store.fileSections('doc:budget.md');
       expect(sections, hasLength(1));
-      // The ONE Ask mechanism: Files pinned in "Search in", the file's
-      // sections as the focus.
+      // The ONE Ask mechanism: the file's sections are the focus; nothing
+      // else is searched unless the user turns a chip on.
       expect(ui.visited, [
-        askNewLocation(sources: {AskSource.files}, focus: [sections.single.id]),
+        askNewLocation(focus: [sections.single.id]),
       ]);
       final uri = Uri.parse(ui.visited.single);
       expect(uri.path, '/ask/new');
-      expect(uri.queryParameters['sources'], 'files');
+      expect(uri.queryParameters.containsKey('sources'), isFalse);
       expect(uri.queryParametersAll['focus'], ['${sections.single.id}']);
     });
 

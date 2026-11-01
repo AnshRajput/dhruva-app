@@ -12,7 +12,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
-import '../../../data/connectors/ask_sources.dart' show AskSource;
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_sources.dart';
 import '../state/library_documents.dart';
@@ -66,9 +65,7 @@ class FileSheet extends ConsumerWidget {
         ? [file.itemId]
         : [for (final s in sections) s.id];
     navigator.pop();
-    unawaited(
-      router.push(askNewLocation(sources: {AskSource.files}, focus: ids)),
-    );
+    unawaited(router.push(askNewLocation(focus: ids)));
   }
 
   @override
