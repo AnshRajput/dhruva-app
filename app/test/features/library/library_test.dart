@@ -106,6 +106,28 @@ void main() {
       expect(find.text('Connected folder'), findsOneWidget);
     });
 
+    testWidgets('backing out of "Change folder" adds no Connected ledger row '
+        'and starts no read', (tester) async {
+      final ui = await _connectFolder(
+        tester,
+        const LibraryScreen(),
+        files: {'a.md': 'hello'},
+      );
+      final before = (await ui.kit.hub.store.ledger(
+        connector: 'folder',
+      )).length;
+      final listed = ui.kit.folder.listCalls;
+      ui.kit.folder.nextPick = null;
+      await tester.tap(_key('library-change-folder'));
+      await tester.pumpAndSettle();
+      expect(_key('library-folder-block'), findsOneWidget);
+      expect(
+        (await ui.kit.hub.store.ledger(connector: 'folder')).length,
+        before,
+      );
+      expect(ui.kit.folder.listCalls, listed);
+    });
+
     testWidgets('cancelling the picker changes nothing', (tester) async {
       final ui = await pumpConnectorScreen(tester, const LibraryScreen());
       ui.kit.folder.nextPick = null;

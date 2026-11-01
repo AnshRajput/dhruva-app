@@ -50,6 +50,17 @@ void main() {
       expect(find.text('Android'), findsOneWidget);
     });
 
+    testWidgets('cards run Calendar, Contacts, Notes folder, Notifications, '
+        'top to bottom', (tester) async {
+      await pumpConnectorScreen(tester, const _Host());
+      final ys = [
+        for (final id in ['calendar', 'contacts', 'folder', 'notifications'])
+          tester.getTopLeft(_key('connector-$id')).dy,
+      ];
+      expect(ys, orderedEquals([...ys]..sort()));
+      expect(ys.toSet(), hasLength(4));
+    });
+
     testWidgets('360dp with the real font: names stay whole, the action sits '
         'under the text, nothing overflows', (tester) async {
       await loadAppFonts();
@@ -115,15 +126,63 @@ void main() {
       expect(ui.scheduler.scheduled, 1);
     });
 
-    testWidgets('permission denied: the card names the fix and Open settings '
-        'goes to the OS page', (tester) async {
+    testWidgets('first and second system Deny both answer inline: retry copy, '
+        'then blocked copy with Open settings; allowing it in settings and '
+        'returning connects by itself', (tester) async {
       final ui = await pumpConnectorScreen(tester, const _Host());
+
+      // 1st Deny: the system will ask again.
+      ui.kit.calendar.afterRequest = DevicePermission.notDetermined;
+      await tester.tap(_key('connector-calendar-action'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<Text>(_key('connector-calendar-feedback')).data,
+        contains('Tap Connect to try again'),
+      );
+      expect(find.text('Not connected'), findsNWidgets(4));
+      expect(find.text('Open settings'), findsNothing);
+
+      // 2nd Deny: Android will not ask any more.
       ui.kit.calendar.afterRequest = DevicePermission.denied;
       await tester.tap(_key('connector-calendar-action'));
       await tester.pumpAndSettle();
-      // Promoted to its own card with the reason and the fix.
+      expect(
+        tester.widget<Text>(_key('connector-calendar-feedback')).data,
+        contains('blocked'),
+      );
       expect(find.text('Open settings'), findsOneWidget);
-      expect(find.textContaining('Calendar access is off'), findsWidgets);
+      // Still an ordinary row, not a "needs attention" card.
+      expect(find.text('Needs attention'), findsNothing);
+
+      await tester.tap(_key('connector-calendar-action'));
+      await tester.pumpAndSettle();
+      expect(ui.kit.calendar.settingsOpened, 1);
+
+      // Allowed in system settings; coming back connects it.
+      ui.kit.calendar.items = [
+        calEvent('e1', start: DateTime.now().add(const Duration(hours: 1))),
+      ];
+      ui.kit.calendar.perm = DevicePermission.granted;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(_key('connector-calendar-feedback'), findsNothing);
+      expect(find.text('Open settings'), findsNothing);
+      expect(find.textContaining('Connected'), findsWidgets);
+      expect(await ui.kit.hub.store.countItems('calendar'), 1);
+    });
+
+    testWidgets('a grant switched off later is a fix card with the revoked '
+        'copy, not the first-time copy', (tester) async {
+      final ui = await pumpConnectorScreen(tester, const _Host());
+      await tester.tap(_key('connector-calendar-action'));
+      await tester.pumpAndSettle();
+      ui.kit.calendar.perm = DevicePermission.denied;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.text('Needs attention'), findsNothing);
+      expect(find.text('Access is off'), findsOneWidget);
+      expect(find.textContaining('bring your events back'), findsWidgets);
+      expect(find.text('Open settings'), findsOneWidget);
       await tester.tap(_key('connector-calendar-action'));
       await tester.pumpAndSettle();
       expect(ui.kit.calendar.settingsOpened, 1);
@@ -138,7 +197,7 @@ void main() {
       // The OS page was opened, and the card says what is wrong.
       expect(ui.kit.notifications.settingsOpened, 1);
       expect(find.text('Needs attention'), findsOneWidget);
-      expect(find.textContaining('Notification access is off'), findsWidgets);
+      expect(find.textContaining('One more step'), findsWidgets);
       expect(find.text('Turn on access'), findsOneWidget);
       expect(ui.scheduler.scheduled, 0);
 

@@ -39,18 +39,71 @@ void main() {
       },
     );
 
-    test(
-      'connect: denied -> permissionDenied naming the fix, nothing stored',
-      () async {
-        kit.calendar.afterRequest = DevicePermission.denied;
-        await kit.hub.calendar.connect();
-        final s = kit.hub.calendar.currentStatus;
-        expect(s.state, ConnectorState.permissionDenied);
-        expect(s.detail, contains('Open settings'));
-        expect(await kit.hub.store.account('calendar'), isNull);
-        expect(await kit.hub.store.ledger(connector: 'calendar'), isEmpty);
-      },
-    );
+    test('first Deny (the system will ask again): the row stays Not '
+        'connected and says how to retry, nothing stored', () async {
+      kit.calendar.afterRequest = DevicePermission.notDetermined;
+      await kit.hub.calendar.connect();
+      final s = kit.hub.calendar.currentStatus;
+      expect(s.state, ConnectorState.notConnected);
+      expect(s.needsSettings, isFalse);
+      expect(s.detail, contains('Tap Connect to try again'));
+      expect(kit.hub.calendar.awaitingGrant, isFalse);
+      expect(await kit.hub.store.account('calendar'), isNull);
+      expect(await kit.hub.store.ledger(connector: 'calendar'), isEmpty);
+    });
+
+    test('Deny for good (second Deny): blocked copy, Open settings, nothing '
+        'stored', () async {
+      kit.calendar.afterRequest = DevicePermission.denied;
+      await kit.hub.calendar.connect();
+      final s = kit.hub.calendar.currentStatus;
+      expect(s.state, ConnectorState.notConnected);
+      expect(s.needsSettings, isTrue);
+      expect(s.detail, contains('blocked'));
+      expect(s.detail, contains('Open settings'));
+      expect(await kit.hub.store.account('calendar'), isNull);
+      expect(await kit.hub.store.ledger(connector: 'calendar'), isEmpty);
+    });
+
+    test('returning from system settings with Calendar allowed finishes the '
+        'connection by itself: connected, ledger row, first read', () async {
+      kit.calendar.afterRequest = DevicePermission.denied;
+      kit.calendar.items = [calEvent('a', start: DateTime.utc(2026, 11, 1, 9))];
+      await kit.hub.calendar.connect();
+      expect(kit.hub.calendar.awaitingGrant, isTrue);
+
+      // Back from settings but still not allowed: nothing happens.
+      await kit.hub.onResume();
+      expect(kit.hub.calendar.currentStatus.state, ConnectorState.notConnected);
+      expect(kit.hub.calendar.awaitingGrant, isTrue);
+
+      kit.calendar.perm = DevicePermission.granted; // allowed in settings
+      await kit.hub.onResume();
+      expect(kit.hub.calendar.currentStatus.state, ConnectorState.connected);
+      expect(kit.hub.calendar.awaitingGrant, isFalse);
+      expect(await kit.hub.store.countItems('calendar'), 1);
+      expect(
+        (await kit.hub.store.ledger(
+          connector: 'calendar',
+        )).map((e) => e.action),
+        containsAll([LedgerAction.connect, LedgerAction.read]),
+      );
+    });
+
+    test('never connected and revoked read differently', () async {
+      kit.calendar.afterRequest = DevicePermission.denied;
+      await kit.hub.calendar.connect();
+      final never = kit.hub.calendar.currentStatus.detail!;
+
+      kit.calendar.perm = DevicePermission.granted;
+      await kit.hub.onResume(); // connects
+      kit.calendar.perm = DevicePermission.denied;
+      await kit.hub.calendar.refreshStatus();
+      final s = kit.hub.calendar.currentStatus;
+      expect(s.state, ConnectorState.permissionDenied);
+      expect(s.detail, contains('bring your events back'));
+      expect(s.detail, isNot(never));
+    });
 
     test(
       'a grant revoked in system settings shows as permissionDenied',
@@ -317,23 +370,44 @@ void main() {
       );
     });
 
-    test(
-      'permission denied -> status says Open settings; sync refused',
-      () async {
-        kit.contacts.afterRequest = DevicePermission.denied;
-        await kit.hub.contacts.connect();
-        expect(
-          kit.hub.contacts.currentStatus.state,
-          ConnectorState.permissionDenied,
-        );
-        expect(
-          kit.hub.contacts.currentStatus.detail,
-          contains('Open settings'),
-        );
-        await kit.hub.contacts.openSystemSettings();
-        expect(kit.contacts.settingsOpened, 1);
-      },
-    );
+    test('Deny: first time says retry, for good says Open settings; allowing '
+        'it in settings connects on return', () async {
+      kit.contacts.afterRequest = DevicePermission.notDetermined;
+      await kit.hub.contacts.connect();
+      expect(kit.hub.contacts.currentStatus.state, ConnectorState.notConnected);
+      expect(
+        kit.hub.contacts.currentStatus.detail,
+        contains('Tap Connect to try again'),
+      );
+
+      kit.contacts.afterRequest = DevicePermission.denied;
+      await kit.hub.contacts.connect();
+      final s = kit.hub.contacts.currentStatus;
+      expect(s.needsSettings, isTrue);
+      expect(s.detail, contains('Open settings'));
+      await kit.hub.contacts.openSystemSettings();
+      expect(kit.contacts.settingsOpened, 1);
+
+      kit.contacts.perm = DevicePermission.granted;
+      await kit.hub.onResume();
+      expect(kit.hub.contacts.currentStatus.state, ConnectorState.connected);
+    });
+
+    test('a grant revoked later shows the revoked copy and sync is '
+        'refused', () async {
+      await kit.hub.contacts.connect();
+      kit.contacts.perm = DevicePermission.denied;
+      await kit.hub.contacts.refreshStatus();
+      expect(
+        kit.hub.contacts.currentStatus.state,
+        ConnectorState.permissionDenied,
+      );
+      expect(kit.hub.contacts.currentStatus.detail, contains('Open settings'));
+      await expectLater(
+        kit.hub.contacts.sync(),
+        throwsA(isA<ConnectorException>()),
+      );
+    });
 
     test('a contacts failure is a needs-attention card, not a crash', () async {
       await seedEvent();

@@ -295,6 +295,22 @@ void main() {
       );
     });
 
+    test('first time: "one more step"; after access was on and is switched '
+        'off: "turned off" (different copy)', () async {
+      await kit.hub.notifications.connect();
+      final pending = kit.hub.notifications.currentStatus.detail!;
+      expect(pending, contains('One more step'));
+
+      kit.notifications.granted = true;
+      await kit.hub.notifications.refreshStatus();
+      kit.notifications.granted = false;
+      await kit.hub.notifications.refreshStatus();
+      final revoked = kit.hub.notifications.currentStatus.detail!;
+      expect(revoked, contains('was turned off'));
+      expect(revoked, contains('Open settings'));
+      expect(revoked, isNot(pending));
+    });
+
     test(
       'status follows the OS grant (granted -> revoked in settings)',
       () async {
