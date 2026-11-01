@@ -44,6 +44,7 @@ import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/appearance_screen.dart';
 import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
+import '../../features/settings/ui/ledger_screen.dart';
 import '../../features/settings/ui/notifications_screen.dart';
 import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
@@ -131,6 +132,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/connectors',
       builder: (context, state) => const ConnectorsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/connectors/ledger',
+      builder: (context, state) => const LedgerScreen(),
     ),
     GoRoute(
       path: '/settings/about-me',
