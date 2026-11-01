@@ -31,6 +31,8 @@ import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
 import '../../features/inbox/ui/inbox_screen.dart';
+import '../../features/library/ui/file_search_screen.dart';
+import '../../features/library/ui/library_lists_screen.dart';
 import '../../features/library/ui/library_screen.dart';
 import '../../features/models_hub/ui/advanced_search_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
@@ -123,6 +125,20 @@ final appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+    // Library sub-pages (full-screen, outside the shell): file search and the
+    // "See all" lists.
+    GoRoute(
+      path: '/library/search',
+      builder: (context, state) => const FileSearchScreen(),
+    ),
+    GoRoute(
+      path: '/library/documents',
+      builder: (context, state) => const DocumentsScreen(),
+    ),
+    GoRoute(
+      path: '/library/saved',
+      builder: (context, state) => const SavedScreen(),
     ),
     // Settings opens full-screen from the gear on Today.
     GoRoute(
