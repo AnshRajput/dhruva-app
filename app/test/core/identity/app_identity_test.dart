@@ -20,7 +20,11 @@ void main() {
     // A string literal containing "Dhruva" (capital D) outside the identity
     // file. The About page's pole-star myth is about the legend, not the
     // product, so that one file is exempt.
-    final literal = RegExp(r'''(['"])[^'"\n]*Dhruva[^'"\n]*\1''');
+    // One pattern per quote style, so a "... can't ..." string (an
+    // apostrophe inside double quotes) is still caught.
+    final literal = RegExp(
+      r'''('[^'\n]*Dhruva[^'\n]*')|("[^"\n]*Dhruva[^"\n]*")''',
+    );
     const exempt = {
       'lib/core/identity/app_identity.dart',
       'lib/features/settings/ui/about_screen.dart',
