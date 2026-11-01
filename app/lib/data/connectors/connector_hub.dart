@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../db/database.dart';
 import '../docs/document_extractor.dart' show DocumentExtractor;
+import 'background_sync.dart';
 import 'calendar_connector.dart';
 import 'connector.dart';
 import 'connector_sources.dart';
@@ -28,10 +29,15 @@ final class ConnectorHub {
     required this.contacts,
     required this.folder,
     required this.notifications,
+    this.scheduler = const WorkmanagerSyncScheduler(),
   }) : sync = SyncService(
          connectors: [calendar, contacts, folder, notifications],
          clock: () => store.now,
-       );
+       ) {
+    for (final c in [calendar, contacts, folder, notifications]) {
+      c.onConnectionChanged = syncBackgroundJob;
+    }
+  }
 
   final ConnectorStore store;
   final CalendarConnector calendar;
@@ -39,6 +45,25 @@ final class ConnectorHub {
   final FolderConnector folder;
   final NotificationConnector notifications;
   final SyncService sync;
+  final BackgroundSyncScheduler scheduler;
+  bool _jobScheduled = false;
+
+  /// The one place the periodic background job is started or stopped: runs
+  /// after every connect/revoke and at app launch. Starts it when something is
+  /// connected (once per process; the job itself is idempotent), cancels it
+  /// when nothing is.
+  Future<void> syncBackgroundJob() async {
+    final any = all.any((c) => c.currentStatus.isConnected);
+    if (any && !_jobScheduled) {
+      _jobScheduled = true;
+      await scheduler.schedule();
+    } else if (!any) {
+      // Always cancel, even if this process never scheduled: the job may be
+      // left over from a previous launch. Cancelling nothing is harmless.
+      _jobScheduled = false;
+      await scheduler.cancel();
+    }
+  }
 
   /// In sync order.
   List<Connector> get all => [calendar, folder, notifications, contacts];
@@ -75,6 +100,7 @@ final class ConnectorHub {
     required Directory folderCache,
     DocumentExtractor? extractor,
     DateTime Function()? clock,
+    BackgroundSyncScheduler scheduler = const WorkmanagerSyncScheduler(),
   }) {
     final store = ConnectorStore(db: db, clock: clock);
     return ConnectorHub(
@@ -89,6 +115,7 @@ final class ConnectorHub {
         extractor: extractor,
       ),
       notifications: NotificationConnector(store: store, access: notifications),
+      scheduler: scheduler,
     );
   }
 

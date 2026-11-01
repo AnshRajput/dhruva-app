@@ -11,6 +11,8 @@
 /// the virtual table and triggers are raw SQL on the app connection.
 library;
 
+import 'dart:isolate';
+
 import 'package:drift/drift.dart';
 
 import '../db/database.dart';
@@ -247,16 +249,21 @@ final class Bm25FallbackSearchIndex implements SearchIndex {
       for (final r in rows) _store.itemFromRow(_db.items.map(r.data)),
     ];
     // Title counts double, like the FTS column weights.
-    final index = Bm25Index([
+    final ranked = await _rank([
       for (final i in items)
         '${i.title} ${i.title} ${i.body} ${i.summary ?? ''}',
-    ]);
+    ], query);
     return [
-      for (final s in index.search(query).take(limit))
-        SearchHit(items[s.index], s.score),
+      for (final s in ranked.take(limit)) SearchHit(items[s.index], s.score),
     ];
   }
 }
+
+/// Tokenizes up to [fallbackCandidateCap] rows of up to 8 KB each, which is
+/// too heavy for the UI isolate, so the build and the ranking run off it.
+/// A top-level function so the closure captures only [texts] and [query].
+Future<List<ScoredChunk>> _rank(List<String> texts, String query) =>
+    Isolate.run(() => Bm25Index(texts).search(query));
 
 String _likeEscape(String s) =>
     s.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');

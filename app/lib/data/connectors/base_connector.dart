@@ -21,6 +21,10 @@ abstract class BaseConnector implements Connector {
   Future<void>? _running;
   bool _cancelled = false;
 
+  /// Called after [connect] and [revoke] finish (status already emitted). The
+  /// hub sets it to keep the background job in step with what is connected.
+  Future<void> Function()? onConnectionChanged;
+
   /// True once [revoke] has been asked for while a sync runs; long reads
   /// (the folder index) check it and stop.
   bool get syncCancelled => _cancelled;
@@ -83,6 +87,7 @@ abstract class BaseConnector implements Connector {
       await store.addLedger(id, LedgerAction.connect);
     }
     emit(next);
+    await onConnectionChanged?.call();
   }
 
   @override
@@ -157,5 +162,6 @@ abstract class BaseConnector implements Connector {
     }
     await store.wipeConnector(id);
     emit(ConnectorStatus.notConnected);
+    await onConnectionChanged?.call();
   }
 }

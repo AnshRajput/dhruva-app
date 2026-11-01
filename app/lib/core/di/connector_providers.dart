@@ -9,7 +9,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/connectors/background_sync.dart';
 import '../../data/connectors/connector.dart';
 import '../../data/connectors/connector_hub.dart';
 import '../../data/connectors/connector_store.dart';
@@ -151,7 +150,5 @@ final connectorBootstrapProvider = FutureProvider<void>((ref) async {
   final hub = await ref.watch(connectorHubProvider.future);
   await ref.read(searchIndexProvider.future);
   await hub.sync.syncOnOpen();
-  if (hub.all.any((c) => c.currentStatus.isConnected)) {
-    await scheduleBackgroundSync();
-  }
+  await hub.syncBackgroundJob();
 });

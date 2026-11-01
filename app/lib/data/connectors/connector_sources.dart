@@ -118,8 +118,9 @@ abstract interface class FolderSource {
   Future<bool> isReachable(String grantId);
 
   /// Files (never directories) at any depth under the grant, at most
-  /// [maxFiles]. The native side never leaves the granted tree and skips
-  /// symlinks.
+  /// [maxFiles]. The native side never leaves the granted tree (iOS also
+  /// skips symlinks; on Android the document provider decides what a link is,
+  /// and fetch re-checks that the document is under the root).
   Future<List<FolderEntry>> list(String grantId, {required int maxFiles});
 
   /// Copies one file into [destPath] (a path inside this app's cache), reading

@@ -228,4 +228,56 @@ void main() {
     await container.read(connectorBootstrapProvider.future);
     expect(await kit.hub.store.countItems('calendar'), 1);
   });
+
+  group('background sync scheduling', () {
+    late FakeScheduler sched;
+    late ConnectorTestKit k;
+    setUp(() {
+      sched = FakeScheduler();
+      k = ConnectorTestKit.create(db, scheduler: sched);
+      k.notifications.granted = true;
+    });
+    tearDown(() => k.dispose());
+
+    test('connecting after launch schedules once; a second connector does '
+        'not duplicate', () async {
+      await k.hub.syncBackgroundJob(); // launch with nothing connected
+      expect(sched.scheduled, 0);
+      await k.hub.calendar.connect();
+      expect(sched.scheduled, 1);
+      await k.hub.notifications.connect();
+      expect(sched.scheduled, 1);
+    });
+
+    test(
+      'revoking one of two keeps the job; revoking the last cancels it',
+      () async {
+        await k.hub.calendar.connect();
+        await k.hub.notifications.connect();
+        await k.hub.calendar.revoke();
+        expect(sched.cancelled, 0);
+        await k.hub.notifications.revoke();
+        expect(sched.cancelled, 1);
+        // Connecting again re-registers.
+        await k.hub.calendar.connect();
+        expect(sched.scheduled, 2);
+      },
+    );
+
+    test('a denied connect schedules nothing', () async {
+      k.calendar.afterRequest = DevicePermission.denied;
+      await k.hub.calendar.connect();
+      expect(sched.scheduled, 0);
+    });
+
+    test('app restart with a connected connector still schedules', () async {
+      await k.hub.calendar.connect();
+      final restarted = ConnectorTestKit.create(db, scheduler: sched);
+      addTearDown(restarted.dispose);
+      restarted.calendar.perm = DevicePermission.granted;
+      await restarted.hub.calendar.refreshStatus();
+      await restarted.hub.syncBackgroundJob();
+      expect(sched.scheduled, 2); // once per process; the job itself dedupes
+    });
+  });
 }

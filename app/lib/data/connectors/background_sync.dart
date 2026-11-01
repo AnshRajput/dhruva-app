@@ -55,6 +55,22 @@ void connectorSyncDispatcher() {
   });
 }
 
+/// The seam [ConnectorHub] uses to start and stop the periodic job; tests pass
+/// a fake.
+abstract interface class BackgroundSyncScheduler {
+  Future<void> schedule();
+  Future<void> cancel();
+}
+
+/// The real scheduler: WorkManager on Android, a no-op elsewhere.
+final class WorkmanagerSyncScheduler implements BackgroundSyncScheduler {
+  const WorkmanagerSyncScheduler();
+  @override
+  Future<void> schedule() => scheduleBackgroundSync();
+  @override
+  Future<void> cancel() => cancelBackgroundSync();
+}
+
 /// Registers the periodic job (Android only, safe to call on every launch:
 /// the policy keeps one job). A failure to schedule is never fatal.
 Future<void> scheduleBackgroundSync() async {

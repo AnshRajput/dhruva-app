@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dhruva/data/connectors/background_sync.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_hub.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
@@ -196,6 +197,16 @@ class FakeNotificationAccess implements NotificationAccess {
   Future<String?> queueDirectory() async => failQueueDir ? null : dir.path;
 }
 
+/// Counts schedule/cancel calls instead of touching WorkManager.
+class FakeScheduler implements BackgroundSyncScheduler {
+  int scheduled = 0;
+  int cancelled = 0;
+  @override
+  Future<void> schedule() async => scheduled++;
+  @override
+  Future<void> cancel() async => cancelled++;
+}
+
 /// Everything a connector test needs, wired over [db].
 class ConnectorTestKit {
   ConnectorTestKit._(
@@ -223,6 +234,7 @@ class ConnectorTestKit {
     DateTime Function()? clock,
     bool notificationsSupported = true,
     DocumentExtractor? extractor,
+    BackgroundSyncScheduler? scheduler,
   }) {
     final temp = Directory.systemTemp.createTempSync('dhruva_connector_kit');
     final queue = Directory(p.join(temp.path, 'queue'))..createSync();
@@ -244,6 +256,7 @@ class ConnectorTestKit {
       folderCache: Directory(p.join(temp.path, 'cache')),
       extractor: extractor,
       clock: clock,
+      scheduler: scheduler ?? FakeScheduler(),
     );
     return ConnectorTestKit._(hub, cal, con, fol, not, temp, charging);
   }

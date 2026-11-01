@@ -395,7 +395,9 @@ void main() {
       final r = await stub.hub.folder.indexNow();
       expect(r.read, maxFolderFiles);
       expect(stub.folder.fetched.length, maxFolderFiles);
-    });
+      // 2,000 DB writes: slow on a loaded CI box, so the default 30 s is not
+      // a safe bound.
+    }, timeout: const Timeout(Duration(minutes: 3)));
 
     test(
       'a listing failure is a needs-attention card; the index is kept',

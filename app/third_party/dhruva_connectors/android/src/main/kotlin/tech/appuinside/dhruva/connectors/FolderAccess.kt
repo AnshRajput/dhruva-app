@@ -25,6 +25,11 @@ internal class FolderError(val code: String, message: String) : Exception(messag
  *    crafted outside the tree is refused;
  *  - the copy destination must resolve inside this app's cache directory;
  *  - reads stop at maxBytes (the file is deleted if it is longer).
+ *
+ * Symlinks: SAF exposes documents, not file-system links, so this code has no
+ * symlink handling of its own. What a provider does with a link is the
+ * provider's choice; the confinement above (child-of-root check at fetch, no
+ * `..`, depth and count caps at list) is what keeps reads inside the tree.
  */
 internal object FolderAccess {
     private const val MAX_DEPTH = 12

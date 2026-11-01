@@ -9,8 +9,9 @@
 /// file (`maxDocumentBytes`), [maxSectionsPerFile] 8 KB sections stored per
 /// file.
 ///
-/// Safety: the native side lists and reads only inside the granted tree and
-/// skips symlinks; this side additionally accepts only plain file names with a
+/// Safety: the native side lists and reads only inside the granted tree (iOS
+/// skips symlinks; Android's document provider has no link concept and every
+/// fetch is checked to be a child of the root); this side additionally accepts only plain file names with a
 /// supported extension, and copies each file into its own temp path (never a
 /// path derived from the file name) before extraction.
 library;
