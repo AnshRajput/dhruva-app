@@ -16,6 +16,8 @@ import 'package:dhruva/features/today/state/brief_facts.dart';
 import 'package:dhruva/features/today/state/brief_writer.dart';
 import 'package:dhruva/features/today/ui/day_timeline_screen.dart';
 import 'package:dhruva/features/today/ui/today_sheets.dart';
+import 'package:dhruva/features/today/ui/today_widgets.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +45,41 @@ String _freshCache() => jsonEncode(
     ],
   ).toJson(),
 );
+
+/// The brief's sentences as plain text.
+String _briefText(WidgetTester tester) => tester
+    .widget<RichText>(
+      find.descendant(
+        of: find.byKey(const ValueKey('today-brief-text')),
+        matching: find.byType(RichText),
+      ),
+    )
+    .text
+    .toPlainText();
+
+/// Taps the cited phrase containing [containing], the way a finger on it
+/// would (the span's own tap recognizer).
+Future<void> _tapCited(WidgetTester tester, String containing) async {
+  final rich = tester.widget<RichText>(
+    find.descendant(
+      of: find.byKey(const ValueKey('today-brief-text')),
+      matching: find.byType(RichText),
+    ),
+  );
+  TapGestureRecognizer? found;
+  rich.text.visitChildren((s) {
+    if (s is TextSpan &&
+        s.recognizer is TapGestureRecognizer &&
+        (s.text ?? '').contains(containing)) {
+      found = s.recognizer! as TapGestureRecognizer;
+      return false;
+    }
+    return true;
+  });
+  expect(found, isNotNull, reason: 'no cited phrase "$containing"');
+  found!.onTap!();
+  await settle(tester);
+}
 
 /// The chips scroll sideways and build lazily: bring [id] on screen.
 Future<void> _revealAction(WidgetTester tester, String id) async {
@@ -147,89 +184,68 @@ void main() {
     });
   });
 
-  group('brief: no model', () {
-    todayTest('shows the facts as a plain list and offers Get a model', (
-      tester,
-    ) async {
+  group('brief: written by rules', () {
+    todayTest('appears at once with no model: natural sentences, nothing '
+        'written', (tester) async {
       final h = await pumpToday(
         tester,
+        prefs: MemoryPrefsStore({
+          'user_profile': jsonEncode({'name': 'Meera Menon'}),
+        }),
         writer: FakeBriefWriter(model: BriefModelStatus.none),
         seed: _seedDay,
       );
-      expect(find.text('Your day, at a glance'), findsOneWidget);
-      expect(find.textContaining('Design sync at 9:30'), findsWidgets);
       expect(
-        find.textContaining('Ravi Menon messaged on WhatsApp'),
-        findsOneWidget,
+        _briefText(tester),
+        'Meera, your first meeting is Design sync at 9:30 AM with Ravi, '
+        'Sana and Dev. You have 2 meetings today, from 9:30 AM to 12:00 PM. '
+        'Ravi Menon on WhatsApp is waiting for a reply. You also have 7 other '
+        'notifications: 4 from Swiggy and 3 from HDFC.',
       );
+      expect(h.writer.prompts, isEmpty);
+      expect(find.text('Your day, at a glance'), findsNothing);
       expect(
         find.byKey(const ValueKey('today-brief-get-model')),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('today-brief-write')), findsNothing);
-      expect(h.writer.prompts, isEmpty); // nothing was written
+      expect(find.byKey(const ValueKey('today-brief-rewrite')), findsNothing);
+      expect(
+        find.text('Made on this phone from your calendar and notifications'),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('today-brief-get-model')));
       await settle(tester);
       expect(h.visited, contains('/settings/models'));
     });
 
-    todayTest('a fact is tappable and opens its source', (tester) async {
-      await pumpToday(
-        tester,
-        writer: FakeBriefWriter(model: BriefModelStatus.none),
-        seed: _seedDay,
-      );
-      await tester.tap(find.byKey(const ValueKey('fact-1')));
-      await settle(tester);
-      expect(find.byKey(const ValueKey('event-sheet-title')), findsOneWidget);
-    });
-  });
-
-  group('brief: written', () {
-    todayTest('writes on open, cites facts, drops uncited sentences', (
+    todayTest('with a model ready it still writes nothing on its own', (
       tester,
     ) async {
-      final h = await pumpToday(
-        tester,
-        writer: FakeBriefWriter(
-          output:
-              'Design sync is at 9:30 [1]. Ravi Menon messaged you [4]. '
-              'Everything will be wonderful today.',
-        ),
-        seed: _seedDay,
-      );
-      expect(h.writer.prompts, hasLength(1));
-      final text = tester
-          .widget<RichText>(
-            find.descendant(
-              of: find.byKey(const ValueKey('today-brief-text')),
-              matching: find.byType(RichText),
-            ),
-          )
-          .text
-          .toPlainText();
-      expect(text, contains('Design sync is at 9:30.'));
-      expect(text, isNot(contains('wonderful')));
+      final h = await pumpToday(tester, seed: _seedDay);
+      expect(h.writer.prompts, isEmpty);
+      expect(find.byKey(const ValueKey('today-brief-rewrite')), findsOneWidget);
       expect(
-        find.textContaining('Written on this phone at 7:42 AM'),
-        findsOneWidget,
+        find.textContaining('Your first meeting is Design sync'),
+        findsOne,
       );
-      // The prompt carried the facts inside one sources block.
-      expect(h.writer.prompts.single, contains('\n<sources>\n[1] '));
     });
 
-    todayTest('tapping a cited phrase opens its source', (tester) async {
+    todayTest('tapping a cited phrase opens ITS source, not another', (
+      tester,
+    ) async {
       await pumpToday(tester, seed: _seedDay);
-      await tester.tapAt(
-        tester.getTopLeft(find.byKey(const ValueKey('today-brief-text'))) +
-            const Offset(12, 10),
-      );
-      await settle(tester);
+      await _tapCited(tester, 'Design sync at 9:30 AM');
       expect(find.byKey(const ValueKey('event-sheet-title')), findsOneWidget);
       expect(find.text('Design sync'), findsWidgets);
+      Navigator.of(tester.element(find.byType(Scaffold).last)).pop();
+      await settle(tester);
+
+      await _tapCited(tester, 'Ravi Menon on WhatsApp');
+      expect(find.byKey(const ValueKey('event-sheet-title')), findsNothing);
+      expect(find.textContaining('Wants your OK'), findsWidgets);
     });
 
-    todayTest('"How this was written" lists the numbered facts', (
+    todayTest('"How this was written" lists the numbered facts, tappable', (
       tester,
     ) async {
       await pumpToday(tester, seed: _seedDay);
@@ -238,128 +254,54 @@ void main() {
       await settle(tester);
       expect(find.byKey(const ValueKey('today-brief-facts')), findsOneWidget);
       expect(find.byKey(const ValueKey('fact-1')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('fact-1')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('event-sheet-title')), findsOneWidget);
     });
 
-    todayTest('a fresh cached brief is shown without writing a new one', (
+    todayTest('Mark all read removes the notification facts', (tester) async {
+      await pumpToday(tester, seed: _seedDay);
+      expect(_briefText(tester), contains('Ravi Menon on WhatsApp'));
+      expect(_briefText(tester), contains('7 other notifications'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('digest-mark-read')),
+      );
+      await tester.tap(find.byKey(const ValueKey('digest-mark-read')));
+      await settle(tester);
+      expect(_briefText(tester), isNot(contains('Ravi Menon')));
+      expect(_briefText(tester), isNot(contains('waiting')));
+      expect(_briefText(tester), isNot(contains('notifications')));
+      expect(_briefText(tester), contains('Design sync'));
+      await tester.tap(find.byKey(const ValueKey('today-brief-how')));
+      await settle(tester);
+      expect(find.textContaining('WhatsApp'), findsNothing);
+    });
+
+    todayTest('an empty calendar says so, with tomorrow\'s first event', (
       tester,
     ) async {
-      final first = await pumpToday(tester, seed: _seedDay);
-      final cache = first.prefs.values['today_brief_v1']!;
-      final h = await pumpToday(
+      await pumpToday(
         tester,
-        prefs: MemoryPrefsStore({'today_brief_v1': cache}),
-        seed: _seedDay,
+        seed: (h) async {
+          h.kit.calendar.items = [
+            calEvent(
+              'e9',
+              title: 'Standup',
+              start: DateTime(2026, 11, 3, 9),
+              attendees: const [Person(name: 'Sana', email: 'sana@x.test')],
+            ),
+          ];
+          await h.kit.hub.calendar.connect();
+          await h.kit.hub.sync.refresh();
+        },
       );
-      expect(h.writer.prompts, isEmpty);
       expect(
-        find.textContaining('Written on this phone at 7:42 AM'),
-        findsOneWidget,
+        _briefText(tester),
+        'You have no meetings today. Tomorrow starts with Standup at 9:00 AM '
+        'with Sana.',
       );
-    });
-
-    todayTest('a fresh cached brief about other sources (a false "no '
-        'meetings") is dropped and rewritten, never shown', (tester) async {
-      final falseBrief = jsonEncode(
-        WrittenBrief(
-          writtenAt: at(7, 40),
-          raw: 'No meetings today [1].',
-          facts: const [
-            BriefFact(
-              n: 1,
-              kind: FactKind.event,
-              text: 'No meetings on the calendar today.',
-              ref: 'event:0',
-            ),
-          ],
-        ).toJson(),
-      );
-      final h = await pumpToday(
-        tester,
-        prefs: MemoryPrefsStore({'today_brief_v1': falseBrief}),
-        seed: _seedDay,
-      );
-      expect(h.writer.prompts, hasLength(1));
-      expect(find.textContaining('No meetings'), findsNothing);
-    });
-
-    todayTest('a failed rewrite does not leave a brief about other sources '
-        'on screen', (tester) async {
-      final falseBrief = jsonEncode(
-        WrittenBrief(
-          writtenAt: at(7, 40),
-          raw: 'No meetings today [1].',
-          facts: const [
-            BriefFact(
-              n: 1,
-              kind: FactKind.event,
-              text: 'No meetings on the calendar today.',
-              ref: 'event:0',
-            ),
-          ],
-        ).toJson(),
-      );
-      final h = await pumpToday(
-        tester,
-        writer: FakeBriefWriter()..failWith = StateError('model crashed'),
-        prefs: MemoryPrefsStore({'today_brief_v1': falseBrief}),
-        seed: _seedDay,
-      );
-      expect(h.writer.prompts, hasLength(1));
-      expect(find.textContaining('No meetings'), findsNothing);
-      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
-      expect(find.text('Your day, at a glance'), findsOneWidget);
-      expect(h.prefs.values['today_brief_v1'], '');
-    });
-
-    todayTest('a stale cached brief (older than 3 h) is rewritten on open', (
-      tester,
-    ) async {
-      final stale = jsonEncode(
-        WrittenBrief(
-          writtenAt: at(3, 30),
-          raw: 'Old news [1].',
-          facts: const [
-            BriefFact(n: 1, kind: FactKind.event, text: 'x', ref: 'event:1'),
-          ],
-        ).toJson(),
-      );
-      final h = await pumpToday(
-        tester,
-        prefs: MemoryPrefsStore({'today_brief_v1': stale}),
-        seed: _seedDay,
-      );
-      expect(h.writer.prompts, hasLength(1));
-      expect(find.textContaining('Old news'), findsNothing);
-    });
-
-    todayTest('regenerate writes again and caches the new brief', (
-      tester,
-    ) async {
-      final h = await pumpToday(tester, seed: _seedDay);
-      expect(h.writer.prompts, hasLength(1));
-      h.writer.output = 'Budget review is at 11:00 [2].';
-      await tester.tap(find.byKey(const ValueKey('today-brief-regenerate')));
-      await settle(tester);
-      expect(h.writer.prompts, hasLength(2));
-      expect(find.textContaining('Budget review is at 11:00.'), findsWidgets);
-      final cached = jsonDecode(h.prefs.values['today_brief_v1']!) as Map;
-      expect(cached['raw'], 'Budget review is at 11:00 [2].');
-      expect((cached['facts'] as List), isNotEmpty);
-    });
-
-    todayTest('a failed rewrite keeps the old brief and shows the facts', (
-      tester,
-    ) async {
-      final h = await pumpToday(tester, seed: _seedDay);
-      expect(find.byKey(const ValueKey('today-brief-text')), findsOneWidget);
-      expect(find.byKey(const ValueKey('today-brief-facts')), findsNothing);
-      h.writer.failWith = StateError('model crashed');
-      await tester.tap(find.byKey(const ValueKey('today-brief-regenerate')));
-      await settle(tester);
-      expect(find.byKey(const ValueKey('today-brief-text')), findsOneWidget);
-      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
-      // The error says "read the facts below": they are below.
-      expect(find.byKey(const ValueKey('today-brief-facts')), findsOneWidget);
+      await _tapCited(tester, 'Standup at 9:00 AM');
+      expect(find.byKey(const ValueKey('event-sheet-title')), findsOneWidget);
     });
 
     todayTest('while a model downloads the card says so, with progress', (
@@ -384,16 +326,275 @@ void main() {
       );
       expect(find.text('Downloading your model · 25%'), findsOneWidget);
       expect(find.byKey(const ValueKey('today-brief-get-model')), findsNothing);
-      expect(find.textContaining('No model'), findsNothing);
-      expect(find.textContaining('Design sync at 9:30'), findsWidgets);
+      expect(_briefText(tester), contains('Design sync at 9:30 AM'));
       expect(h.writer.prompts, isEmpty);
     });
 
-    todayTest('pull to refresh rewrites the brief', (tester) async {
-      final h = await pumpToday(tester, seed: _seedDay);
+    todayTest('a cached brief from before the check (v1) is never shown', (
+      tester,
+    ) async {
+      final old = jsonEncode({
+        'writtenAt': at(7, 30).millisecondsSinceEpoch,
+        'raw': 'Your first meeting is Standup at 9:00 [1].',
+        'facts': [
+          {
+            'n': 1,
+            'kind': 'event',
+            'text': 'Design sync at 9:30',
+            'ref': 'event:1',
+          },
+        ],
+      });
+      await pumpToday(
+        tester,
+        prefs: MemoryPrefsStore({'today_brief_v1': old}),
+        seed: _seedDay,
+      );
+      expect(find.textContaining('Standup'), findsNothing);
+      expect(_briefText(tester), contains('Design sync at 9:30 AM'));
+    });
+
+    todayTest('disconnecting a source forgets a rewrite made from it', (
+      tester,
+    ) async {
+      final h = await pumpToday(
+        tester,
+        prefs: MemoryPrefsStore({'today_brief_v1': _freshCache()}),
+      );
+      // The calendar was never connected here, so the cached rewrite (which
+      // quotes an event) must be erased, not shown.
+      expect(find.byKey(const ValueKey('today-brief-text')), findsNothing);
+      expect(h.prefs.values['today_brief_v1'], '');
+    });
+  });
+
+  group('brief: optional rewrite', () {
+    const faithful =
+        'Your day starts with Design sync at 9:30 AM, with Ravi, Sana and Dev '
+        '[1]. You have 2 meetings today, until 12:00 PM [2]. Ravi Menon on '
+        'WhatsApp is waiting for a reply [3].';
+    // The exact kind of output a 0.5B model produced on device: the prompt's
+    // old sample sentence, with valid markers.
+    const fabricated =
+        'Your first meeting is Standup at 9:00 [1]. Ana needs a reply about '
+        'the invoice [2].';
+
+    todayTest('a faithful rewrite is shown, cited, checked and cached', (
+      tester,
+    ) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      final before = _briefText(tester);
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+
       expect(h.writer.prompts, hasLength(1));
-      // The same callback a pull runs (the drag gesture itself is the
-      // framework's, and is exercised on a device).
+      final prompt = h.writer.prompts.single;
+      expect(prompt, contains('\n<sources>\n'));
+      expect(prompt, contains('Design sync at 9:30 AM'));
+      expect(prompt, isNot(contains('Standup')));
+      expect(prompt, isNot(contains('Ana ')));
+
+      final after = _briefText(tester);
+      expect(after, isNot(before));
+      expect(after, startsWith('Your day starts with Design sync'));
+      expect(
+        find.textContaining('Reworded on this phone at 7:42 AM'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('today-brief-kept')), findsNothing);
+      await _tapCited(tester, 'Ravi Menon on WhatsApp');
+      expect(find.byKey(const ValueKey('event-sheet-title')), findsNothing);
+
+      final cached = jsonDecode(h.prefs.values['today_brief_v1']!) as Map;
+      expect(cached['v'], 2);
+      expect((cached['facts'] as List), isNotEmpty);
+      expect(
+        cached['raw'],
+        contains('Ravi Menon on WhatsApp is waiting for a reply [3]'),
+      );
+    });
+
+    todayTest('a fabricated rewrite is rejected whole: the checked version '
+        'stays and nothing is cached', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: fabricated),
+        seed: _seedDay,
+      );
+      final before = _briefText(tester);
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+
+      expect(h.writer.prompts, hasLength(1));
+      expect(_briefText(tester), before);
+      expect(find.textContaining('Standup'), findsNothing);
+      expect(find.textContaining('Ana'), findsNothing);
+      expect(find.text('Kept the checked version'), findsOneWidget);
+      expect(h.prefs.values['today_brief_v1'] ?? '', '');
+      // The button is back for another try.
+      expect(find.byKey(const ValueKey('today-brief-rewrite')), findsOneWidget);
+    });
+
+    todayTest('a rewrite with one invented sentence among good ones is '
+        'rejected whole', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(
+          output:
+              'Your day starts with Design sync at 9:30 AM [1]. '
+              'Priya joins you at 10:00 [1].',
+        ),
+        seed: _seedDay,
+      );
+      final before = _briefText(tester);
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(_briefText(tester), before);
+      expect(find.text('Kept the checked version'), findsOneWidget);
+      expect(h.prefs.values['today_brief_v1'] ?? '', '');
+    });
+
+    todayTest('a rejected second try drops the first rewrite too', (
+      tester,
+    ) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(find.textContaining('Reworded on this phone'), findsOneWidget);
+
+      h.writer.output = fabricated;
+      await tester.tap(find.byKey(const ValueKey('today-brief-regenerate')));
+      await settle(tester);
+      expect(find.textContaining('Standup'), findsNothing);
+      expect(find.textContaining('Reworded on this phone'), findsNothing);
+      expect(_briefText(tester), startsWith('Your first meeting is Design'));
+      expect(find.text('Kept the checked version'), findsOneWidget);
+      expect(h.prefs.values['today_brief_v1'], '');
+    });
+
+    todayTest('a crashed model leaves the checked brief and shows the fix', (
+      tester,
+    ) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter()..failWith = StateError('model crashed'),
+        seed: _seedDay,
+      );
+      final before = _briefText(tester);
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(_briefText(tester), before);
+      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
+      expect(h.prefs.values['today_brief_v1'] ?? '', '');
+    });
+
+    todayTest('a busy phone says so and keeps the checked brief', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter()
+          ..failWith = const BriefUnavailable(
+            'Your phone is busy with another task. Pull down to try again.',
+          ),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
+      expect(_briefText(tester), contains('Your first meeting is Design sync'));
+    });
+
+    todayTest('an idle model is loaded on the tap, then used', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.idle, output: faithful),
+        seed: _seedDay,
+        health: const DeviceHealth(batteryPercent: 3),
+      );
+      expect(h.writer.prepares, 0);
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(h.writer.prepares, 1);
+      expect(find.textContaining('Reworded on this phone'), findsOneWidget);
+    });
+
+    todayTest('a fresh cached rewrite is shown without writing again', (
+      tester,
+    ) async {
+      final first = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      final cache = first.prefs.values['today_brief_v1']!;
+      final h = await pumpToday(
+        tester,
+        prefs: MemoryPrefsStore({'today_brief_v1': cache}),
+        seed: _seedDay,
+      );
+      expect(h.writer.prompts, isEmpty);
+      expect(_briefText(tester), startsWith('Your day starts with Design'));
+    });
+
+    todayTest('a cached rewrite about other facts is dropped, never shown', (
+      tester,
+    ) async {
+      final falseBrief = jsonEncode(
+        WrittenBrief(
+          writtenAt: at(7, 40),
+          raw: 'You have no meetings today [1].',
+          facts: const [
+            BriefFact(
+              n: 1,
+              kind: FactKind.event,
+              text: 'No meetings on the calendar today.',
+              ref: 'event:0',
+            ),
+          ],
+        ).toJson(),
+      );
+      final h = await pumpToday(
+        tester,
+        prefs: MemoryPrefsStore({'today_brief_v1': falseBrief}),
+        seed: _seedDay,
+      );
+      expect(find.textContaining('no meetings'), findsNothing);
+      expect(_briefText(tester), contains('Design sync'));
+      expect(h.writer.prompts, isEmpty);
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.prefs.values['today_brief_v1'], '');
+    });
+
+    todayTest('Show original goes back and clears the cache', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('today-brief-original')));
+      await settle(tester);
+      expect(find.textContaining('Reworded on this phone'), findsNothing);
+      expect(_briefText(tester), startsWith('Your first meeting is Design'));
+      expect(h.prefs.values['today_brief_v1'], '');
+    });
+
+    todayTest('pull to refresh syncs but never starts the model', (
+      tester,
+    ) async {
+      final h = await pumpToday(tester, seed: _seedDay);
       unawaited(
         tester
             .state<RefreshIndicatorState>(find.byType(RefreshIndicator))
@@ -402,66 +603,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await settle(tester);
       await tester.pump(const Duration(seconds: 1));
-      expect(h.writer.prompts, hasLength(2));
-    });
-
-    todayTest('a low battery holds back the unasked write; the button '
-        'still works', (tester) async {
-      final h = await pumpToday(
-        tester,
-        writer: FakeBriefWriter(model: BriefModelStatus.idle),
-        seed: _seedDay,
-        health: const DeviceHealth(batteryPercent: 3),
-      );
       expect(h.writer.prompts, isEmpty);
-      expect(h.writer.prepares, 0);
-      await tester.tap(find.byKey(const ValueKey('today-brief-write')));
-      await settle(tester);
-      expect(h.writer.prepares, 1); // the model was loaded on request
-      expect(h.writer.prompts, hasLength(1));
-      expect(find.byKey(const ValueKey('today-brief-text')), findsOneWidget);
-    });
-
-    todayTest('a model that cannot be reached shows the fix, keeps facts', (
-      tester,
-    ) async {
-      final h = await pumpToday(
-        tester,
-        writer: FakeBriefWriter()
-          ..failWith = const BriefUnavailable(
-            'Your phone is busy with another task. Pull down to try again.',
-          ),
-        seed: _seedDay,
-      );
-      expect(h.writer.prompts, hasLength(1));
-      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
-      expect(find.text('Your day, at a glance'), findsOneWidget);
-    });
-
-    todayTest('model text with no valid citation is dropped, not shown', (
-      tester,
-    ) async {
-      await pumpToday(
-        tester,
-        writer: FakeBriefWriter(output: 'A lovely day ahead [9].'),
-        seed: _seedDay,
-      );
-      expect(find.textContaining('lovely'), findsNothing);
-      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
-      expect(find.text('Your day, at a glance'), findsOneWidget);
-    });
-
-    todayTest('disconnecting a source forgets what was written from it', (
-      tester,
-    ) async {
-      final h = await pumpToday(
-        tester,
-        prefs: MemoryPrefsStore({'today_brief_v1': _freshCache()}),
-      );
-      // The calendar was never connected here, so the cached brief (which
-      // quotes an event) must be erased, not shown.
-      expect(find.byKey(const ValueKey('today-brief-text')), findsNothing);
-      expect(h.prefs.values['today_brief_v1'], '');
     });
   });
 
@@ -475,7 +617,12 @@ void main() {
       );
       expect(find.byKey(const ValueKey('up-next-title')), findsOneWidget);
       expect(find.text('in 1h 48m'), findsOneWidget);
-      expect(find.text('Ravi, Sana, Dev'), findsOneWidget);
+      expect(
+        tester
+            .widget<AttendeeLine>(find.byKey(const ValueKey('up-next-people')))
+            .names,
+        ['Ravi', 'Sana', 'Dev'],
+      );
       expect(
         find.textContaining('Budget review', findRichText: true),
         findsWidgets,
@@ -536,11 +683,10 @@ void main() {
         },
       );
       expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('up-next-card')),
-          matching: find.textContaining('Ravi Menon, Sana, Dev'),
-        ),
-        findsOneWidget,
+        tester
+            .widget<AttendeeLine>(find.byKey(const ValueKey('up-next-people')))
+            .names,
+        ['Ravi Menon', 'Sana', 'Dev'],
       );
     });
 
@@ -579,6 +725,29 @@ void main() {
       );
       expect(find.byKey(const ValueKey('up-next-attention')), findsOneWidget);
       expect(find.byKey(const ValueKey('up-next-retry')), findsOneWidget);
+    });
+
+    todayTest('the second row says Tomorrow when it is tomorrow', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) async {
+          h.kit.calendar.items = [
+            calEvent('e1', title: 'Design sync', start: at(9, 30)),
+            calEvent('e3', title: 'Standup', start: DateTime(2026, 11, 3, 9)),
+          ];
+          await h.kit.hub.calendar.connect();
+          await h.kit.hub.sync.refresh();
+        },
+      );
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('up-next-second-time')))
+            .data,
+        'Tomorrow 9:00 AM',
+      );
     });
 
     todayTest('says "last synced" so offline reads as honest', (tester) async {
@@ -642,6 +811,40 @@ void main() {
       await settle(tester);
       expect(find.byKey(const ValueKey('today-digest')), findsNothing);
       expect(h.prefs.values['notifications_read_at'], isNotNull);
+      // Read means read everywhere: Needs you goes too.
+      expect(find.text('Needs you'), findsNothing);
+    });
+
+    todayTest('a long preview is cut by the row (one ellipsis), not by a '
+        'pre-trimmed string', (tester) async {
+      final long = notification(
+        90,
+        'in.news',
+        'News',
+        'News',
+        'Markets   rallied\nafter the central bank held rates steady and '
+            'signalled cuts later this year, analysts said on Monday morning.',
+        at(7),
+      );
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) => h.seedNotifications([long]),
+      );
+      final row = tester.widget<RichText>(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('today-digest')),
+              matching: find.textContaining('Markets', findRichText: true),
+            )
+            .first,
+      );
+      final text = row.text.toPlainText();
+      expect(text, contains('Monday morning.')); // whole text handed over
+      expect(text, isNot(contains('…')));
+      expect(text, isNot(contains('  Markets   ')));
+      expect(row.overflow, TextOverflow.ellipsis);
+      expect(row.maxLines, 1);
     });
 
     todayTest('iOS: no digest and no Needs you (notifications are '
@@ -774,6 +977,31 @@ void main() {
       expect(ravi, lessThan(now)); // 7:12 is before now (7:42)
       expect(now, lessThan(design));
       expect(design, lessThan(budget));
+    });
+
+    todayTest('overlapping meetings are marked on the rail', (tester) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) async {
+          h.kit.calendar.items = [
+            calEvent('e1', title: 'Design sync', start: at(9, 30)),
+            calEvent('e2', title: 'Budget review', start: at(10)),
+            calEvent('e3', title: 'Lunch', start: at(13)),
+          ];
+          await h.kit.hub.calendar.connect();
+          await h.kit.hub.sync.refresh();
+        },
+      );
+      await tester.tap(find.byKey(const ValueKey('today-see-day')));
+      await settle(tester);
+      expect(find.text('Overlaps Budget review'), findsOneWidget);
+      expect(find.text('Overlaps Design sync'), findsOneWidget);
+      expect(find.textContaining('Overlaps Lunch'), findsNothing);
+      expect(
+        find.textContaining('Overlaps', skipOffstage: false),
+        findsNWidgets(2),
+      );
     });
 
     todayTest('every row paints a rail segment, joined top to bottom', (

@@ -552,6 +552,15 @@ void main() {
     });
   });
 
+  group('day labels', () {
+    test('Tomorrow, then weekday, never for today', () {
+      expect(dayLabel(DateTime(2026, 11, 3, 9), fixtureNow), 'Tomorrow');
+      expect(dayLabel(DateTime(2026, 11, 4, 9), fixtureNow), 'Wednesday');
+      expect(dayLabel(DateTime(2026, 11, 2, 23), fixtureNow), isNull);
+      expect(dayLabel(DateTime(2026, 11, 1, 23), fixtureNow), isNull);
+    });
+  });
+
   group('day text', () {
     test('greeting carries the first name only', () {
       expect(greetingWithName(at(7), 'Meera Menon'), 'Good morning, Meera');
