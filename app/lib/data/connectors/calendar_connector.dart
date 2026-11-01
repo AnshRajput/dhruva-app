@@ -95,7 +95,7 @@ class CalendarConnector extends BaseConnector {
       for (final e in events)
         if (!excluded.contains(e.calendarId)) _draft(e),
     ];
-    final result = await store.upsertItems(id, drafts);
+    final result = await store.upsertItems(id, drafts, requireAccount: true);
     await store.removeMissingInWindow(
       id,
       ItemKind.event,

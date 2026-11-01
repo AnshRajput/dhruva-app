@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -94,6 +95,11 @@ class FakeFolderSource implements FolderSource {
   int settingsOpened = 0;
   int listCalls = 0;
 
+  /// When set, every fetch announces itself on [fetchStarted] and then waits
+  /// for this gate (lets a test act while a sync is mid-run).
+  Completer<void>? fetchGate;
+  Completer<void>? fetchStarted;
+
   void addFile(String name, String text, {DateTime? modified, String? id}) {
     final bytes = Uint8List.fromList(text.codeUnits);
     final eid = id ?? 'doc:$name';
@@ -132,6 +138,12 @@ class FakeFolderSource implements FolderSource {
     required int maxBytes,
   }) async {
     fetched.add(entry.id);
+    if (fetchGate != null) {
+      if (fetchStarted != null && !fetchStarted!.isCompleted) {
+        fetchStarted!.complete();
+      }
+      await fetchGate!.future;
+    }
     if (unreadable.contains(entry.id)) {
       throw const FolderFetchException('cannot read');
     }

@@ -409,6 +409,9 @@ class AppDatabase extends _$AppDatabase {
       // SQLite foreign keys are opt-in per connection — required for the
       // onDelete: setNull/cascade behavior declared above to actually fire.
       await customStatement('PRAGMA foreign_keys = ON');
+      // The background sync opens a second connection; wait for the other
+      // writer instead of failing with "database is locked".
+      await customStatement('PRAGMA busy_timeout = 5000');
     },
   );
 

@@ -232,7 +232,12 @@ class DhruvaConnectorsPlugin :
                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                 Intent.FLAG_GRANT_PREFIX_URI_PERMISSION,
         )
-        a.startActivityForResult(intent, REQ_PICK_FOLDER)
+        try {
+            a.startActivityForResult(intent, REQ_PICK_FOLDER)
+        } catch (e: Exception) {
+            pendingPick = null
+            result.error("no_picker", "This phone has no folder picker.", null)
+        }
     }
 
     override fun onActivityResult(code: Int, resultCode: Int, data: Intent?): Boolean {

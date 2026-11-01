@@ -128,7 +128,7 @@ class ContactsConnector extends BaseConnector {
           },
         ),
     ];
-    final result = await store.upsertItems(id, drafts);
+    final result = await store.upsertItems(id, drafts, requireAccount: true);
     return SyncResult(read: drafts.length, changed: result.changed);
   }
 

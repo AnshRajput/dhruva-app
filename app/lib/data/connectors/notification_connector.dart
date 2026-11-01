@@ -118,7 +118,7 @@ class NotificationConnector extends BaseConnector {
           flags: {'pkg': n.pkg, 'app': n.app},
         ),
     ];
-    final result = await store.upsertItems(id, drafts);
+    final result = await store.upsertItems(id, drafts, requireAccount: true);
     // Only now is it safe to forget the queue files.
     await batch.commit();
     await store.pruneOlderThan(id, now.subtract(notificationRetention));

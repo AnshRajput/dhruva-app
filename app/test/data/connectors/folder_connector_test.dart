@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -436,6 +437,29 @@ void main() {
       await kit.hub.folder.indexNow();
       await kit.hub.folder.revoke();
       expect(kit.folder.released, ['tree:notes']);
+      expect(await kit.hub.store.countItems('folder'), 0);
+      expect(await kit.hub.store.account('folder'), isNull);
+      expect(
+        (await kit.hub.store.ledger(connector: 'folder')).map((e) => e.action),
+        [LedgerAction.revoke],
+      );
+      expect(kit.hub.folder.currentStatus.state, ConnectorState.notConnected);
+    });
+
+    test('revoke during a running index leaves no items, no account and only '
+        'the revoke ledger row', () async {
+      for (var i = 0; i < 3; i++) {
+        kit.folder.addFile('f$i.txt', 'text $i', id: 'f$i');
+      }
+      await connect();
+      kit.folder.fetchGate = Completer<void>();
+      kit.folder.fetchStarted = Completer<void>();
+      final index = kit.hub.folder.indexNow();
+      await kit.folder.fetchStarted!.future;
+      final revoke = kit.hub.folder.revoke();
+      kit.folder.fetchGate!.complete();
+      await index;
+      await revoke;
       expect(await kit.hub.store.countItems('folder'), 0);
       expect(await kit.hub.store.account('folder'), isNull);
       expect(

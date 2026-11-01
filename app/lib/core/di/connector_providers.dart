@@ -70,7 +70,7 @@ final connectorListProvider = StreamProvider<List<ConnectorEntry>>((
     unawaited(controller.close());
   });
   await Future.wait(hub.all.map((c) => c.refreshStatus()));
-  controller.add(snapshot());
+  if (!controller.isClosed) controller.add(snapshot());
   yield* controller.stream;
 });
 

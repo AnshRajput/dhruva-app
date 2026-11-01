@@ -235,6 +235,42 @@ void main() {
     });
   });
 
+  group('late sync writes after revoke (e.g. the background isolate)', () {
+    test(
+      'upsert, recordSync and recordFailure are inert once revoked',
+      () async {
+        await store.saveAccount('folder');
+        await store.wipeConnector('folder');
+        final r = await store.upsertItems('folder', const [
+          ItemDraft(externalId: 'a', kind: ItemKind.file, title: 'a'),
+        ], requireAccount: true);
+        await store.recordSync('folder', count: 1);
+        await store.recordFailure('folder', 'boom');
+        await store.saveAccount(
+          'folder',
+          status: 'connected',
+          onlyIfExists: true,
+        );
+        expect(r.changed, 0);
+        expect(await store.countItems('folder'), 0);
+        expect(await store.account('folder'), isNull);
+        expect((await store.ledger(connector: 'folder')).map((e) => e.action), [
+          LedgerAction.revoke,
+        ]);
+      },
+    );
+
+    test(
+      'recordSync writes the ledger row and lastSyncAt while connected',
+      () async {
+        await store.saveAccount('folder');
+        await store.recordSync('folder', count: 3);
+        expect((await store.account('folder'))!.lastSyncAt, isNotNull);
+        expect((await store.ledger(connector: 'folder')).single.count, 3);
+      },
+    );
+  });
+
   group('accounts, ledger, revoke', () {
     test('saveAccount creates then patches only the given fields', () async {
       await store.saveAccount(

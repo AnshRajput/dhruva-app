@@ -18,6 +18,12 @@ abstract class BaseConnector implements Connector {
   final _controller = StreamController<ConnectorStatus>.broadcast();
   ConnectorStatus _status;
   bool _syncing = false;
+  Future<void>? _running;
+  bool _cancelled = false;
+
+  /// True once [revoke] has been asked for while a sync runs; long reads
+  /// (the folder index) check it and stop.
+  bool get syncCancelled => _cancelled;
 
   @override
   Stream<ConnectorStatus> get status => _controller.stream;
@@ -89,17 +95,14 @@ abstract class BaseConnector implements Connector {
       );
     }
     _syncing = true;
+    _cancelled = false;
+    final done = Completer<void>();
+    _running = done.future;
     emit(_status.copyWith(state: ConnectorState.syncing));
     try {
       final result = await doSync(account, since);
       if (result.skipped == null) {
-        await store.addLedger(id, LedgerAction.read, count: result.read);
-        await store.saveAccount(
-          id,
-          status: 'connected',
-          clearError: true,
-          lastSyncAt: store.now,
-        );
+        await store.recordSync(id, count: result.read);
       }
       emit(await _evaluateSafely(await store.account(id)));
       return result;
@@ -126,16 +129,25 @@ abstract class BaseConnector implements Connector {
       throw ConnectorException(ConnectorState.needsAttention, msg);
     } finally {
       _syncing = false;
+      done.complete();
     }
   }
 
-  Future<void> _recordFailure(String message) async {
-    await store.saveAccount(id, status: 'needsAttention', lastError: message);
-    await store.addLedger(id, LedgerAction.failed);
-  }
+  Future<void> _recordFailure(String message) =>
+      store.recordFailure(id, message);
 
   @override
   Future<void> revoke() async {
+    // Stop a running sync and let it finish first. The store also refuses
+    // late writes once the account row is gone, which is what protects against
+    // a sync in another isolate (the background engine).
+    final running = _running;
+    if (_syncing && running != null) {
+      _cancelled = true;
+      try {
+        await running;
+      } catch (_) {}
+    }
     final account = await store.account(id);
     try {
       await onRevoke(account);

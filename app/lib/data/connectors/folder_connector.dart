@@ -180,7 +180,7 @@ class FolderConnector extends BaseConnector {
     // file's sections are separate rows). One query, no per-file scans.
     final rowsByFile = <String, List<String>>{};
     final known = <String, ({int mtime, int size, bool retry})>{};
-    for (final i in await store.itemsOf(id, kind: ItemKind.file)) {
+    for (final i in await store.flagsOf(id, ItemKind.file)) {
       final fileId = (i.flags['fileId'] as String?) ?? i.externalId;
       rowsByFile.putIfAbsent(fileId, () => []).add(i.externalId);
       if (i.externalId == fileId) {
@@ -199,6 +199,7 @@ class FolderConnector extends BaseConnector {
 
     var read = 0, changed = 0, processed = 0;
     for (final entry in entries) {
+      if (syncCancelled) break; // the user revoked mid-run
       final mtime = entry.modified.millisecondsSinceEpoch ~/ 1000;
       final old = known[entry.id];
       if (old != null &&
@@ -221,7 +222,7 @@ class FolderConnector extends BaseConnector {
       final fresh =
           drafts ?? [_placeholder(entry, mtime, 'unreadable', retry: true)];
       await store.removeByExternalIds(id, rowsByFile[entry.id] ?? const []);
-      final r = await store.upsertItems(id, fresh);
+      final r = await store.upsertItems(id, fresh, requireAccount: true);
       read++;
       changed += r.changed;
     }

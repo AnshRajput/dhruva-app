@@ -84,15 +84,22 @@ class ConnectorStore {
   /// Inserts new drafts and updates changed ones (matched on externalId),
   /// leaving identical rows alone. A changed title/body drops the cached
   /// summary because it no longer describes the text.
+  ///
+  /// [requireAccount] (every sync path sets it) makes the write a no-op once
+  /// the opt-in row is gone, checked inside the same transaction as the write:
+  /// a sync still running when the user revokes (in this isolate or the
+  /// background one) can never bring revoked content back.
   Future<IngestResult> upsertItems(
     String source,
-    List<ItemDraft> drafts,
-  ) async {
+    List<ItemDraft> drafts, {
+    bool requireAccount = false,
+  }) async {
     if (drafts.isEmpty) return const IngestResult();
     // Last draft wins if a connector repeats an id within one batch.
     final byId = <String, ItemDraft>{for (final d in drafts) d.externalId: d};
     var inserted = 0, updated = 0, unchanged = 0;
     await _db.transaction(() async {
+      if (requireAccount && await account(source) == null) return;
       final existing = <String, ItemRow>{};
       final ids = byId.keys.toList();
       for (var i = 0; i < ids.length; i += 500) {
@@ -249,6 +256,25 @@ class ConnectorStore {
     return [for (final r in await q.get()) _toItem(r)];
   }
 
+  /// (externalId, flags) of one source's items of [kind], without the bodies:
+  /// the folder re-index only needs fileId/mtime/size, not up to 96 MB of text.
+  Future<List<({String externalId, Map<String, Object?> flags})>> flagsOf(
+    String source,
+    ItemKind kind,
+  ) async {
+    final t = _db.items;
+    final q = _db.selectOnly(t)
+      ..addColumns([t.externalId, t.flagsJson])
+      ..where(t.source.equals(source) & t.kind.equalsValue(kind));
+    return [
+      for (final r in await q.get())
+        (
+          externalId: r.read(t.externalId)!,
+          flags: _map(r.read(t.flagsJson) ?? '{}'),
+        ),
+    ];
+  }
+
   Future<List<ConnectorItem>> itemsByIds(Iterable<int> ids) async {
     final list = ids.toList();
     if (list.isEmpty) return const [];
@@ -376,6 +402,8 @@ class ConnectorStore {
       .map((rows) => [for (final r in rows) _toAccount(r)]);
 
   /// Creates or updates the opt-in row. Only the given fields change.
+  /// [onlyIfExists] never creates the row (a sync must not resurrect an opt-in
+  /// the user has revoked).
   Future<void> saveAccount(
     String connector, {
     String? status,
@@ -384,9 +412,11 @@ class ConnectorStore {
     String? lastError,
     bool clearError = false,
     DateTime? lastSyncAt,
-  }) async {
+    bool onlyIfExists = false,
+  }) => _db.transaction(() async {
     final existing = await account(connector);
     if (existing == null) {
+      if (onlyIfExists) return;
       await _db
           .into(_db.connectorAccounts)
           .insert(
@@ -419,7 +449,36 @@ class ConnectorStore {
             : Value(lastSyncAt),
       ),
     );
-  }
+  });
+
+  /// End of a successful sync: the content ledger row and the account's
+  /// lastSyncAt in one transaction, skipped entirely if the connector was
+  /// revoked meanwhile.
+  Future<void> recordSync(String connector, {required int count}) =>
+      _db.transaction(() async {
+        if (await account(connector) == null) return;
+        await addLedger(connector, LedgerAction.read, count: count);
+        await saveAccount(
+          connector,
+          status: 'connected',
+          clearError: true,
+          lastSyncAt: now,
+          onlyIfExists: true,
+        );
+      });
+
+  /// A failed sync, same revoke guard as [recordSync].
+  Future<void> recordFailure(String connector, String message) =>
+      _db.transaction(() async {
+        if (await account(connector) == null) return;
+        await saveAccount(
+          connector,
+          status: 'needsAttention',
+          lastError: message,
+          onlyIfExists: true,
+        );
+        await addLedger(connector, LedgerAction.failed);
+      });
 
   /// Revoke: deletes the connector's items (and so its FTS rows), its content
   /// ledger rows and its account row, then records one `revoke` ledger row.
