@@ -1,6 +1,8 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  exclude:
+    - third_party/** # vendored pdf_cos (Apache-2.0), upstream style
   language:
     strict-casts: true
     strict-inference: true

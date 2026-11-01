@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
+import 'package:dhruva/data/docs/grounding.dart';
 import 'package:dhruva/features/chat/state/message_info_x.dart';
 import 'package:dhruva/features/chat/widgets/message_bubble.dart';
 import 'package:dhruva/voice/fake_audio_sink.dart';
@@ -345,6 +346,53 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Copy text'), findsNothing);
+    });
+
+    group('document sources', () {
+      final sources = [
+        const DocSource(
+          docName: 'terms.pdf',
+          page: 2,
+          paged: true,
+          snippet: 'The warranty lasts two years.',
+        ),
+      ];
+
+      MessageInfo withSources(List<DocSource> s) => MessageInfo(
+        id: 1,
+        conversationId: 1,
+        role: MessageRole.assistant,
+        content: 'Two years [p.2].',
+        status: MessageStatus.complete,
+        createdAt: DateTime.now(),
+        sources: s,
+      );
+
+      testWidgets('a grounded reply shows a collapsed Sources row', (
+        tester,
+      ) async {
+        await _pump(tester, MessageBubble(message: withSources(sources)));
+        await tester.pumpAndSettle();
+        expect(find.text('Sources · p.2'), findsOneWidget);
+        expect(find.text('The warranty lasts two years.'), findsNothing);
+      });
+
+      testWidgets('an ordinary reply has no Sources row', (tester) async {
+        await _pump(tester, MessageBubble(message: withSources(const [])));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Sources'), findsNothing);
+      });
+
+      testWidgets('no Sources row while the reply is still streaming', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          MessageBubble(message: withSources(sources), isStreaming: true),
+        );
+        await tester.pump();
+        expect(find.textContaining('Sources'), findsNothing);
+      });
     });
   });
 }

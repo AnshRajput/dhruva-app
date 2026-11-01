@@ -14,6 +14,12 @@
 /// (preset prompt, `vision_presets.dart`) rather than a whole second UI
 /// surface — "Describe" needs none, it's just normal chat with an image
 /// attached.
+///
+/// Chat with a document: the same attach button also offers a PDF/TXT/MD
+/// ([onAttachDocument]); attached documents sit above the input as removable
+/// chips (name + page/character count), with a "Reading..." chip while one
+/// is being extracted and an inline, dismissible error if it cannot be read.
+/// For a text-only model the button opens the document picker directly.
 library;
 
 import 'dart:typed_data';
@@ -26,6 +32,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
 import '../../voice/state/voice_input_controller.dart';
 import '../../voice/widgets/mic_button.dart';
@@ -49,9 +56,30 @@ class Composer extends ConsumerStatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback onOpenSettings;
 
+  /// Opens the document picker; null hides document attach (the pre-docs
+  /// behavior every existing caller keeps).
+  final VoidCallback? onAttachDocument;
+  final void Function(int documentId)? onRemoveDocument;
+  final VoidCallback? onDismissDocumentError;
+
+  /// Documents already attached to this conversation.
+  final List<DocumentInfo> documents;
+
+  /// Name of a document currently being read, or null.
+  final String? extractingDocName;
+
+  /// Plain-language reason the last attach failed, or null.
+  final String? documentError;
+
   const Composer({
     super.key,
     required this.isGenerating,
+    this.onAttachDocument,
+    this.onRemoveDocument,
+    this.onDismissDocumentError,
+    this.documents = const [],
+    this.extractingDocName,
+    this.documentError,
     this.isMultimodal = false,
     required this.onSend,
     this.beforeSend,
@@ -141,6 +169,21 @@ class _ComposerState extends ConsumerState<Composer> {
     }
   }
 
+  /// The attach button: a text-only model can only attach a document, so go
+  /// straight to the picker; a vision model gets the choice.
+  void _onAttachPressed() {
+    if (!widget.isMultimodal) {
+      widget.onAttachDocument?.call();
+    } else {
+      _openAttachSheet();
+    }
+  }
+
+  void _pickDocument() {
+    Navigator.of(context).pop(); // close the attach sheet first.
+    widget.onAttachDocument?.call();
+  }
+
   void _openAttachSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -158,6 +201,13 @@ class _ComposerState extends ConsumerState<Composer> {
               title: const Text('Camera'),
               onTap: () => _pickImage(ImageAttachSource.camera),
             ),
+            if (widget.onAttachDocument != null)
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Document (PDF, TXT, MD)'),
+                subtitle: const Text('Ask questions about a file'),
+                onTap: _pickDocument,
+              ),
           ],
         ),
       ),
@@ -229,6 +279,13 @@ class _ComposerState extends ConsumerState<Composer> {
             children: [
               const Center(child: TrustMark()),
               SizedBox(height: tokens.spacing.sm),
+              _DocumentArea(
+                documents: widget.documents,
+                extractingName: widget.extractingDocName,
+                error: widget.documentError,
+                onRemove: widget.onRemoveDocument,
+                onDismissError: widget.onDismissDocumentError,
+              ),
               if (_attachedImage != null) ...[
                 _AttachedImageChip(
                   imageBytes: _attachedImage!,
@@ -245,11 +302,23 @@ class _ComposerState extends ConsumerState<Composer> {
                     icon: const Icon(Icons.tune),
                     onPressed: widget.onOpenSettings,
                   ),
-                  if (widget.isMultimodal)
+                  if (widget.isMultimodal || widget.onAttachDocument != null)
                     IconButton(
-                      tooltip: 'Attach image',
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      onPressed: _openAttachSheet,
+                      tooltip: !widget.isMultimodal
+                          ? 'Attach document'
+                          : (widget.onAttachDocument != null
+                                ? 'Attach image or document'
+                                : 'Attach image'),
+                      // Reads as what the button offers: photos for a vision
+                      // model, a file for a text-only one.
+                      icon: Icon(
+                        widget.isMultimodal
+                            ? Icons.add_photo_alternate_outlined
+                            : Icons.description_outlined,
+                      ),
+                      onPressed: widget.extractingDocName != null
+                          ? null
+                          : _onAttachPressed,
                     ),
                   Expanded(
                     child: listening
@@ -294,6 +363,243 @@ class _ComposerState extends ConsumerState<Composer> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Chips for the attached documents, the "Reading..." placeholder, and the
+/// inline error. Collapses to nothing when there is nothing to show.
+class _DocumentArea extends StatelessWidget {
+  final List<DocumentInfo> documents;
+  final String? extractingName;
+  final String? error;
+  final void Function(int documentId)? onRemove;
+  final VoidCallback? onDismissError;
+
+  const _DocumentArea({
+    required this.documents,
+    required this.extractingName,
+    required this.error,
+    required this.onRemove,
+    required this.onDismissError,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    final empty = documents.isEmpty && extractingName == null && error == null;
+    // Reduced motion: no height animation, the area just appears.
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : tokens.motion.fast;
+    return AnimatedSize(
+      duration: duration,
+      curve: tokens.motion.standard,
+      alignment: Alignment.topCenter,
+      child: empty
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: tokens.spacing.sm,
+                  runSpacing: tokens.spacing.xs,
+                  children: [
+                    for (final d in documents)
+                      _DocumentChip(
+                        key: ValueKey('doc-chip-${d.id}'),
+                        title: d.name,
+                        subtitle: d.sizeLabel,
+                        onRemove: onRemove == null
+                            ? null
+                            : () => onRemove!(d.id),
+                      ),
+                    if (extractingName != null)
+                      _DocumentChip(
+                        key: const ValueKey('doc-chip-reading'),
+                        title: extractingName!,
+                        subtitle: 'Reading document…',
+                        busy: true,
+                      ),
+                    if (error != null)
+                      _DocumentErrorChip(
+                        message: error!,
+                        onDismiss: onDismissError,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// One attached document: icon, file name, "12 pages · 14,498 characters",
+/// and a remove button (48dp target). A pill, like the other composer
+/// chrome.
+class _DocumentChip extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool busy;
+  final VoidCallback? onRemove;
+
+  const _DocumentChip({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.busy = false,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final scheme = theme.colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320, minHeight: 48),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(tokens.radius.full),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: tokens.spacing.md,
+            right: onRemove == null ? tokens.spacing.md : 0,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // One spoken label for the whole chip body; the remove button
+              // stays its own control.
+              Flexible(
+                child: Semantics(
+                  label: busy
+                      ? 'Reading document $title'
+                      : 'Attached document $title, $subtitle',
+                  child: ExcludeSemantics(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (busy)
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          Icon(
+                            Icons.description_outlined,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                        SizedBox(width: tokens.spacing.sm),
+                        Flexible(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: scheme.onSurface,
+                                ),
+                              ),
+                              Text(
+                                subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (onRemove != null)
+                IconButton(
+                  onPressed: onRemove,
+                  tooltip: 'Remove $title',
+                  iconSize: 18,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Why the last attach failed, in plain words, with a dismiss button.
+class _DocumentErrorChip extends StatelessWidget {
+  final String message;
+  final VoidCallback? onDismiss;
+  const _DocumentErrorChip({required this.message, this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final scheme = theme.colorScheme;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: message,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: scheme.errorContainer,
+            borderRadius: BorderRadius.circular(tokens.radius.lg),
+          ),
+          child: Padding(
+            padding: EdgeInsets.only(left: tokens.spacing.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: scheme.onErrorContainer,
+                ),
+                SizedBox(width: tokens.spacing.sm),
+                Flexible(
+                  child: Text(
+                    message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onDismiss,
+                  tooltip: 'Dismiss',
+                  iconSize: 18,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  icon: Icon(Icons.close, color: scheme.onErrorContainer),
+                ),
+              ],
+            ),
           ),
         ),
       ),

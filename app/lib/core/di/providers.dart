@@ -18,11 +18,14 @@ import 'package:path_provider/path_provider.dart';
 import '../../data/characters/character_repository.dart';
 import '../../data/chat/chat_repository.dart';
 import '../../data/db/database.dart';
+import '../../data/docs/document_extractor.dart';
+import '../../data/docs/document_repository.dart';
 import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
 import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../data/safety/report_repository.dart';
+import '../../docs/document_picker.dart';
 import '../../engine_bindings/engine_service.dart';
 import '../../engine_bindings/llama_engine_service.dart';
 import '../../vision/image_attach_source.dart';
@@ -86,6 +89,19 @@ final audioSinkProvider = Provider<AudioSink>((ref) {
 /// tests/previews (same seam as [micSourceProvider]).
 final imageAttacherProvider = Provider<ImageAttacher>((ref) {
   return SystemImageAttacher();
+});
+
+/// OS file picker for attaching a PDF/TXT/MD to a chat (docs_chat):
+/// `SystemDocumentPicker` in production; override with `FakeDocumentPicker`.
+final documentPickerProvider = Provider<DocumentPicker>((ref) {
+  return const SystemDocumentPicker();
+});
+
+/// Reads a picked document into chunks off the root isolate. Override with a
+/// synchronous fake in widget tests (an `Isolate.run` can't complete under
+/// `testWidgets`' fake clock).
+final documentExtractorProvider = Provider<DocumentExtractor>((ref) {
+  return extractDocumentFile;
 });
 
 /// Resolves + extracts downloaded voice-model bundles under `models/voice/`.
@@ -167,6 +183,10 @@ final storageManagerProvider = Provider<StorageManager>((ref) {
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository(db: ref.watch(appDatabaseProvider));
+});
+
+final documentRepositoryProvider = Provider<DocumentRepository>((ref) {
+  return DocumentRepository(db: ref.watch(appDatabaseProvider));
 });
 
 final reportRepositoryProvider = Provider<ReportRepository>((ref) {

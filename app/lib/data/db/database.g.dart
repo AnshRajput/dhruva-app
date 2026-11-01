@@ -2523,6 +2523,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sourcesJsonMeta = const VerificationMeta(
+    'sourcesJson',
+  );
+  @override
+  late final GeneratedColumn<String> sourcesJson = GeneratedColumn<String>(
+    'sources_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2560,6 +2571,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     tokCount,
     reported,
     genMs,
+    sourcesJson,
     createdAt,
     parentMessageId,
   ];
@@ -2626,6 +2638,15 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
       context.handle(
         _genMsMeta,
         genMs.isAcceptableOrUnknown(data['gen_ms']!, _genMsMeta),
+      );
+    }
+    if (data.containsKey('sources_json')) {
+      context.handle(
+        _sourcesJsonMeta,
+        sourcesJson.isAcceptableOrUnknown(
+          data['sources_json']!,
+          _sourcesJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -2698,6 +2719,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.int,
         data['${effectivePrefix}gen_ms'],
       ),
+      sourcesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sources_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -2742,6 +2767,11 @@ class Message extends DataClass implements Insertable<Message> {
   /// "Show" placeholder. The report itself lives in [ContentReports].
   final bool reported;
   final int? genMs;
+
+  /// JSON list of the document citations a reply was grounded in (v6, see
+  /// `data/docs/grounding.dart`'s `encodeSources`), or null for an ordinary
+  /// reply. Drives the collapsible "Sources" row under the bubble.
+  final String? sourcesJson;
   final DateTime createdAt;
 
   /// Enables edit/regenerate history (a regenerated or edited message
@@ -2760,6 +2790,7 @@ class Message extends DataClass implements Insertable<Message> {
     this.tokCount,
     required this.reported,
     this.genMs,
+    this.sourcesJson,
     required this.createdAt,
     this.parentMessageId,
   });
@@ -2790,6 +2821,9 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || genMs != null) {
       map['gen_ms'] = Variable<int>(genMs);
     }
+    if (!nullToAbsent || sourcesJson != null) {
+      map['sources_json'] = Variable<String>(sourcesJson);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || parentMessageId != null) {
       map['parent_message_id'] = Variable<int>(parentMessageId);
@@ -2817,6 +2851,9 @@ class Message extends DataClass implements Insertable<Message> {
       genMs: genMs == null && nullToAbsent
           ? const Value.absent()
           : Value(genMs),
+      sourcesJson: sourcesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourcesJson),
       createdAt: Value(createdAt),
       parentMessageId: parentMessageId == null && nullToAbsent
           ? const Value.absent()
@@ -2844,6 +2881,7 @@ class Message extends DataClass implements Insertable<Message> {
       tokCount: serializer.fromJson<int?>(json['tokCount']),
       reported: serializer.fromJson<bool>(json['reported']),
       genMs: serializer.fromJson<int?>(json['genMs']),
+      sourcesJson: serializer.fromJson<String?>(json['sourcesJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       parentMessageId: serializer.fromJson<int?>(json['parentMessageId']),
     );
@@ -2866,6 +2904,7 @@ class Message extends DataClass implements Insertable<Message> {
       'tokCount': serializer.toJson<int?>(tokCount),
       'reported': serializer.toJson<bool>(reported),
       'genMs': serializer.toJson<int?>(genMs),
+      'sourcesJson': serializer.toJson<String?>(sourcesJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'parentMessageId': serializer.toJson<int?>(parentMessageId),
     };
@@ -2882,6 +2921,7 @@ class Message extends DataClass implements Insertable<Message> {
     Value<int?> tokCount = const Value.absent(),
     bool? reported,
     Value<int?> genMs = const Value.absent(),
+    Value<String?> sourcesJson = const Value.absent(),
     DateTime? createdAt,
     Value<int?> parentMessageId = const Value.absent(),
   }) => Message(
@@ -2897,6 +2937,7 @@ class Message extends DataClass implements Insertable<Message> {
     tokCount: tokCount.present ? tokCount.value : this.tokCount,
     reported: reported ?? this.reported,
     genMs: genMs.present ? genMs.value : this.genMs,
+    sourcesJson: sourcesJson.present ? sourcesJson.value : this.sourcesJson,
     createdAt: createdAt ?? this.createdAt,
     parentMessageId: parentMessageId.present
         ? parentMessageId.value
@@ -2918,6 +2959,9 @@ class Message extends DataClass implements Insertable<Message> {
       tokCount: data.tokCount.present ? data.tokCount.value : this.tokCount,
       reported: data.reported.present ? data.reported.value : this.reported,
       genMs: data.genMs.present ? data.genMs.value : this.genMs,
+      sourcesJson: data.sourcesJson.present
+          ? data.sourcesJson.value
+          : this.sourcesJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       parentMessageId: data.parentMessageId.present
           ? data.parentMessageId.value
@@ -2938,6 +2982,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('tokCount: $tokCount, ')
           ..write('reported: $reported, ')
           ..write('genMs: $genMs, ')
+          ..write('sourcesJson: $sourcesJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('parentMessageId: $parentMessageId')
           ..write(')'))
@@ -2956,6 +3001,7 @@ class Message extends DataClass implements Insertable<Message> {
     tokCount,
     reported,
     genMs,
+    sourcesJson,
     createdAt,
     parentMessageId,
   );
@@ -2973,6 +3019,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.tokCount == this.tokCount &&
           other.reported == this.reported &&
           other.genMs == this.genMs &&
+          other.sourcesJson == this.sourcesJson &&
           other.createdAt == this.createdAt &&
           other.parentMessageId == this.parentMessageId);
 }
@@ -2988,6 +3035,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<int?> tokCount;
   final Value<bool> reported;
   final Value<int?> genMs;
+  final Value<String?> sourcesJson;
   final Value<DateTime> createdAt;
   final Value<int?> parentMessageId;
   const MessagesCompanion({
@@ -3001,6 +3049,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.tokCount = const Value.absent(),
     this.reported = const Value.absent(),
     this.genMs = const Value.absent(),
+    this.sourcesJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.parentMessageId = const Value.absent(),
   });
@@ -3015,6 +3064,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.tokCount = const Value.absent(),
     this.reported = const Value.absent(),
     this.genMs = const Value.absent(),
+    this.sourcesJson = const Value.absent(),
     required DateTime createdAt,
     this.parentMessageId = const Value.absent(),
   }) : conversationId = Value(conversationId),
@@ -3032,6 +3082,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<int>? tokCount,
     Expression<bool>? reported,
     Expression<int>? genMs,
+    Expression<String>? sourcesJson,
     Expression<DateTime>? createdAt,
     Expression<int>? parentMessageId,
   }) {
@@ -3046,6 +3097,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (tokCount != null) 'tok_count': tokCount,
       if (reported != null) 'reported': reported,
       if (genMs != null) 'gen_ms': genMs,
+      if (sourcesJson != null) 'sources_json': sourcesJson,
       if (createdAt != null) 'created_at': createdAt,
       if (parentMessageId != null) 'parent_message_id': parentMessageId,
     });
@@ -3062,6 +3114,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<int?>? tokCount,
     Value<bool>? reported,
     Value<int?>? genMs,
+    Value<String?>? sourcesJson,
     Value<DateTime>? createdAt,
     Value<int?>? parentMessageId,
   }) {
@@ -3076,6 +3129,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       tokCount: tokCount ?? this.tokCount,
       reported: reported ?? this.reported,
       genMs: genMs ?? this.genMs,
+      sourcesJson: sourcesJson ?? this.sourcesJson,
       createdAt: createdAt ?? this.createdAt,
       parentMessageId: parentMessageId ?? this.parentMessageId,
     );
@@ -3118,6 +3172,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (genMs.present) {
       map['gen_ms'] = Variable<int>(genMs.value);
     }
+    if (sourcesJson.present) {
+      map['sources_json'] = Variable<String>(sourcesJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3140,6 +3197,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('tokCount: $tokCount, ')
           ..write('reported: $reported, ')
           ..write('genMs: $genMs, ')
+          ..write('sourcesJson: $sourcesJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('parentMessageId: $parentMessageId')
           ..write(')'))
@@ -3654,6 +3712,820 @@ class ContentReportsCompanion extends UpdateCompanion<ContentReport> {
   }
 }
 
+class $AttachedDocumentsTable extends AttachedDocuments
+    with TableInfo<$AttachedDocumentsTable, AttachedDocument> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AttachedDocumentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<int> conversationId = GeneratedColumn<int>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES conversations (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeMeta = const VerificationMeta('mime');
+  @override
+  late final GeneratedColumn<String> mime = GeneratedColumn<String>(
+    'mime',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pageCountMeta = const VerificationMeta(
+    'pageCount',
+  );
+  @override
+  late final GeneratedColumn<int> pageCount = GeneratedColumn<int>(
+    'page_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _charCountMeta = const VerificationMeta(
+    'charCount',
+  );
+  @override
+  late final GeneratedColumn<int> charCount = GeneratedColumn<int>(
+    'char_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    conversationId,
+    name,
+    mime,
+    pageCount,
+    charCount,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'attached_documents';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AttachedDocument> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('mime')) {
+      context.handle(
+        _mimeMeta,
+        mime.isAcceptableOrUnknown(data['mime']!, _mimeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mimeMeta);
+    }
+    if (data.containsKey('page_count')) {
+      context.handle(
+        _pageCountMeta,
+        pageCount.isAcceptableOrUnknown(data['page_count']!, _pageCountMeta),
+      );
+    }
+    if (data.containsKey('char_count')) {
+      context.handle(
+        _charCountMeta,
+        charCount.isAcceptableOrUnknown(data['char_count']!, _charCountMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AttachedDocument map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AttachedDocument(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      mime: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime'],
+      )!,
+      pageCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}page_count'],
+      )!,
+      charCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}char_count'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AttachedDocumentsTable createAlias(String alias) {
+    return $AttachedDocumentsTable(attachedDatabase, alias);
+  }
+}
+
+class AttachedDocument extends DataClass
+    implements Insertable<AttachedDocument> {
+  final int id;
+  final int conversationId;
+  final String name;
+  final String mime;
+
+  /// Real page count for a PDF; 0 for a page-less TXT/MD file.
+  final int pageCount;
+
+  /// Characters of extracted text (before chunk overlap).
+  final int charCount;
+  final DateTime createdAt;
+  const AttachedDocument({
+    required this.id,
+    required this.conversationId,
+    required this.name,
+    required this.mime,
+    required this.pageCount,
+    required this.charCount,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['conversation_id'] = Variable<int>(conversationId);
+    map['name'] = Variable<String>(name);
+    map['mime'] = Variable<String>(mime);
+    map['page_count'] = Variable<int>(pageCount);
+    map['char_count'] = Variable<int>(charCount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AttachedDocumentsCompanion toCompanion(bool nullToAbsent) {
+    return AttachedDocumentsCompanion(
+      id: Value(id),
+      conversationId: Value(conversationId),
+      name: Value(name),
+      mime: Value(mime),
+      pageCount: Value(pageCount),
+      charCount: Value(charCount),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AttachedDocument.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AttachedDocument(
+      id: serializer.fromJson<int>(json['id']),
+      conversationId: serializer.fromJson<int>(json['conversationId']),
+      name: serializer.fromJson<String>(json['name']),
+      mime: serializer.fromJson<String>(json['mime']),
+      pageCount: serializer.fromJson<int>(json['pageCount']),
+      charCount: serializer.fromJson<int>(json['charCount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'conversationId': serializer.toJson<int>(conversationId),
+      'name': serializer.toJson<String>(name),
+      'mime': serializer.toJson<String>(mime),
+      'pageCount': serializer.toJson<int>(pageCount),
+      'charCount': serializer.toJson<int>(charCount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AttachedDocument copyWith({
+    int? id,
+    int? conversationId,
+    String? name,
+    String? mime,
+    int? pageCount,
+    int? charCount,
+    DateTime? createdAt,
+  }) => AttachedDocument(
+    id: id ?? this.id,
+    conversationId: conversationId ?? this.conversationId,
+    name: name ?? this.name,
+    mime: mime ?? this.mime,
+    pageCount: pageCount ?? this.pageCount,
+    charCount: charCount ?? this.charCount,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  AttachedDocument copyWithCompanion(AttachedDocumentsCompanion data) {
+    return AttachedDocument(
+      id: data.id.present ? data.id.value : this.id,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      name: data.name.present ? data.name.value : this.name,
+      mime: data.mime.present ? data.mime.value : this.mime,
+      pageCount: data.pageCount.present ? data.pageCount.value : this.pageCount,
+      charCount: data.charCount.present ? data.charCount.value : this.charCount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttachedDocument(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('name: $name, ')
+          ..write('mime: $mime, ')
+          ..write('pageCount: $pageCount, ')
+          ..write('charCount: $charCount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    conversationId,
+    name,
+    mime,
+    pageCount,
+    charCount,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AttachedDocument &&
+          other.id == this.id &&
+          other.conversationId == this.conversationId &&
+          other.name == this.name &&
+          other.mime == this.mime &&
+          other.pageCount == this.pageCount &&
+          other.charCount == this.charCount &&
+          other.createdAt == this.createdAt);
+}
+
+class AttachedDocumentsCompanion extends UpdateCompanion<AttachedDocument> {
+  final Value<int> id;
+  final Value<int> conversationId;
+  final Value<String> name;
+  final Value<String> mime;
+  final Value<int> pageCount;
+  final Value<int> charCount;
+  final Value<DateTime> createdAt;
+  const AttachedDocumentsCompanion({
+    this.id = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.mime = const Value.absent(),
+    this.pageCount = const Value.absent(),
+    this.charCount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  AttachedDocumentsCompanion.insert({
+    this.id = const Value.absent(),
+    required int conversationId,
+    required String name,
+    required String mime,
+    this.pageCount = const Value.absent(),
+    this.charCount = const Value.absent(),
+    required DateTime createdAt,
+  }) : conversationId = Value(conversationId),
+       name = Value(name),
+       mime = Value(mime),
+       createdAt = Value(createdAt);
+  static Insertable<AttachedDocument> custom({
+    Expression<int>? id,
+    Expression<int>? conversationId,
+    Expression<String>? name,
+    Expression<String>? mime,
+    Expression<int>? pageCount,
+    Expression<int>? charCount,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (name != null) 'name': name,
+      if (mime != null) 'mime': mime,
+      if (pageCount != null) 'page_count': pageCount,
+      if (charCount != null) 'char_count': charCount,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  AttachedDocumentsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? conversationId,
+    Value<String>? name,
+    Value<String>? mime,
+    Value<int>? pageCount,
+    Value<int>? charCount,
+    Value<DateTime>? createdAt,
+  }) {
+    return AttachedDocumentsCompanion(
+      id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
+      name: name ?? this.name,
+      mime: mime ?? this.mime,
+      pageCount: pageCount ?? this.pageCount,
+      charCount: charCount ?? this.charCount,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<int>(conversationId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (mime.present) {
+      map['mime'] = Variable<String>(mime.value);
+    }
+    if (pageCount.present) {
+      map['page_count'] = Variable<int>(pageCount.value);
+    }
+    if (charCount.present) {
+      map['char_count'] = Variable<int>(charCount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AttachedDocumentsCompanion(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('name: $name, ')
+          ..write('mime: $mime, ')
+          ..write('pageCount: $pageCount, ')
+          ..write('charCount: $charCount, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DocumentChunksTable extends DocumentChunks
+    with TableInfo<$DocumentChunksTable, DocumentChunk> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DocumentChunksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<int> documentId = GeneratedColumn<int>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES attached_documents (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _chunkIndexMeta = const VerificationMeta(
+    'chunkIndex',
+  );
+  @override
+  late final GeneratedColumn<int> chunkIndex = GeneratedColumn<int>(
+    'chunk_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pageMeta = const VerificationMeta('page');
+  @override
+  late final GeneratedColumn<int> page = GeneratedColumn<int>(
+    'page',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    chunkIndex,
+    page,
+    body,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'document_chunks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DocumentChunk> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('chunk_index')) {
+      context.handle(
+        _chunkIndexMeta,
+        chunkIndex.isAcceptableOrUnknown(data['chunk_index']!, _chunkIndexMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chunkIndexMeta);
+    }
+    if (data.containsKey('page')) {
+      context.handle(
+        _pageMeta,
+        page.isAcceptableOrUnknown(data['page']!, _pageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pageMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DocumentChunk map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DocumentChunk(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}document_id'],
+      )!,
+      chunkIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}chunk_index'],
+      )!,
+      page: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}page'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+    );
+  }
+
+  @override
+  $DocumentChunksTable createAlias(String alias) {
+    return $DocumentChunksTable(attachedDatabase, alias);
+  }
+}
+
+class DocumentChunk extends DataClass implements Insertable<DocumentChunk> {
+  final int id;
+  final int documentId;
+  final int chunkIndex;
+  final int page;
+  final String body;
+  const DocumentChunk({
+    required this.id,
+    required this.documentId,
+    required this.chunkIndex,
+    required this.page,
+    required this.body,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['document_id'] = Variable<int>(documentId);
+    map['chunk_index'] = Variable<int>(chunkIndex);
+    map['page'] = Variable<int>(page);
+    map['body'] = Variable<String>(body);
+    return map;
+  }
+
+  DocumentChunksCompanion toCompanion(bool nullToAbsent) {
+    return DocumentChunksCompanion(
+      id: Value(id),
+      documentId: Value(documentId),
+      chunkIndex: Value(chunkIndex),
+      page: Value(page),
+      body: Value(body),
+    );
+  }
+
+  factory DocumentChunk.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DocumentChunk(
+      id: serializer.fromJson<int>(json['id']),
+      documentId: serializer.fromJson<int>(json['documentId']),
+      chunkIndex: serializer.fromJson<int>(json['chunkIndex']),
+      page: serializer.fromJson<int>(json['page']),
+      body: serializer.fromJson<String>(json['body']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'documentId': serializer.toJson<int>(documentId),
+      'chunkIndex': serializer.toJson<int>(chunkIndex),
+      'page': serializer.toJson<int>(page),
+      'body': serializer.toJson<String>(body),
+    };
+  }
+
+  DocumentChunk copyWith({
+    int? id,
+    int? documentId,
+    int? chunkIndex,
+    int? page,
+    String? body,
+  }) => DocumentChunk(
+    id: id ?? this.id,
+    documentId: documentId ?? this.documentId,
+    chunkIndex: chunkIndex ?? this.chunkIndex,
+    page: page ?? this.page,
+    body: body ?? this.body,
+  );
+  DocumentChunk copyWithCompanion(DocumentChunksCompanion data) {
+    return DocumentChunk(
+      id: data.id.present ? data.id.value : this.id,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      chunkIndex: data.chunkIndex.present
+          ? data.chunkIndex.value
+          : this.chunkIndex,
+      page: data.page.present ? data.page.value : this.page,
+      body: data.body.present ? data.body.value : this.body,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DocumentChunk(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('chunkIndex: $chunkIndex, ')
+          ..write('page: $page, ')
+          ..write('body: $body')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, documentId, chunkIndex, page, body);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DocumentChunk &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.chunkIndex == this.chunkIndex &&
+          other.page == this.page &&
+          other.body == this.body);
+}
+
+class DocumentChunksCompanion extends UpdateCompanion<DocumentChunk> {
+  final Value<int> id;
+  final Value<int> documentId;
+  final Value<int> chunkIndex;
+  final Value<int> page;
+  final Value<String> body;
+  const DocumentChunksCompanion({
+    this.id = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.chunkIndex = const Value.absent(),
+    this.page = const Value.absent(),
+    this.body = const Value.absent(),
+  });
+  DocumentChunksCompanion.insert({
+    this.id = const Value.absent(),
+    required int documentId,
+    required int chunkIndex,
+    required int page,
+    required String body,
+  }) : documentId = Value(documentId),
+       chunkIndex = Value(chunkIndex),
+       page = Value(page),
+       body = Value(body);
+  static Insertable<DocumentChunk> custom({
+    Expression<int>? id,
+    Expression<int>? documentId,
+    Expression<int>? chunkIndex,
+    Expression<int>? page,
+    Expression<String>? body,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (documentId != null) 'document_id': documentId,
+      if (chunkIndex != null) 'chunk_index': chunkIndex,
+      if (page != null) 'page': page,
+      if (body != null) 'body': body,
+    });
+  }
+
+  DocumentChunksCompanion copyWith({
+    Value<int>? id,
+    Value<int>? documentId,
+    Value<int>? chunkIndex,
+    Value<int>? page,
+    Value<String>? body,
+  }) {
+    return DocumentChunksCompanion(
+      id: id ?? this.id,
+      documentId: documentId ?? this.documentId,
+      chunkIndex: chunkIndex ?? this.chunkIndex,
+      page: page ?? this.page,
+      body: body ?? this.body,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<int>(documentId.value);
+    }
+    if (chunkIndex.present) {
+      map['chunk_index'] = Variable<int>(chunkIndex.value);
+    }
+    if (page.present) {
+      map['page'] = Variable<int>(page.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DocumentChunksCompanion(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('chunkIndex: $chunkIndex, ')
+          ..write('page: $page, ')
+          ..write('body: $body')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   late final $InstalledModelsTable installedModels = $InstalledModelsTable(
@@ -3664,6 +4536,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $ContentReportsTable contentReports = $ContentReportsTable(this);
+  late final $AttachedDocumentsTable attachedDocuments =
+      $AttachedDocumentsTable(this);
+  late final $DocumentChunksTable documentChunks = $DocumentChunksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3675,6 +4550,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     conversations,
     messages,
     contentReports,
+    attachedDocuments,
+    documentChunks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3719,6 +4596,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('messages', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'conversations',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('attached_documents', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'attached_documents',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('document_chunks', kind: UpdateKind.delete)],
     ),
   ]);
 }

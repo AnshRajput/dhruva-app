@@ -1,10 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/docs/document_extractor.dart';
+import 'package:dhruva/docs/document_picker.dart';
+import 'package:dhruva/docs/fake_document_picker.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
@@ -72,9 +76,22 @@ void main() {
     FakeEngineService engine,
     ChatRouteArgs args, {
     FakeImageAttacher? imageAttacher,
+    FakeDocumentPicker? documentPicker,
   }) {
     return ProviderScope(
       overrides: [
+        if (documentPicker != null) ...[
+          documentPickerProvider.overrideWithValue(documentPicker),
+          documentExtractorProvider.overrideWithValue(
+            (path, name) async => extractDocumentBytes(
+              Uint8List.fromList(
+                ('The warranty lasts two years and covers parts. ' * 20)
+                    .codeUnits,
+              ),
+              name,
+            ),
+          ),
+        ],
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
@@ -346,6 +363,52 @@ void main() {
       expect(find.text('Llama-3.2-1B-Instruct'), findsOneWidget);
     },
   );
+
+  group('chat with a document', () {
+    testWidgets('attach shows a chip, a question gets a grounded reply with a '
+        'Sources row, and removing the chip detaches it', (tester) async {
+      final modelId = await insertModel();
+      final picker = FakeDocumentPicker()
+        ..next = const PickedDocument(name: 'terms.txt', path: '/x/terms.txt');
+      await tester.pumpWidget(
+        buildApp(
+          FakeEngineService(
+            scriptedTokens: const ['Two ', 'years ', '[p.1].'],
+            tokenDelay: const Duration(milliseconds: 5),
+          ),
+          ChatRouteArgs(initialModelId: modelId),
+          documentPicker: picker,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Attach document'));
+      await tester.pumpAndSettle();
+      expect(picker.pickCount, 1);
+      expect(find.text('terms.txt'), findsOneWidget);
+
+      await tester.enterText(
+        find.byType(TextField),
+        'How long is the warranty?',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+
+      // The user's own words stay in the bubble; the reply cites its source.
+      expect(find.text('How long is the warranty?'), findsOneWidget);
+      expect(find.textContaining('Two years'), findsOneWidget);
+      expect(find.text('Sources · part 1'), findsOneWidget);
+      await tester.tap(find.text('Sources · part 1'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('The warranty lasts two years'), findsWidgets);
+
+      await tester.tap(find.byTooltip('Remove terms.txt'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Remove terms.txt'), findsNothing);
+      expect(await db.select(db.attachedDocuments).get(), isEmpty);
+    });
+  });
 
   group('Loop 7: vision', () {
     testWidgets('gate G3: a text-only loaded model hides the attach button', (
