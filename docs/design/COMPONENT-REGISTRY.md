@@ -78,6 +78,22 @@ Status: SEED. "What it is" entries are inferred from class names, file placement
 | `MicButton` | `features/voice/widgets/mic_button.dart` | Hold-to-talk mic (pulsing) | Non-voice actions | Pulse uses `pulseMedium` | composer, handsfree_screen |
 | `TtsButton` | `features/voice/widgets/tts_button.dart` | Read-aloud control | — | — | message_bubble |
 
+### Connectors data layer (`app/lib/data/connectors`, `app/lib/core/di/connector_providers.dart`) — Wave 2A, no screens
+
+The UI waves (2B Settings, 2C Ask, 3A Today, 3B Inbox) read these; they never build their own queries or talk to the OS.
+
+| Component | Path | Use for | When NOT to use | Gotchas / adaptation notes | Used by |
+|---|---|---|---|---|---|
+| `Connector`, `ConnectorStatus`, `ConnectorState` | `data/connectors/connector.dart` | The one contract (`id`, `displayName`, `status`, `connect()`, `sync()`, `revoke()`, `openSystemSettings()`); status drives every card (Not connected / Connected / Needs attention / Permission denied; `unsupported` = hide, e.g. notifications on iOS) | A plugin system (none exists: one class per source) | `detail` is a user-ready sentence that names the fix; show it verbatim | settings (2B), today (3A), inbox (3B) |
+| `connectorListProvider` | `core/di/connector_providers.dart` | Live list of supported connectors + status (re-reads OS grants when built) | Items/search (use the item providers) | `unsupported` connectors are already filtered out | settings, today "Set up" card |
+| `ConnectorStore`, `ConnectorItem`, `NotificationGroup` | `data/connectors/connector_store.dart` | Read items (plain classes, never drift rows), ledger, accounts | Writing items from a feature (only connectors write) | `upsertItems` is idempotent on (source, externalId); body capped 8 KB; dates round-trip as whole seconds | all |
+| `todaysEventsProvider`, `nextEventsProvider`, `notificationGroupsProvider`, `ledgerProvider` | `core/di/connector_providers.dart` | Today / Inbox / privacy ledger | — | Listen to them; Riverpod 3 pauses an unlistened provider, so `container.read(p.future)` can hang in tests | today, inbox, settings |
+| `SearchIndex`, `connectorSearchProvider` | `data/connectors/search_index.dart` | Grounding for Ask: `search(query, sources:, kinds:)` over items | Doc-chat chunks of an attached file (still `data/docs/grounding.dart`) | Engine chosen once (FTS5 or capped BM25 fallback); query text is never SQL/FTS syntax | ask (2C) |
+| `inboxAvailableProvider` | `core/router/inbox_availability.dart` | Gates the Inbox tab: true when notifications (Android) are connected | — | Gmail joins in 0.7b | app_shell |
+| `FolderConnector.indexNow()` | `data/connectors/folder_connector.dart` | The Library "Index now" button; scheduled indexing is charging-only | Reading file contents from a feature | One grant, 2,000 files, 20 MB each, 6 sections of 8 KB per file | library (2D) |
+| `NotificationQueue` | `data/connectors/notification_queue.dart` | Draining the listener's JSON-lines queue | Anything but the notifications connector | Corrupt lines skipped, 2 MB read cap, commit-after-store | notification connector |
+| `SyncService`, `ConnectorHub` | `data/connectors/sync_service.dart`, `connector_hub.dart` | `syncOnOpen()` / `refresh()` (single flight); the hub is the composition root shared with the WorkManager job | Per-connector reads (call the connector) | Every connector sync writes its own ledger row | main (bootstrap), settings pull-to-refresh |
+
 ## Layout & shell patterns
 
 - Not yet catalogued. Candidates for a later pass: screen scaffolds in `features/*/ui/*_screen.dart` (AppBar + body + composer), bottom-sheet wrapper pattern used by model_picker_sheet, report_sheet, emoji_picker_sheet.
@@ -129,3 +145,7 @@ Hardcoded-value counts are regex-based (`grep -rnE`), not AST-based. Treat as a 
 - `2026-11-01` (Wave 1) — Shell branches are `/today`, `/inbox`, `/ask`, `/library`; everything else is full-screen. Old tab routes (`/chat`, `/characters`, `/models`, `/playground`, `/workflows`) are redirects (`legacyRouteRedirect`). Never `push` a shell-branch route from outside the shell (blank-page bug); `test/core/router/shell_routes_test.dart` sweeps `lib/` for it.
 - `2026-11-01` — `zsh` does not word-split unquoted variables in `for x in $var` loops. Use `bash -c` for consumer-count shell loops → rerun in bash (source: registry seed pass).
 - `2026-11-01` — `design_tokens.dart` is a hand-transcribed mirror of `design-tokens.json`. Drift is caught by `test/core/theme/app_theme_test.dart`, not by the compiler (source: registry seed pass).
+- `2026-11-01` (Wave 2A) — `device_calendar_plus` 0.8.x refuses any calendar read unless `WRITE_CALENDAR` is declared and granted (its Android `PermissionService` requires both), and 0.9+ needs Flutter 3.44. Android therefore reads the calendar through our own `dhruva_connectors` plugin with `READ_CALENDAR` only; the package is used on iOS only. `test/platform/connectors_platform_test.dart` fails if any WRITE permission appears.
+- `2026-11-01` (Wave 2A) — The shared doc-chat tokenizer split on combining marks, which shattered Devanagari words ("पार्टी") into 1-character tokens that were then dropped. `\p{M}` now stays inside a word (`data/docs/bm25.dart`); covered by `search_index_test.dart`.
+- `2026-11-01` (Wave 2A) — Drift stores `DateTime` as whole unix seconds and returns local time: compare instants as seconds, never with `==` (a UTC draft never equals the stored local value).
+- `2026-11-01` (Wave 2A) — Native connector code is a plugin (`app/third_party/dhruva_connectors`), not `MainActivity`: the WorkManager background engine registers plugins but never runs MainActivity, so a MainActivity channel is invisible to the background job.

@@ -4,11 +4,17 @@ PODS:
     - FlutterMacOS
   - background_downloader (0.0.1):
     - Flutter
+  - device_calendar_plus_ios (0.0.1):
+    - Flutter
   - device_info_plus (0.0.1):
+    - Flutter
+  - dhruva_connectors (0.1.0):
     - Flutter
   - file_selector_ios (0.0.1):
     - Flutter
   - Flutter (1.0.0)
+  - flutter_contacts (0.0.1):
+    - Flutter
   - image_picker_ios (0.0.1):
     - Flutter
   - integration_test (0.0.1):
@@ -16,38 +22,53 @@ PODS:
   - llama_cpp (0.9.0-dev.9)
   - record_ios (1.2.1):
     - Flutter
+  - restart_app (1.10.2):
+    - Flutter
   - share_plus (0.0.1):
     - Flutter
   - sherpa_onnx_ios (1.13.4):
     - Flutter
   - url_launcher_ios (0.0.1):
     - Flutter
+  - workmanager_apple (0.0.1):
+    - Flutter
 
 DEPENDENCIES:
   - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/darwin`)
   - background_downloader (from `.symlinks/plugins/background_downloader/ios`)
+  - device_calendar_plus_ios (from `.symlinks/plugins/device_calendar_plus_ios/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
+  - dhruva_connectors (from `.symlinks/plugins/dhruva_connectors/ios`)
   - file_selector_ios (from `.symlinks/plugins/file_selector_ios/ios`)
   - Flutter (from `Flutter`)
+  - flutter_contacts (from `.symlinks/plugins/flutter_contacts/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - llama_cpp (from `Vendor/llama_cpp`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
+  - restart_app (from `.symlinks/plugins/restart_app/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - sherpa_onnx_ios (from `.symlinks/plugins/sherpa_onnx_ios/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
+  - workmanager_apple (from `.symlinks/plugins/workmanager_apple/ios`)
 
 EXTERNAL SOURCES:
   audioplayers_darwin:
     :path: ".symlinks/plugins/audioplayers_darwin/darwin"
   background_downloader:
     :path: ".symlinks/plugins/background_downloader/ios"
+  device_calendar_plus_ios:
+    :path: ".symlinks/plugins/device_calendar_plus_ios/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
+  dhruva_connectors:
+    :path: ".symlinks/plugins/dhruva_connectors/ios"
   file_selector_ios:
     :path: ".symlinks/plugins/file_selector_ios/ios"
   Flutter:
     :path: Flutter
+  flutter_contacts:
+    :path: ".symlinks/plugins/flutter_contacts/ios"
   image_picker_ios:
     :path: ".symlinks/plugins/image_picker_ios/ios"
   integration_test:
@@ -56,26 +77,35 @@ EXTERNAL SOURCES:
     :path: Vendor/llama_cpp
   record_ios:
     :path: ".symlinks/plugins/record_ios/ios"
+  restart_app:
+    :path: ".symlinks/plugins/restart_app/ios"
   share_plus:
     :path: ".symlinks/plugins/share_plus/ios"
   sherpa_onnx_ios:
     :path: ".symlinks/plugins/sherpa_onnx_ios/ios"
   url_launcher_ios:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
+  workmanager_apple:
+    :path: ".symlinks/plugins/workmanager_apple/ios"
 
 SPEC CHECKSUMS:
   audioplayers_darwin: 835ced6edd4c9fc8ebb0a7cc9e294a91d99917d5
   background_downloader: 50e91d979067b82081aba359d7d916b3ba5fadad
+  device_calendar_plus_ios: 655745d124102b995010c48b167c9196456dcb9e
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
+  dhruva_connectors: 059483751d9537a71ea96b4fed7be4dbd108a7e1
   file_selector_ios: ec57ec07954363dd730b642e765e58f199bb621a
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_contacts: 2ec1d6b62ca2869c3bbb3871bd74d4e3ef157135
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   llama_cpp: 3a8a21861094318ce76cbfda25d53b94be14c64c
   record_ios: 980fd386a97a35987d0fce3dfda4b26a38c90f4c
+  restart_app: 4133ccff8cf33178edfab1d63c1135933c9eb4df
   share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
   sherpa_onnx_ios: 32af18abd5c776d5f425d2abe0903471d26db221
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
+  workmanager_apple: 1fc2a64e6a63ed3540fbb91b65f0c0d501881248
 
 PODFILE CHECKSUM: a6eaf6bdfc72569233d6fcc6864323a78b5f7b53
 
