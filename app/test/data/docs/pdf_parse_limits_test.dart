@@ -250,10 +250,16 @@ void main() {
   });
 
   group('memory watchdog', () {
-    // Stays under every parser limit (480k operators), so only the watchdog
-    // can stop it when the limit is lowered.
+    // Stays under every parser and decode limit (45,000-item arrays), so only
+    // the watchdog can stop it when the limit is lowered. It builds the most
+    // transient garbage of any shape that gets past them.
     final underLimits = buildFlatePdf(
-      _repeat('BT /F1 12 Tf ', '0 1 Td (a) Tj ', ' ET', 480000 * 7),
+      _repeat(
+        'BT /F1 12 Tf ',
+        '[${'(a)-1 ' * 45000}] TJ ',
+        ' ET',
+        _underStageCap,
+      ),
     );
 
     test('kills the isolate and refuses the file as too complex', () async {

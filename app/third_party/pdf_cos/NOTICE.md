@@ -2,7 +2,8 @@
 
 This directory is `pdf_cos` 14.0.0 from pub.dev (Apache-2.0, see `LICENSE`),
 copied unmodified except for the changes below. Every changed line is marked
-`// dhruva: bounded decode` or `// dhruva: parse limits`.
+`// dhruva: bounded decode`, `// dhruva: parse limits` or
+`// dhruva: allocation clamps`.
 
 ## What changed and why
 
@@ -71,8 +72,9 @@ A decoded content stream within the byte cap can still become millions of
 objects, each far bigger than the byte behind it (a 24 KB Flate file whose
 stream decodes to `BT /F1 12 Tf [(a)-1 (a)-1 ...] TJ ET` drove a read to
 2.3 GB; `()`, `<>` and `0 1 Td (a) Tj` repeated cost 580-610 MB).
-`pdf_graphics`/`pdf_document` are NOT vendored: the content-stream parser they
-call is `ContentStreamParser` in this package, so the limits live here.
+(Round 7 removed `pdf_document` and `pdf_graphics` from the app entirely; see
+below. The limits still live here because the app's own extractor uses this
+package's `ContentStreamParser`.)
 
 - `content_parser.dart` (marked `// dhruva: parse limits`):
   `ContentStreamParser.maxOperations` (500,000 operators per stream, i.e. per
@@ -90,6 +92,60 @@ call is `ContentStreamParser` in this package, so the limits live here.
   with a check that the app-level memory watchdog still holds.
 - The hard guarantee is not in this package: `extractDocumentFile` kills the
   extraction isolate when process RSS grows 350 MB past its starting size.
+
+## Round 7: no font programs, and allocation clamps
+
+Round 6 found single allocations sized from font-program fields (a Type 1
+`/Subrs 300000000` became a 1.6 GB `List.filled`) inside `pdf_graphics`, which
+no per-stage cap or RSS watchdog can interrupt. The app no longer uses
+`pdf_document` or `pdf_graphics`: text extraction is
+`lib/data/docs/pdf_text_extractor.dart`, built on this package only, and it
+never reads `FontFile*`, `CIDToGIDMap`, ICC profiles, patterns, images or
+shadings. This package was grepped for every allocation sized from file
+values (`List.filled`, `Uint8List(`, `Float64List(`, `Int32List(`,
+`Uint16List(`, `BytesBuilder`, growable lists and maps in count-driven
+loops). Each site, and what was done:
+
+Changed (marked `// dhruva: allocation clamps`):
+
+- `xref.dart` `_parseStream` (xref stream rows): `/W` entries must be 0..8
+  and the row at least 1 byte (`/W [0 0 0]` with `/Index [0 2000000000]` used
+  to add an entry per iteration from no input); the row count is clamped by
+  the decoded data and by `cosMaxXrefEntries` (1,000,000).
+- `xref.dart` `_parseTable` and `walkFrom`: entries per section and in the
+  merged chain capped at `cosMaxXrefEntries`.
+- `document.dart` `_scanObjectHeaders` (recovery and rescue scans): scanned
+  object map capped at `cosMaxXrefEntries`.
+- `document.dart` `_ObjectStream`: `/N` clamped by `data.length ~/ 4 + 1`
+  (a header pair is at least 4 bytes) before it drives the index loop.
+- `parser.dart`: `CosParser` object nesting capped at 64 (`[[[[...` no longer
+  recurses the stack; it throws `CosParseException`).
+
+Audited and already bounded (no change):
+
+- `filters/ccitt.dart` `Uint8List(rows * rowBytes)`: charged to the decode
+  stage first (`rows` and `columns` are checked against `stage.remaining`),
+  so at most 4 MB.
+- `filters/predictor.dart` `Uint8List(rowCount * bytesPerRow)` and `prior`:
+  charged first, `bytesPerRow` checked against the stream cap,
+  `rowCount = data.length ~/ (bytesPerRow + 1)`.
+- `filters/lzw.dart` (four fixed 4096-entry arrays), `filters/mq.dart`
+  (constants), `filters/decode_budget.dart` `DecodeBuffer` (doubles up to the
+  stage's remaining budget), `run_length.dart`, `ascii.dart`.
+- `content_parser.dart` `Float64List`/`Uint8List` operand arrays: grow by
+  doubling to at most `maxOperands` (100,000).
+- `lexer.dart` string/name `BytesBuilder`s: bounded by the input.
+- `byte_source.dart` `Uint8List(len)`: the progressive loader, which the app
+  never calls.
+- `crypto/*`: reached only for an encrypted file, which the app refuses
+  before `CosDocument.open` (`pdfGuard`) and again after it. Sizes there come
+  from fixed digest/key lengths or `sublist` calls that throw instead of
+  allocating.
+- `objects.dart` `CosString.fromText`, `compactor.dart`, `builder.dart`,
+  `serializer.dart`, `updater.dart`, `xref_writer.dart`: writer side, never run
+  for text extraction.
+- `filters/jbig2.dart`, `filters/jpx.dart`: not registered in `decodeStream`'s
+  filter table; only image rendering would call them, which the app never does.
 
 Not covered: JBIG2/JPX image decoders (run only when rendering images, which
 text extraction never does) and the `tool/`, `test/`, `example/` folders

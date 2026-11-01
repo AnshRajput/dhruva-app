@@ -105,14 +105,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.5.6"
-  bidi:
-    dependency: transitive
-    description:
-      name: bidi
-      sha256: "77f475165e94b261745cf1032c751e2032b8ed92ccb2bf5716036db79320637d"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.13"
   boolean_selector:
     dependency: transitive
     description:
@@ -886,22 +878,6 @@ packages:
       path: "third_party/pdf_cos"
       relative: true
     source: path
-    version: "14.0.0"
-  pdf_document:
-    dependency: "direct main"
-    description:
-      name: pdf_document
-      sha256: a285e8cef1ab82b45486929318356c9837ba511440cda1a7b963d5efa91ca943
-      url: "https://pub.dev"
-    source: hosted
-    version: "14.0.0"
-  pdf_graphics:
-    dependency: "direct main"
-    description:
-      name: pdf_graphics
-      sha256: "2d89b774b08a38d9fb614c9bc3ef2d5398264fad2b3c040142c3d297555c425a"
-      url: "https://pub.dev"
-    source: hosted
     version: "14.0.0"
   platform:
     dependency: transitive

@@ -96,11 +96,11 @@ dependencies:
   # Chat with a document (docs_chat): PDF text extraction. Pure Dart, no
   # native code (so no 16 KB page-alignment concern on Google Play, and
   # identical on Android + iOS), Apache-2.0, no network. Runs inside an
-  # isolate (data/docs/document_extractor.dart). Scanned PDFs have no text
-  # layer and are reported as such rather than OCR'd.
+  # isolate (data/docs/document_extractor.dart) on a minimal extractor over
+  # pdf_cos alone (data/docs/pdf_text_extractor.dart): no font programs,
+  # images or rendering are ever parsed. Scanned PDFs have no text layer and
+  # are reported as such rather than OCR'd.
   pdf_cos: ^14.0.0 # vendored + patched, see dependency_overrides
-  pdf_document: ^14.0.0
-  pdf_graphics: ^14.0.0
   # Loop 6 (voice). Mic capture as a 16kHz mono PCM stream (record.startStream)
   # for STT + the VAD segmenter. BSD-3-Clause, actively maintained (llfbandit).
   # T1 uses it only in the thin, coverage-excluded MicAudioSource adapter —

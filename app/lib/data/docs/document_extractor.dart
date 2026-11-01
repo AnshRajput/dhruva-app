@@ -2,9 +2,11 @@
 /// on-device and entirely off the root isolate (`Isolate.run`): reading,
 /// PDF parsing and chunking of a 20 MB file never touch the UI thread.
 ///
-/// PDF text comes from `pdf_graphics` (pure Dart, no native code, same on
-/// Android and iOS). Image-only (scanned) PDFs have no text layer; they are
-/// detected and reported rather than OCR'd.
+/// PDF text comes from a minimal extractor over the vendored `pdf_cos` alone
+/// (`pdf_text_extractor.dart`): pure Dart, no native code, same on Android
+/// and iOS, and it never reads font programs, images or colour spaces.
+/// Image-only (scanned) PDFs have no text layer; they are detected and
+/// reported rather than OCR'd.
 library;
 
 import 'dart:async';
@@ -16,14 +18,14 @@ import 'dart:typed_data';
 import 'package:pdf_cos/pdf_cos.dart'
     show
         ContentStreamParser,
+        CosDocument,
         CosPasswordException,
         PdfDecodeLimitExceeded,
         UnsupportedEncryptionException;
-import 'package:pdf_document/pdf_document.dart';
-import 'package:pdf_graphics/pdf_graphics.dart';
 
 import 'doc_chunker.dart';
 import 'pdf_inflate_guard.dart';
+import 'pdf_text_extractor.dart';
 
 /// Hard file-size limit.
 const maxDocumentBytes = 20 * 1024 * 1024;
@@ -34,7 +36,7 @@ const maxDocumentChars = 400000;
 
 /// A read that runs longer than this is killed (the isolate is cancellable,
 /// unlike `Isolate.run`) as a backstop for inputs the guards do not model.
-const _extractTimeout = Duration(seconds: 60);
+const _extractTimeout = Duration(seconds: 20);
 
 /// The most the process may grow (resident memory) while one document is
 /// being extracted, measured against the size before the extraction isolate
@@ -45,7 +47,7 @@ const maxExtractionRssGrowth = 350 * 1024 * 1024;
 const _watchdogInterval = Duration(milliseconds: 25);
 
 /// Pages processed per PDF; later pages are ignored.
-const maxPdfPages = 2000;
+const maxPdfPages = maxPdfTextPages;
 
 /// A PDF with fewer characters than this has no usable text layer.
 const _minUsableChars = 50;
@@ -301,9 +303,9 @@ ExtractedDocument _extractPdf(Uint8List bytes, String name) {
 }
 
 ExtractedDocument _readPdf(Uint8List bytes, String name) {
-  final PdfDocument doc;
+  final CosDocument cos;
   try {
-    doc = PdfDocument.open(bytes);
+    cos = CosDocument.open(bytes);
   } on PdfDecodeLimitExceeded {
     rethrow;
   } on CosPasswordException {
@@ -316,35 +318,43 @@ ExtractedDocument _readPdf(Uint8List bytes, String name) {
       "Couldn't open that PDF. It may be damaged.",
     );
   }
-  // Backstop for a file the guard's byte scan missed: `PdfDocument.open`
+  // Backstop for a file the guard's byte scan missed: `CosDocument.open`
   // authenticates the empty password, and an encrypted file's streams are
   // ciphertext to the guard, so never read one.
-  if (doc.cos.isEncrypted) throw _encrypted;
-  final pageCount = doc.pageCount < maxPdfPages ? doc.pageCount : maxPdfPages;
+  if (cos.isEncrypted) throw _encrypted;
   // Library code swallows per-stream errors in places; the budget latches.
   // The parser's operator/operand limits latch the same way.
-  final budget = doc.cos.decodeBudget;
+  final budget = cos.decodeBudget;
   final trips = ContentStreamParser.limitTrips;
   bool tripped() => budget.tripped || ContentStreamParser.limitTrips != trips;
+  final PdfTextResult result;
+  try {
+    result = extractPdfText(cos, maxPages: maxPdfPages);
+  } on PdfDecodeLimitExceeded {
+    rethrow;
+  } on PdfTextTooLong {
+    throw const DocumentException(
+      DocumentFailureKind.tooLong,
+      'That document is too long (over 400,000 characters). '
+      'Split it into smaller parts.',
+    );
+  } on Object {
+    if (tripped()) throw _unsafe;
+    throw const DocumentException(
+      DocumentFailureKind.unreadable,
+      "Couldn't read that PDF. It may be damaged.",
+    );
+  }
+  if (tripped()) throw _unsafe;
   final pages = <PageText>[];
   var chars = 0;
-  for (var i = 0; i < pageCount; i++) {
-    String text;
-    try {
-      text = normalizeWhitespace(PdfTextExtractor.extract(doc, i).text);
-    } on PdfDecodeLimitExceeded {
-      rethrow;
-    } on Object {
-      if (tripped()) throw _unsafe;
-      continue; // one bad page must not lose the rest of the document.
-    }
-    if (tripped()) throw _unsafe;
+  for (var i = 0; i < result.pages.length; i++) {
+    final text = normalizeWhitespace(result.pages[i]);
     if (text.isEmpty) continue;
     chars += text.length;
     _checkLength(chars);
     pages.add(PageText(i + 1, text));
   }
-  if (tripped()) throw _unsafe;
   if (chars < _minUsableChars) {
     throw const DocumentException(
       DocumentFailureKind.noText,
@@ -355,7 +365,7 @@ ExtractedDocument _readPdf(Uint8List bytes, String name) {
   return ExtractedDocument(
     name: name,
     mime: 'application/pdf',
-    pageCount: pageCount,
+    pageCount: result.pageCount,
     charCount: chars,
     chunks: chunkPages(pages),
   );

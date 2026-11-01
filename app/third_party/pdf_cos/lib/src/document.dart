@@ -664,6 +664,11 @@ class CosDocument {
           final header = _objectHeaderBefore(bytes, i, shift);
           if (header != null) {
             final (start, objectNumber, generation) = header;
+            // dhruva: allocation clamps - cap the scanned object map.
+            if (entries.length >= cosMaxXrefEntries &&
+                !entries.containsKey(objectNumber)) {
+              break;
+            }
             entries[objectNumber] =
                 CosXrefEntry.inUse(start - shift, generation);
           }
@@ -1309,7 +1314,9 @@ class _DecodedKey {
 class _ObjectStream {
   _ObjectStream(this.data, int count, this.first) {
     final parser = CosParser(data);
-    for (var i = 0; i < count; i++) {
+    // dhruva: allocation clamps - a header pair is at least 4 bytes of data.
+    final pairs = count < data.length ~/ 4 + 1 ? count : data.length ~/ 4 + 1;
+    for (var i = 0; i < pairs; i++) {
       try {
         _index.add((parser.expectInteger(), parser.expectInteger()));
       } on CosParseException {

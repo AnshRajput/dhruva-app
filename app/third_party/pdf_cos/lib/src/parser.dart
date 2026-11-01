@@ -19,6 +19,11 @@ class CosParser {
   final CosResolver? _resolver;
   final List<CosToken> _lookahead = [];
 
+  // dhruva: allocation clamps - object nesting, so a file of `[[[[...` cannot
+  // recurse the stack away.
+  static const maxNesting = 64;
+  int _depth = 0;
+
   Uint8List get bytes => _lexer.bytes;
 
   CosToken peekToken([int n = 0]) {
@@ -81,9 +86,9 @@ class CosParser {
         nextToken();
         return CosName(t.textValue);
       case CosTokenType.arrayOpen:
-        return _parseArray();
+        return _nested(_parseArray);
       case CosTokenType.dictOpen:
-        return _parseDictionaryOrStream();
+        return _nested(_parseDictionaryOrStream);
       case CosTokenType.keyword:
         nextToken();
         switch (t.textValue) {
@@ -101,6 +106,18 @@ class CosParser {
       case CosTokenType.arrayClose:
       case CosTokenType.dictClose:
         throw CosParseException('unexpected token $t', t.offset);
+    }
+  }
+
+  T _nested<T>(T Function() parse) {
+    if (_depth >= maxNesting) {
+      throw CosParseException('objects nested past $maxNesting levels');
+    }
+    _depth++;
+    try {
+      return parse();
+    } finally {
+      _depth--;
     }
   }
 

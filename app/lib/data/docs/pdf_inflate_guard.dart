@@ -21,11 +21,11 @@
 ///    trailer, or a cross-reference stream's dictionary). Stream payloads of
 ///    an encrypted file are ciphertext, so steps 1-2 would inflate noise and
 ///    wave through a stream that only becomes a bomb once decrypted (and
-///    `PdfDocument.open` auto-authenticates the empty password).
+///    `CosDocument.open` auto-authenticates the empty password).
 ///
-/// Text extraction never decodes image streams (`resolveOverprint: false`
-/// and `collectImages: false` keep `drawImage` a no-op), and the parser
-/// decodes DCT/JPX/JBIG2 never (it throws), so those are safe to leave alone.
+/// Text extraction (`pdf_text_extractor.dart`) never decodes image, font
+/// program, ICC, pattern or shading streams, and the decoders never run
+/// DCT/JPX/JBIG2, so those are safe to leave alone.
 library;
 
 import 'dart:convert';

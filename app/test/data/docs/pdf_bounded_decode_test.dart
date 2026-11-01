@@ -5,10 +5,9 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart' show getAdler32;
 import 'package:dhruva/data/docs/document_extractor.dart';
 import 'package:dhruva/data/docs/pdf_inflate_guard.dart';
+import 'package:dhruva/data/docs/pdf_text_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf_cos/pdf_cos.dart';
-import 'package:pdf_document/pdf_document.dart';
-import 'package:pdf_graphics/pdf_graphics.dart';
 
 import '../../support/tiny_pdf.dart';
 
@@ -96,13 +95,13 @@ void main() {
     });
 
     test('with the guard bypassed, text extraction latches the cap', () {
-      final doc = PdfDocument.open(pdf);
+      final cos = CosDocument.open(pdf);
       try {
-        PdfTextExtractor.extract(doc, 0);
+        extractPdfText(cos);
       } on Object {
-        // either rethrown or swallowed inside the library; both are fine.
+        // either rethrown or swallowed inside the extractor; both are fine.
       }
-      expect(doc.cos.decodeBudget.tripped, isTrue);
+      expect(cos.decodeBudget.tripped, isTrue);
     });
   });
 
@@ -284,11 +283,9 @@ void main() {
 
     test('twenty such pages (60 MB) stay under the cap', () {
       final z = ZLibEncoder(level: 9).convert(_filled(3 * _mb, 0x20));
-      final doc = PdfDocument.open(_multiPagePdf(20, z));
-      for (var i = 0; i < 20; i++) {
-        PdfTextExtractor.extract(doc, i);
-      }
-      expect(doc.cos.decodeBudget.tripped, isFalse);
+      final cos = CosDocument.open(_multiPagePdf(20, z));
+      expect(extractPdfText(cos).pageCount, 20);
+      expect(cos.decodeBudget.tripped, isFalse);
     });
   });
 

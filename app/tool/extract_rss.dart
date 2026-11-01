@@ -2,6 +2,7 @@
 //   dart compile exe tool/extract_rss.dart -o /tmp/extract_rss
 //   [RSS_LIMIT_MB=50] /tmp/extract_rss a.pdf b.pdf ...
 // RSS_LIMIT_MB lowers the watchdog limit to prove it fires.
+// DUMP_DIR=/dir also writes each extracted document's text to /dir/<name>.txt.
 // Prints one line per file: outcome, peak RSS growth over the pre-call
 // baseline (sampled every 5 ms), and wall time. Used to verify the extraction
 // watchdog (maxExtractionRssGrowth) end to end in AOT.
@@ -12,6 +13,7 @@ import 'package:dhruva/data/docs/document_extractor.dart';
 
 Future<void> main(List<String> args) async {
   final limitMb = int.tryParse(Platform.environment['RSS_LIMIT_MB'] ?? '');
+  final dump = Platform.environment['DUMP_DIR'];
   final limit = limitMb == null ? maxExtractionRssGrowth : limitMb << 20;
   for (final path in args) {
     final base = ProcessInfo.currentRss;
@@ -29,6 +31,11 @@ Future<void> main(List<String> args) async {
         rssGrowthLimit: limit,
       );
       outcome = 'ok chars=${d.charCount}';
+      if (dump != null) {
+        File('$dump/${path.split('/').last}.txt').writeAsStringSync(
+          d.chunks.map((c) => '[p.${c.page}] ${c.text}').join('\n'),
+        );
+      }
     } on DocumentException catch (e) {
       outcome = e.kind.name;
     }

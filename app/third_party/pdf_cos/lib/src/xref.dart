@@ -8,6 +8,11 @@ import 'token.dart';
 
 enum CosXrefEntryType { free, inUse, compressed }
 
+// dhruva: allocation clamps - most entries one cross-reference section, and
+// the merged chain, may hold. A real 20 MB file has well under this many
+// objects; the cap bounds a map that would otherwise grow with file bytes.
+const cosMaxXrefEntries = 1000000;
+
 /// One cross-reference entry: where to find an object.
 class CosXrefEntry {
   const CosXrefEntry.free()
@@ -147,6 +152,7 @@ class CosXrefReader {
       if (!visited.add(offset)) continue;
       final section = parseSection(offset);
       for (final entry in section.entries.entries) {
+        if (entries.length >= cosMaxXrefEntries) break; // dhruva: clamps
         entries.putIfAbsent(entry.key, () => entry.value);
       }
       // The first section reached is the newest; its trailer wins.
@@ -182,7 +188,8 @@ class CosXrefReader {
     while (parser.peekToken().type == CosTokenType.integer) {
       final start = parser.expectInteger();
       final count = parser.expectInteger();
-      for (var i = 0; i < count; i++) {
+      // dhruva: allocation clamps - an entry costs input tokens; cap the map.
+      for (var i = 0; i < count && entries.length < cosMaxXrefEntries; i++) {
         final first = parser.expectInteger();
         final second = parser.expectInteger();
         final kind = parser.nextToken();
@@ -238,12 +245,26 @@ class CosXrefReader {
         : [0, size.value];
 
     final entries = <int, CosXrefEntry>{};
+    // dhruva: allocation clamps - a field is at most 8 bytes and a row at
+    // least one, so `/W [0 0 0]` with a huge /Index count cannot spin out
+    // millions of entries from no input; a count is clamped by the rows the
+    // decoded data can hold and by [cosMaxXrefEntries].
+    for (final width in widths) {
+      if (width < 0 || width > 8) {
+        throw CosParseException('invalid /W entry');
+      }
+    }
     final rowLength = widths.fold(0, (a, b) => a + b);
+    if (rowLength < 1) throw CosParseException('empty /W row');
     var pos = 0;
     for (var r = 0; r + 1 < ranges.length; r += 2) {
       final start = ranges[r];
       final count = ranges[r + 1];
-      for (var i = 0; i < count && pos + rowLength <= data.length; i++) {
+      for (var i = 0;
+          i < count &&
+              pos + rowLength <= data.length &&
+              entries.length < cosMaxXrefEntries;
+          i++) {
         final fields = <int>[];
         for (final width in widths) {
           var value = 0;
