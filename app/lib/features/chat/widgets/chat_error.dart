@@ -61,8 +61,15 @@ ChatErrorContent chatErrorContentFor(String? errorKind) {
         primaryAction: ChatRecoveryAction.reloadModel,
         primaryLabel: 'Reload model',
       );
-    case 'EngineDecodeFailure':
     case 'EngineStateFailure':
+      return const ChatErrorContent(
+        message:
+            'The model is busy with something else, like a speed test. Try '
+            'again in a moment.',
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Retry',
+      );
+    case 'EngineDecodeFailure':
     case 'EngineValidationFailure':
       return const ChatErrorContent(
         message: 'Something went wrong generating a response.',

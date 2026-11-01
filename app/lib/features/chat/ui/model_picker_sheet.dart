@@ -11,9 +11,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
+import '../../../core/widgets/speed_label_chip.dart';
+import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../state/installed_models_provider.dart';
 import '../widgets/brand_motif.dart';
@@ -135,7 +138,7 @@ class _ModelList extends ConsumerWidget {
         child: Text('No models installed yet.'),
       );
     }
-    if (!smallerModelsOnly) return _list(context, models);
+    if (!smallerModelsOnly) return _list(context, ref, models);
 
     return FutureBuilder<DeviceMemoryInfo>(
       future: ref.read(deviceInfoServiceProvider).getMemoryInfo(),
@@ -154,13 +157,19 @@ class _ModelList extends ConsumerWidget {
           );
           return tier != ModelTier.notRecommended;
         }).toList();
-        return _list(context, filtered.isEmpty ? models : filtered);
+        return _list(context, ref, filtered.isEmpty ? models : filtered);
       },
     );
   }
 
-  Widget _list(BuildContext context, List<InstalledModelInfo> items) {
+  Widget _list(
+    BuildContext context,
+    WidgetRef ref,
+    List<InstalledModelInfo> items,
+  ) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final results = ref.watch(speedResultsProvider).value ?? const {};
     return ListView.builder(
       shrinkWrap: true,
       itemCount: items.length,
@@ -175,11 +184,20 @@ class _ModelList extends ConsumerWidget {
             modelShortLabel(model.repoId),
             style: theme.textTheme.titleSmall,
           ),
-          subtitle: Text(
-            '${model.quant ?? 'unknown quant'} · ${_formatBytes(model.sizeBytes)}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${model.quant ?? 'unknown quant'} · ${_formatBytes(model.sizeBytes)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              SizedBox(height: tokens.spacing.xs),
+              SpeedLabelChip(
+                result: results[speedKey(model.repoId, model.fileName)],
+              ),
+            ],
           ),
           onTap: () => Navigator.of(context).pop(model),
         );
