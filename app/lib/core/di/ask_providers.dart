@@ -16,6 +16,18 @@ final askRetrieverProvider = FutureProvider<AskRetriever>((ref) async {
   );
 });
 
+/// Names of stored contacts, for Auto's "a known contact name" rule in the
+/// live chip preview. Empty on any failure (the preview just shows less).
+final askContactNamesProvider = FutureProvider.autoDispose<List<String>>((
+  ref,
+) async {
+  try {
+    return await ref.watch(connectorStoreProvider).contactNames();
+  } on Object {
+    return const [];
+  }
+});
+
 /// For the "Search in" chips: connector id -> connected, for every connector
 /// this platform offers. Mail is absent until a mail connector exists, which
 /// is how Ask hides it. Empty while loading or if the hub failed.

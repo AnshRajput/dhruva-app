@@ -66,7 +66,10 @@ final class AskSourceSelection {
   static const autoSelection = AskSourceSelection();
 
   AskSourceSelection copyWith({bool? auto, Set<AskSource>? pinned}) =>
-      AskSourceSelection(auto: auto ?? this.auto, pinned: pinned ?? this.pinned);
+      AskSourceSelection(
+        auto: auto ?? this.auto,
+        pinned: pinned ?? this.pinned,
+      );
 
   /// The sources this question will search, before availability is applied.
   Set<AskSource> resolve({
@@ -262,7 +265,8 @@ String shortDate(DateTime d) {
   return '${_weekdays[l.weekday - 1]} ${l.day} ${_months[l.month - 1]}';
 }
 
-String _clock(DateTime d) {
+/// "9:30" (24-hour, local).
+String shortTime(DateTime d) {
   final l = d.toLocal();
   return '${l.hour}:${l.minute.toString().padLeft(2, '0')}';
 }
@@ -279,7 +283,7 @@ String buildSourcedPrompt({
 }) {
   final b = StringBuffer()
     ..writeln(docExcerpts == null ? askInstruction : askInstructionWithDocs)
-    ..writeln('Today is ${shortDate(now)} ${now.year}, ${_clock(now)}.')
+    ..writeln('Today is ${shortDate(now)} ${now.year}, ${shortTime(now)}.')
     ..writeln()
     ..writeln(block.text);
   if (block.isEmpty) b.writeln('No items matched this question.');

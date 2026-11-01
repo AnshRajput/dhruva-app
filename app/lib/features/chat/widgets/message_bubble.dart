@@ -17,9 +17,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart' show ItemSource;
 import '../../vision/widgets/image_lightbox.dart';
 import '../../voice/widgets/tts_button.dart';
 import '../state/message_info_x.dart';
+import 'answer_source_chips.dart';
 import 'reasoning_block.dart';
 import 'sources_block.dart';
 
@@ -41,6 +43,10 @@ class MessageBubble extends StatelessWidget {
   /// action (e.g. previews/tests that don't wire it).
   final VoidCallback? onReport;
 
+  /// Opens a cited connector item (the chip under a grounded answer). Null
+  /// hides the chips (previews/tests that don't wire it).
+  final ValueChanged<ItemSource>? onOpenItemSource;
+
   const MessageBubble({
     super.key,
     required this.message,
@@ -51,6 +57,7 @@ class MessageBubble extends StatelessWidget {
     this.onRegenerate,
     this.onEdit,
     this.onReport,
+    this.onOpenItemSource,
   });
 
   @override
@@ -144,6 +151,14 @@ class MessageBubble extends StatelessWidget {
             ),
             if (!isUser && !isStreaming && message.sources.isNotEmpty)
               SourcesBlock(sources: message.sources),
+            if (!isUser &&
+                !isStreaming &&
+                onOpenItemSource != null &&
+                message.itemSources.isNotEmpty)
+              AnswerSourceChips(
+                sources: message.itemSources,
+                onOpen: onOpenItemSource!,
+              ),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
               _MetadataRow(
