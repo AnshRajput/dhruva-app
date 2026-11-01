@@ -48,6 +48,7 @@ class CharactersController extends AsyncNotifier<CharactersState> {
 
   @override
   Future<CharactersState> build() async {
+    await _repo.ensureSeeded();
     return CharactersState(characters: await _repo.listCharacters());
   }
 

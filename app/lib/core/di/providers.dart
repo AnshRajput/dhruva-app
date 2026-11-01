@@ -218,9 +218,8 @@ class ConversationListRevision extends Notifier<int> {
 
 final characterRepositoryProvider = Provider<CharacterRepository>((ref) {
   final repo = CharacterRepository(db: ref.watch(appDatabaseProvider));
-  // Fire-and-forget: idempotent, tolerates the starter-pack asset being
-  // absent (see CharacterRepository.seedBuiltInsIfPresent), so there's
-  // nothing worth blocking provider construction on.
-  unawaited(repo.seedBuiltInsIfPresent());
+  // Idempotent, tolerates the starter-pack asset being absent. Started here;
+  // list consumers await repo.ensureSeeded() so they never read before it.
+  unawaited(repo.ensureSeeded());
   return repo;
 });

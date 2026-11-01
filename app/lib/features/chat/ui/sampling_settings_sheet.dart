@@ -22,6 +22,7 @@ Future<void> showSamplingSettingsSheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     // Nit 6, chat-spec.md §10: entrance motion.moderate (300ms) / exit
     // motion.fast (150ms). `AnimationStyle` only reads duration/
     // reverseDuration for `showModalBottomSheet` — the entrance/exit
