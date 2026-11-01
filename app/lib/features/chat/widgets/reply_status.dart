@@ -195,6 +195,45 @@ class _WarmUpStatusState extends State<WarmUpStatus> {
   }
 }
 
+/// "Looking through your calendar and files…" while Ask searches the user's
+/// data, before the model starts (Wave 3C).
+class SearchingStatus extends StatelessWidget {
+  final String label;
+  const SearchingStatus({super.key, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          key: const ValueKey('searching-status'),
+          padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const TypingIndicator(),
+              SizedBox(width: tokens.spacing.sm),
+              Flexible(
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// No first token after the timeout: say so plainly and offer a way out.
 class StalledTurnCard extends StatelessWidget {
   final VoidCallback onStop;

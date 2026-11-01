@@ -45,7 +45,7 @@ class ConnectorUi {
   final FakeOpener opener;
   final FakeScheduler scheduler;
 
-  /// Every location the screen pushed (`/chat/new?source=3`, ...).
+  /// Every location the screen pushed (`/ask/new?focus=3`, ...).
   final List<String> visited;
 }
 

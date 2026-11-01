@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart';
@@ -157,7 +158,8 @@ class InboxItemScreen extends ConsumerWidget {
               children: [
                 FilledButton(
                   key: const ValueKey('inbox-ask'),
-                  onPressed: () => context.push('/chat/new?source=${item.id}'),
+                  onPressed: () =>
+                      context.push(askNewLocation(focus: [item.id])),
                   child: const Text('Ask about this'),
                 ),
                 OutlinedButton(

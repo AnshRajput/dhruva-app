@@ -57,6 +57,7 @@ import '../../features/today/ui/today_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
 import 'app_shell.dart';
+import 'ask_route.dart';
 
 /// Maps a pre-redesign route to its new home, or null if [uri] is current.
 /// Pure so tests can pin every old route. Query strings are preserved
@@ -209,6 +210,27 @@ final appRouter = GoRouter(
       path: '/personas',
       builder: (context, state) => const CharactersGalleryScreen(),
     ),
+    // A fresh Ask thread, optionally prefilled and with sources pinned:
+    // `/ask/new?q=Prep me for Budget review&sources=calendar,contacts,files`
+    // (contract + builder in `ask_route.dart`). Outside the shell, so callers
+    // `push` it. `extra` may carry an installed model id, like `/chat/new`.
+    GoRoute(
+      path: '/ask/new',
+      builder: (context, state) {
+        final q = parseAskNewQuery(
+          state.uri.queryParameters,
+          focus: state.uri.queryParametersAll['focus'] ?? const [],
+        );
+        return ChatThreadScreen(
+          args: ChatRouteArgs(
+            initialModelId: state.extra is int ? state.extra! as int : null,
+            initialDraft: q.draft,
+            initialSources: q.sources,
+            focusItemIds: q.focus,
+          ),
+        );
+      },
+    ),
     GoRoute(
       path: '/chat/:id',
       builder: (context, state) {
@@ -248,15 +270,6 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
-              // Library "Ask about this file" / Inbox "Ask about this":
-              // `?source=<item id>` (repeatable) pins connector items as the
-              // chat's sources. Query params keep features decoupled.
-              sourceItemIds: [
-                for (final s
-                    in state.uri.queryParametersAll['source'] ??
-                        const <String>[])
-                  ?int.tryParse(s),
-              ],
             ),
           );
         }

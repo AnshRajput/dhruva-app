@@ -2,6 +2,8 @@
 // asking about it, saved answers, to-dos persistence, empty states.
 
 import 'package:dhruva/core/di/library_providers.dart';
+import 'package:dhruva/core/router/ask_route.dart';
+import 'package:dhruva/data/connectors/ask_sources.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/connectors/search_index.dart';
@@ -231,7 +233,15 @@ void main() {
       await tester.pumpAndSettle();
       final sections = await ui.kit.hub.store.fileSections('doc:budget.md');
       expect(sections, hasLength(1));
-      expect(ui.visited, ['/chat/new?source=${sections.single.id}']);
+      // The ONE Ask mechanism: Files pinned in "Search in", the file's
+      // sections as the focus.
+      expect(ui.visited, [
+        askNewLocation(sources: {AskSource.files}, focus: [sections.single.id]),
+      ]);
+      final uri = Uri.parse(ui.visited.single);
+      expect(uri.path, '/ask/new');
+      expect(uri.queryParameters['sources'], 'files');
+      expect(uri.queryParametersAll['focus'], ['${sections.single.id}']);
     });
 
     testWidgets('no match says what to try; empty query hints; no folder '

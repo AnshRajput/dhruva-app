@@ -312,6 +312,38 @@ class ConnectorStore {
     return [for (final r in rows) _toItem(r)];
   }
 
+  /// Events starting in [from, to), earliest first (Ask reads these directly
+  /// for calendar questions instead of waiting for a keyword hit).
+  Future<List<ConnectorItem>> eventsBetween(
+    DateTime from,
+    DateTime to, {
+    int limit = 8,
+  }) async {
+    final q = _db.select(_db.items)
+      ..where((t) => t.kind.equalsValue(ItemKind.event))
+      ..where(
+        (t) =>
+            t.startsAt.isBiggerOrEqualValue(from) &
+            t.startsAt.isSmallerThanValue(to),
+      )
+      ..orderBy([(t) => OrderingTerm.asc(t.startsAt)])
+      ..limit(limit);
+    return [for (final r in await q.get()) _toItem(r)];
+  }
+
+  /// Display names of the stored contact items (people met in events/mail).
+  /// Ask uses them to notice "what did Ravi say" without a model call.
+  Future<List<String>> contactNames() async {
+    final q = _db.selectOnly(_db.items)
+      ..addColumns([_db.items.title])
+      ..where(_db.items.kind.equalsValue(ItemKind.contact));
+    return [
+      for (final r in await q.get())
+        if ((r.read(_db.items.title) ?? '').trim().isNotEmpty)
+          r.read(_db.items.title)!.trim(),
+    ];
+  }
+
   /// A contact item whose people include [email] (case-insensitive), or null.
   Future<ConnectorItem?> contactForEmail(String email) async {
     final needle = email.trim().toLowerCase();

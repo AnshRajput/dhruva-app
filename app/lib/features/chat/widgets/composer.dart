@@ -73,9 +73,16 @@ class Composer extends ConsumerStatefulWidget {
   /// Plain-language reason the last attach failed, or null.
   final String? documentError;
 
-  /// Titles of the items this chat was opened about (a Library file, an
-  /// Inbox notification); shown as "Source for this chat" chips.
-  final List<String> sourceTitles;
+  /// Shown inside the composer surface above the input row (Ask's "Search in"
+  /// chips).
+  final Widget? header;
+
+  /// Text the field starts with (a prefilled `/ask/new?q=...`); never sent
+  /// until the user taps send.
+  final String? initialText;
+
+  /// Called whenever the field's text changes (Auto source preview).
+  final ValueChanged<String>? onChanged;
 
   const Composer({
     super.key,
@@ -86,7 +93,9 @@ class Composer extends ConsumerStatefulWidget {
     this.documents = const [],
     this.extractingDocName,
     this.documentError,
-    this.sourceTitles = const [],
+    this.header,
+    this.initialText,
+    this.onChanged,
     this.isMultimodal = false,
     required this.onSend,
     this.beforeSend,
@@ -106,9 +115,16 @@ class _ComposerState extends ConsumerState<Composer> {
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialText;
+    if (initial != null && initial.isNotEmpty) {
+      _controller.text = initial;
+      _controller.selection = TextSelection.collapsed(offset: initial.length);
+      _hasText = initial.trim().isNotEmpty;
+    }
     _controller.addListener(() {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      widget.onChanged?.call(_controller.text);
     });
   }
 
@@ -299,12 +315,12 @@ class _ComposerState extends ConsumerState<Composer> {
               SizedBox(height: tokens.spacing.sm),
               _DocumentArea(
                 documents: widget.documents,
-                sourceTitles: widget.sourceTitles,
                 extractingName: widget.extractingDocName,
                 error: widget.documentError,
                 onRemove: widget.onRemoveDocument,
                 onDismissError: widget.onDismissDocumentError,
               ),
+              if (widget.header != null) widget.header!,
               if (_attachedImage != null) ...[
                 _AttachedImageChip(
                   imageBytes: _attachedImage!,
@@ -393,7 +409,6 @@ class _ComposerState extends ConsumerState<Composer> {
 /// inline error. Collapses to nothing when there is nothing to show.
 class _DocumentArea extends StatelessWidget {
   final List<DocumentInfo> documents;
-  final List<String> sourceTitles;
   final String? extractingName;
   final String? error;
   final void Function(int documentId)? onRemove;
@@ -401,7 +416,6 @@ class _DocumentArea extends StatelessWidget {
 
   const _DocumentArea({
     required this.documents,
-    required this.sourceTitles,
     required this.extractingName,
     required this.error,
     required this.onRemove,
@@ -411,11 +425,7 @@ class _DocumentArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-    final empty =
-        documents.isEmpty &&
-        sourceTitles.isEmpty &&
-        extractingName == null &&
-        error == null;
+    final empty = documents.isEmpty && extractingName == null && error == null;
     // Reduced motion: no height animation, the area just appears.
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -434,12 +444,6 @@ class _DocumentArea extends StatelessWidget {
                   spacing: tokens.spacing.sm,
                   runSpacing: tokens.spacing.xs,
                   children: [
-                    for (var i = 0; i < sourceTitles.length; i++)
-                      _DocumentChip(
-                        key: ValueKey('source-chip-$i'),
-                        title: sourceTitles[i],
-                        subtitle: 'Source for this chat',
-                      ),
                     for (final d in documents)
                       _DocumentChip(
                         key: ValueKey('doc-chip-${d.id}'),

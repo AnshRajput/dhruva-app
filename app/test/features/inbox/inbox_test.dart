@@ -5,6 +5,7 @@
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
+import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
@@ -533,7 +534,12 @@ void main() {
       expect(find.text('Sana shared onboarding v4'), findsOneWidget);
       await tester.tap(_key('inbox-ask'));
       await tester.pumpAndSettle();
-      expect(ui.visited, ['/chat/new?source=1']);
+      expect(ui.visited, [
+        askNewLocation(focus: [1]),
+      ]);
+      final uri = Uri.parse(ui.visited.single);
+      expect(uri.path, '/ask/new');
+      expect(uri.queryParametersAll['focus'], ['1']);
     });
 
     testWidgets('Open app launches the source app; a missing app is named', (

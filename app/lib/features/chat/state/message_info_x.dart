@@ -9,6 +9,7 @@
 library;
 
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart' show ItemSource;
 import '../../../data/db/database.dart' show MessageStatus;
 import '../../../data/docs/grounding.dart' show DocSource;
 
@@ -25,6 +26,7 @@ extension MessageInfoCopy on MessageInfo {
     int? genMs,
     bool? reported,
     List<DocSource>? sources,
+    List<ItemSource>? itemSources,
   }) {
     return MessageInfo(
       id: id,
@@ -42,6 +44,7 @@ extension MessageInfoCopy on MessageInfo {
       parentMessageId: parentMessageId,
       reported: reported ?? this.reported,
       sources: sources ?? this.sources,
+      itemSources: itemSources ?? this.itemSources,
     );
   }
 }

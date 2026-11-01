@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../core/failures/app_failure.dart';
+import '../connectors/ask_sources.dart';
 import '../db/database.dart';
 import '../docs/grounding.dart';
 import 'chat_export.dart';
@@ -76,6 +77,10 @@ final class MessageInfo {
   /// empty for an ordinary reply.
   final List<DocSource> sources;
 
+  /// Connector citations (calendar, contacts, files, mail) this reply was
+  /// grounded in (Ask); empty for an ungrounded reply.
+  final List<ItemSource> itemSources;
+
   const MessageInfo({
     required this.id,
     required this.conversationId,
@@ -90,6 +95,7 @@ final class MessageInfo {
     this.parentMessageId,
     this.reported = false,
     this.sources = const [],
+    this.itemSources = const [],
   });
 }
 
@@ -437,14 +443,24 @@ final class ChatRepository {
     await _touchUpdatedAt(message.conversationId);
   }
 
-  /// Records the document citations behind a grounded reply (shown as the
-  /// bubble's "Sources" row).
-  Future<void> setSources(int messageId, List<DocSource> sources) {
+  /// Records the citations behind a grounded reply: document pages (the
+  /// bubble's "Sources" row) and connector items (the source chips).
+  Future<void> setSources(
+    int messageId,
+    List<DocSource> sources, {
+    List<ItemSource> items = const [],
+  }) {
     return (_db.update(
       _db.messages,
     )..where((t) => t.id.equals(messageId))).write(
       MessagesCompanion(
-        sourcesJson: Value(sources.isEmpty ? null : encodeSources(sources)),
+        sourcesJson: Value(
+          sources.isEmpty && items.isEmpty
+              ? null
+              : encodeAnswerSources([
+                  for (final s in sources) s.toJson(),
+                ], items),
+        ),
       ),
     );
   }
@@ -644,5 +660,6 @@ final class ChatRepository {
     parentMessageId: row.parentMessageId,
     reported: row.reported,
     sources: decodeSources(row.sourcesJson),
+    itemSources: decodeItemSources(row.sourcesJson),
   );
 }

@@ -21,6 +21,9 @@ abstract final class ConnectorIds {
   static const folder = 'folder';
   static const notifications = 'notifications';
 
+  /// Reserved for Gmail (0.7b). No connector uses it yet, so Ask hides Mail.
+  static const mail = 'gmail';
+
   /// Sync order: contacts resolve people found by the others, so it runs last.
   static const syncOrder = [calendar, folder, notifications, contacts];
 

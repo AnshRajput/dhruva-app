@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/ask_providers.dart';
 import '../../../core/di/library_providers.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
@@ -19,12 +20,15 @@ import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart';
 import '../../../data/library/todo_parser.dart';
+import '../state/ask_selection.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../state/lighter_model.dart';
 import '../state/message_info_x.dart';
+import '../widgets/answer_source_chips.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
 import '../widgets/empty_states.dart';
@@ -33,6 +37,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
 import '../widgets/reply_status.dart';
 import '../widgets/report_sheet.dart';
+import '../widgets/search_in_chips.dart';
 import 'model_picker_sheet.dart';
 import 'sampling_settings_sheet.dart';
 import 'voice_launch.dart';
@@ -384,7 +389,16 @@ class _ThreadScaffold extends ConsumerWidget {
               documents: state.documents,
               extractingDocName: state.extractingDocName,
               documentError: state.documentError,
-              sourceTitles: state.sourceTitles,
+              // Ask: "Search in" chips (not for persona/roleplay threads).
+              header: state.characterId != null
+                  ? null
+                  : _SearchInRow(
+                      args: args,
+                      hasDocuments: state.documents.isNotEmpty,
+                    ),
+              initialText: args.initialDraft,
+              onChanged: (text) =>
+                  ref.read(askSelectionProvider(args).notifier).setDraft(text),
               onAttachDocument: controller.attachDocument,
               onRemoveDocument: controller.removeDocument,
               onDismissDocumentError: controller.dismissDocumentError,
@@ -406,6 +420,8 @@ class _ThreadScaffold extends ConsumerWidget {
   /// The row under the user's message while the reply has not started:
   /// "Warming up (model) · 4 s", or the plain-words timeout card.
   Widget _buildWarmUp() {
+    final searching = state.searchingLabel;
+    if (searching != null) return SearchingStatus(label: searching);
     final since = state.warmingSince ?? DateTime.now();
     if (state.firstTokenTimedOut) {
       return StalledTurnCard(
@@ -502,6 +518,7 @@ class _ThreadScaffold extends ConsumerWidget {
           isStreamingMessage &&
           !state.reasoningDurationMs.containsKey(message.id),
       attachedImage: state.attachedImages[message.id],
+      onOpenItemSource: (source) => unawaited(_openSource(context, source)),
       onRegenerate: message.role == MessageRole.assistant && canAct
           ? () => unawaited(
               _confirmStart(context, ref).then((ok) {
@@ -578,6 +595,14 @@ class _ThreadScaffold extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [bubble, note],
     );
+  }
+
+  /// A source chip under an answer: loads the live item and shows it. A chip
+  /// whose item is gone opens a plain "no longer on this phone" sheet.
+  Future<void> _openSource(BuildContext context, ItemSource source) async {
+    final item = await controller.loadSourceItem(source);
+    if (!context.mounted) return;
+    await showSourceSheet(context, source: source, item: item);
   }
 
   Future<void> _replaceSelection(
@@ -803,6 +828,54 @@ class _ThreadScaffold extends ConsumerWidget {
             ? '${AppIdentity.shortName} conversation'
             : state.title,
       ),
+    );
+  }
+}
+
+/// The "Search in" row inside the composer: reads the thread's selection, the
+/// connectors' live state and the contact names, and shows what Auto would
+/// search for the text typed so far.
+class _SearchInRow extends ConsumerWidget {
+  final ChatRouteArgs args;
+  final bool hasDocuments;
+  const _SearchInRow({required this.args, required this.hasDocuments});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final picked = ref.watch(askSelectionProvider(args));
+    final connectors = ref.watch(askConnectorsProvider);
+    final names = ref.watch(askContactNamesProvider).value ?? const [];
+    final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
+    final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
+    // One chip per file, however many sections it was split into.
+    final focusTitles = <String>[
+      for (final t in {
+        for (final i in focus)
+          i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
+      })
+        t,
+    ];
+    if (chips.isEmpty && focusTitles.isEmpty) return const SizedBox.shrink();
+    final ready = {
+      for (final c in chips)
+        if (c.availability == AskChipAvailability.ready) c.source,
+    };
+    final resolved = picked.selection
+        .resolve(
+          question: picked.draft,
+          contactNames: names,
+          hasDocuments: hasDocuments,
+        )
+        .intersection(ready);
+    final notifier = ref.read(askSelectionProvider(args).notifier);
+    return SearchInChips(
+      selection: picked.selection,
+      focusTitles: focusTitles,
+      resolved: resolved,
+      chips: chips,
+      onAuto: notifier.chooseAuto,
+      onToggle: (s) => notifier.toggle(s, currentlyResolved: resolved),
+      onConnect: (s) => context.push(connectRouteFor(s)),
     );
   }
 }
