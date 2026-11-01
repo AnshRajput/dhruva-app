@@ -31,7 +31,7 @@ ConnectorItem event(
   flags: {
     'end': end.millisecondsSinceEpoch,
     'allDay': allDay,
-    if (location != null) 'location': location,
+    'location': ?location,
   },
   summary: null,
   summaryModel: null,
@@ -72,7 +72,7 @@ ConnectorItem contact(int id, String name, String email, {String? photo}) =>
       people: [Person(name: name, email: email)],
       startsAt: null,
       sentAt: null,
-      flags: {if (photo != null) 'photo': photo},
+      flags: {'photo': ?photo},
       summary: null,
       summaryModel: null,
       updatedAt: fixtureNow,

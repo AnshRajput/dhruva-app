@@ -30,6 +30,7 @@ import '../../features/models_hub/state/speed_test_controller.dart';
 import '../../features/models_hub/state/storage_controller.dart';
 import '../../features/playground/state/playground_installed_models_provider.dart'
     as playground_installed;
+import '../../features/today/state/brief_controller.dart';
 import '../settings/what_moved.dart';
 import '../widgets/platform_chrome.dart';
 import 'inbox_availability.dart';
@@ -64,6 +65,8 @@ class AppShell extends ConsumerWidget {
       ref.invalidate(char_installed.installedModelsProvider);
       ref.invalidate(playground_installed.playgroundInstalledModelsProvider);
       ref.invalidate(storageControllerProvider);
+      // Today's brief re-reads whether a model can write it now.
+      ref.invalidate(briefControllerProvider);
 
       // A5: an unmissable confirmation that ties the loop back to chatting —
       // but only for chat-usable GGUF models that are FULLY ready. Voice

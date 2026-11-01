@@ -9,6 +9,7 @@ import 'core/di/speed_providers.dart';
 import 'core/identity/app_identity.dart';
 import 'core/intents/intent_inbox.dart';
 import 'core/intents/process_text.dart';
+import 'core/notifications/morning_brief.dart';
 import 'core/privacy/screen_privacy.dart';
 import 'core/profile/user_profile.dart';
 import 'core/router/app_router.dart';
@@ -82,6 +83,9 @@ Future<void> main() async {
         onReplaceable: container.read(processTextSessionProvider.notifier).set,
       ).start(),
     );
+    // Morning brief: wire the notification tap to Today and top up the next
+    // mornings while the brief is on. Never blocks or breaks launch.
+    unawaited(_startMorningBrief(container));
     // Connectors (Wave 2A): pick the search engine, refresh statuses, sync
     // what is stale, schedule the Android background job. Never blocks or
     // breaks launch.
@@ -91,6 +95,23 @@ Future<void> main() async {
           .then((_) {}, onError: (Object _) {}),
     );
   });
+}
+
+Future<void> _startMorningBrief(ProviderContainer container) async {
+  try {
+    final enabled = await container.read(morningBriefEnabledProvider.future);
+    final minutes = await container.read(morningBriefMinutesProvider.future);
+    await startMorningBrief(
+      gateway: container.read(notificationGatewayProvider),
+      scheduler: container.read(morningBriefSchedulerProvider),
+      enabled: enabled,
+      minutesAfterMidnight: minutes,
+      // Today is a shell branch: `go`, never `push`.
+      openToday: () => appRouter.go('/today'),
+    );
+  } on Object {
+    // A notification problem never blocks launch.
+  }
 }
 
 /// Intent targets that are shell branches (`/today`, `/ask`, ...) must `go`:

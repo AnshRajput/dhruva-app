@@ -40,6 +40,10 @@ final calendarEntryProvider = Provider<ConnectorEntry?>(
   (ref) => _entry(ref, ConnectorIds.calendar),
 );
 
+final contactsEntryProvider = Provider<ConnectorEntry?>(
+  (ref) => _entry(ref, ConnectorIds.contacts),
+);
+
 final notificationsEntryProvider = Provider<ConnectorEntry?>(
   (ref) => _entry(ref, ConnectorIds.notifications),
 );

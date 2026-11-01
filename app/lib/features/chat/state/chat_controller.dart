@@ -40,6 +40,7 @@ import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
+import 'connector_grounding.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
 import 'think_tag_parser.dart';
@@ -63,12 +64,27 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
+  /// Connector sources pinned for this thread (`calendar`, `contacts`,
+  /// `folder`, `notifications`): every question is answered from matching
+  /// items on the phone, quoted inside a delimited sources block. Today's
+  /// "Prep", "Plan my day" and "Ask my files" open Ask this way.
+  final Set<String> pinnedSources;
+
+  /// An event (connector item id) that "Prep" focuses on: it is always put in
+  /// the sources block and its title/attendees drive the search, so the
+  /// event's text never has to be typed into the prompt itself.
+  final int? focusEventId;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
+    this.pinnedSources = const {},
+    this.focusEventId,
   });
+
+  String get _pinnedKey => (pinnedSources.toList()..sort()).join(',');
 
   @override
   bool operator ==(Object other) =>
@@ -76,11 +92,19 @@ final class ChatRouteArgs {
       other.conversationId == conversationId &&
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
-      other.initialPrompt == initialPrompt;
+      other.initialPrompt == initialPrompt &&
+      other._pinnedKey == _pinnedKey &&
+      other.focusEventId == focusEventId;
 
   @override
-  int get hashCode =>
-      Object.hash(conversationId, initialModelId, characterId, initialPrompt);
+  int get hashCode => Object.hash(
+    conversationId,
+    initialModelId,
+    characterId,
+    initialPrompt,
+    _pinnedKey,
+    focusEventId,
+  );
 }
 
 final class ChatThreadState {
@@ -1101,6 +1125,23 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     return buildGroundedPrompt(question: question, excerpts: excerpts);
   }
 
+  /// The question rewritten around a sources block of connector items, or
+  /// null when nothing is pinned for this thread.
+  Future<String?> _groundOnConnectors(List<MessageInfo> historyMessages) async {
+    if (args.pinnedSources.isEmpty) return null;
+    final question = historyMessages
+        .where((m) => m.role == MessageRole.user)
+        .lastOrNull
+        ?.content;
+    if (question == null) return null;
+    return groundOnConnectors(
+      ref,
+      question: question,
+      sources: args.pinnedSources,
+      focusEventId: args.focusEventId,
+    );
+  }
+
   // ---- Streaming machinery -------------------------------------------------
 
   Future<void> _runAssistantTurn({
@@ -1261,6 +1302,21 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
               systemPrompt: current.systemPrompt,
               samplingParams: samplingParams,
             );
+      // Pinned connector sources (Today's Prep / Plan / Ask my files): answer
+      // from items on the phone, quoted in a sources block. Documents win if
+      // both apply (a doc chat is never pinned, in practice).
+      final fromConnectors = continued != null || grounded != null
+          ? null
+          : await _groundOnConnectors(historyMessages);
+      if (fromConnectors != null) {
+        final last = turns.lastIndexWhere((t) => t.role == EngineRole.user);
+        if (last >= 0) {
+          turns[last] = ChatTurn.user(
+            fromConnectors,
+            images: turns[last].images,
+          );
+        }
+      }
       if (grounded != null) {
         // Swap the plain question for the grounded prompt, on this request
         // only: the stored message (and so the history shown/exported) keeps

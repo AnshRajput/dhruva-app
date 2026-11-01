@@ -216,6 +216,16 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
+              // Today's Prep / Plan my day / Ask my files: pin connector
+              // sources (and optionally one event) for the whole thread.
+              pinnedSources: {
+                for (final s
+                    in (state.uri.queryParameters['sources'] ?? '').split(','))
+                  if (s.isNotEmpty) s,
+              },
+              focusEventId: int.tryParse(
+                state.uri.queryParameters['event'] ?? '',
+              ),
             ),
           );
         }

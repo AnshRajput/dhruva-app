@@ -55,9 +55,7 @@ final class WrittenBrief {
     return WrittenBrief(
       writtenAt: DateTime.fromMillisecondsSinceEpoch(at),
       raw: raw,
-      facts: [
-        for (final f in facts) ?BriefFact.fromJson(f),
-      ],
+      facts: [for (final f in facts) ?BriefFact.fromJson(f)],
     );
   }
 }

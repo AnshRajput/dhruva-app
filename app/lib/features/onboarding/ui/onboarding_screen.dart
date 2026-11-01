@@ -1,12 +1,15 @@
-/// First-run onboarding flow (PRD v0.3 WS2). Four calm steps, skippable at
-/// any point, shown ONCE (the store flag is written on finish OR skip):
+/// First-run onboarding flow, v2 (daily assistant). Skippable at any point,
+/// shown ONCE (the store flag is written on finish OR skip):
 ///
-///   welcome → pick your first model → one-tap download → ready → chat
+///   welcome -> pick your model (download continues in the background)
+///           -> connect your calendar -> Today with real events
 ///
-/// A fresh install reaches a working first chat without ever seeing the raw
-/// Hugging Face firehose or a quant menu: the "pick" step is the curated
-/// catalog only, with the device-appropriate model pre-selected and badged
-/// "Recommended", and the download auto-picks the right quant.
+/// A fresh install reaches a useful Today without seeing the raw Hugging Face
+/// firehose or a quant menu: the "pick" step is the curated catalog only, with
+/// the device-appropriate model pre-selected and badged "Recommended". The
+/// calendar step needs no sign-in; Folder and (Android) Notifications are
+/// optional extras. Download errors keep their recovery (Try again, Pick
+/// another, Download anyway) wherever they surface.
 library;
 
 import 'dart:async';
@@ -22,16 +25,9 @@ import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/models/starter_catalog.dart';
 import '../state/onboarding_controller.dart';
+import 'connect_step.dart';
 
-/// A few concrete things a first-timer can try — shown on the "ready" step so
-/// the handoff into chat says what the model is *for*, not just "done".
-const _suggestedPrompts = <String>[
-  'Explain how a rainbow forms, simply',
-  'Write a short poem about the sea',
-  'Give me 3 quick dinner ideas',
-];
-
-enum _Step { welcome, pick, download, ready }
+enum _Step { welcome, pick, download, connect }
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -61,32 +57,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     await store.markComplete();
     await _markWhatMovedSeen();
     if (mounted) context.go('/today');
-  }
-
-  /// The ready-step exit: mark onboarding done, then land the user IN a chat
-  /// thread with the just-installed model already loaded — not on the empty
-  /// conversation list. Push the thread on top of `/chat` so the shell (and
-  /// back-to-list) sits underneath, exactly like the models-hub download CTA.
-  /// [prompt] is a tapped "Try asking" chip: it rides a query param the
-  /// `/chat/:id` route turns into `ChatRouteArgs.initialPrompt`, which
-  /// auto-sends the first turn (PRD golden path: tap a prompt → streaming
-  /// reply).
-  Future<void> _startChat({String? prompt}) async {
-    final store = await ref.read(onboardingStoreProvider.future);
-    await store.markComplete();
-    await _markWhatMovedSeen();
-    if (!mounted) return;
-    final installedId = ref
-        .read(onboardingDownloadControllerProvider)
-        .value
-        ?.installedId;
-    final trimmed = prompt?.trim();
-    final location = trimmed == null || trimmed.isEmpty
-        ? '/chat/new'
-        : '/chat/new?prompt=${Uri.encodeQueryComponent(trimmed)}';
-    final router = GoRouter.of(context);
-    router.go('/ask');
-    unawaited(router.push(location, extra: installedId));
   }
 
   /// Download-step Cancel / Android back: stop the download and return to the
@@ -123,7 +93,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.listen(onboardingDownloadControllerProvider, (_, next) {
       if (next.value?.status == OnboardingDownloadStatus.installed &&
           _step == _Step.download) {
-        setState(() => _step = _Step.ready);
+        setState(() => _step = _Step.connect);
       }
     });
 
@@ -142,8 +112,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             setState(() => _step = _Step.welcome);
           case _Step.download:
             _cancelDownload();
-          case _Step.ready:
-            setState(() => _step = _Step.pick);
+          case _Step.connect:
+            break; // the download carries on behind this step; stay put
         }
       },
       child: Scaffold(
@@ -168,10 +138,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               onDownloadAnyway: _downloadAnyway,
               onPickAnother: () => setState(() => _step = _Step.pick),
               onCancel: _cancelDownload,
+              onContinue: () => setState(() => _step = _Step.connect),
+              onSkip: _finish,
             ),
-            _Step.ready => _ReadyStep(
-              model: _selected,
-              onStartChat: (prompt) => _startChat(prompt: prompt),
+            _Step.connect => ConnectStep(
+              onDone: _finish,
+              onRetryDownload: () {
+                final m = _selected;
+                if (m != null) _startDownload(m);
+              },
             ),
           },
         ),
@@ -515,12 +490,18 @@ class _DownloadStep extends ConsumerWidget {
     required this.onDownloadAnyway,
     required this.onPickAnother,
     required this.onCancel,
+    required this.onContinue,
+    required this.onSkip,
   });
   final StarterModel? model;
   final VoidCallback onRetry;
   final VoidCallback onDownloadAnyway;
   final VoidCallback onPickAnother;
   final VoidCallback onCancel;
+
+  /// "Keep going while it downloads": on to the calendar step.
+  final VoidCallback onContinue;
+  final Future<void> Function() onSkip;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -627,108 +608,28 @@ class _DownloadStep extends ConsumerWidget {
               ),
             ],
             SizedBox(height: tokens.spacing.lg),
+            if (status == OnboardingDownloadStatus.downloading) ...[
+              SizedBox(height: tokens.spacing.lg),
+              // The download runs in the background; nothing waits on it.
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const ValueKey('onboarding-continue'),
+                  onPressed: onContinue,
+                  child: const Text('Continue while it downloads'),
+                ),
+              ),
+            ],
+            SizedBox(height: tokens.spacing.sm),
             // No dead-end: a large model on a slow link is always cancellable.
             TextButton(onPressed: onCancel, child: const Text('Cancel')),
+            TextButton(
+              key: const ValueKey('onboarding-skip-download'),
+              onPressed: () => onSkip(),
+              child: const Text('Skip for now'),
+            ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _ReadyStep extends StatelessWidget {
-  const _ReadyStep({required this.model, required this.onStartChat});
-  final StarterModel? model;
-
-  /// [prompt] is the tapped "Try asking" chip (null for the plain "Start
-  /// chatting" button) — carried into the first chat turn so it actually gets
-  /// asked, not discarded.
-  final void Function(String? prompt) onStartChat;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return _Page(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(height: tokens.spacing.lg),
-          Center(child: DhruvaStar(size: 80, color: theme.colorScheme.primary)),
-          SizedBox(height: tokens.spacing.lg),
-          Text(
-            'You\'re ready',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall,
-          ),
-          SizedBox(height: tokens.spacing.sm),
-          Text(
-            model == null
-                ? 'Your model is installed and runs fully on-device.'
-                : '${model!.displayName} is installed and runs fully on your '
-                      'phone.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.xl),
-          Text('Try asking', style: theme.textTheme.titleSmall),
-          SizedBox(height: tokens.spacing.sm),
-          for (final prompt in _suggestedPrompts) ...[
-            _SuggestedPromptChip(
-              prompt: prompt,
-              onTap: () => onStartChat(prompt),
-            ),
-            SizedBox(height: tokens.spacing.sm),
-          ],
-          SizedBox(height: tokens.spacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              icon: const Icon(Icons.chat_bubble_outline, size: 18),
-              onPressed: () => onStartChat(null),
-              label: const Text('Start chatting'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SuggestedPromptChip extends StatelessWidget {
-  const _SuggestedPromptChip({required this.prompt, required this.onTap});
-  final String prompt;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return InkWell(
-      borderRadius: BorderRadius.circular(tokens.radius.md),
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.md,
-          vertical: tokens.spacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(tokens.radius.md),
-        ),
-        child: Row(
-          children: [
-            Expanded(child: Text(prompt, style: theme.textTheme.bodyMedium)),
-            Icon(
-              Icons.arrow_forward,
-              size: 18,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ],
-        ),
       ),
     );
   }
