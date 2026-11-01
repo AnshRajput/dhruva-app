@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dhruva/data/db/database.dart';
-import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -27,46 +26,49 @@ void main() {
     expect(ByteData.sublistView(header).getUint32(0), 6);
   });
 
-  test('v6 -> v7 keeps every existing row and adds the connector tables', () async {
-    final db = AppDatabase(NativeDatabase(file));
-    expect(db.schemaVersion, 7);
+  test(
+    'v6 -> v7 keeps every existing row and adds the connector tables',
+    () async {
+      final db = AppDatabase(NativeDatabase(file));
+      expect(db.schemaVersion, 7);
 
-    // Existing chat + document data survives untouched.
-    final convos = await db.select(db.conversations).get();
-    expect(convos.single.title, 'Trip plan');
-    final msgs = await db.select(db.messages).get();
-    expect(msgs.single.content, 'Plan a trip to Pune');
-    expect(await db.select(db.documentChunks).get(), hasLength(1));
+      // Existing chat + document data survives untouched.
+      final convos = await db.select(db.conversations).get();
+      expect(convos.single.title, 'Trip plan');
+      final msgs = await db.select(db.messages).get();
+      expect(msgs.single.content, 'Plan a trip to Pune');
+      expect(await db.select(db.documentChunks).get(), hasLength(1));
 
-    expect(
-      db.allTables.map((t) => t.actualTableName),
-      containsAll(['connector_accounts', 'items', 'ledger']),
-    );
-    final real = await db
-        .customSelect(
-          "SELECT name FROM sqlite_master WHERE type = 'table' "
-          "AND name IN ('connector_accounts', 'items', 'ledger')",
-        )
-        .get();
-    expect(real, hasLength(3));
-    final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 7);
+      expect(
+        db.allTables.map((t) => t.actualTableName),
+        containsAll(['connector_accounts', 'items', 'ledger']),
+      );
+      final real = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name IN ('connector_accounts', 'items', 'ledger')",
+          )
+          .get();
+      expect(real, hasLength(3));
+      final version = await db.customSelect('PRAGMA user_version').getSingle();
+      expect(version.read<int>('user_version'), 7);
 
-    // The new tables work.
-    final now = DateTime.utc(2026, 11, 1, 8);
-    await db
-        .into(db.items)
-        .insert(
-          ItemsCompanion.insert(
-            source: 'calendar',
-            externalId: 'e1',
-            kind: ItemKind.event,
-            updatedAt: now,
-          ),
-        );
-    expect((await db.select(db.items).getSingle()).kind, ItemKind.event);
-    await db.close();
-  });
+      // The new tables work.
+      final now = DateTime.utc(2026, 11, 1, 8);
+      await db
+          .into(db.items)
+          .insert(
+            ItemsCompanion.insert(
+              source: 'calendar',
+              externalId: 'e1',
+              kind: ItemKind.event,
+              updatedAt: now,
+            ),
+          );
+      expect((await db.select(db.items).getSingle()).kind, ItemKind.event);
+      await db.close();
+    },
+  );
 
   test('(source, externalId) is unique; the same id in another source is not '
       'a clash', () async {
@@ -99,20 +101,23 @@ void main() {
     await db.close();
   });
 
-  test('upgraded and fresh databases have identical connector indexes',
-      () async {
-    final upgraded = AppDatabase(NativeDatabase(file));
-    final fresh = AppDatabase(NativeDatabase.memory());
-    Future<List<String>> names(AppDatabase d) async => (await d
-            .customSelect(
-              "SELECT name FROM sqlite_master WHERE tbl_name IN "
-              "('items', 'ledger', 'connector_accounts') ORDER BY name",
-            )
-            .get())
-        .map((r) => r.read<String>('name'))
-        .toList();
-    expect(await names(upgraded), await names(fresh));
-    await upgraded.close();
-    await fresh.close();
-  });
+  test(
+    'upgraded and fresh databases have identical connector indexes',
+    () async {
+      final upgraded = AppDatabase(NativeDatabase(file));
+      final fresh = AppDatabase(NativeDatabase.memory());
+      Future<List<String>> names(AppDatabase d) async =>
+          (await d
+                  .customSelect(
+                    'SELECT name FROM sqlite_master WHERE tbl_name IN '
+                    "('items', 'ledger', 'connector_accounts') ORDER BY name",
+                  )
+                  .get())
+              .map((r) => r.read<String>('name'))
+              .toList();
+      expect(await names(upgraded), await names(fresh));
+      await upgraded.close();
+      await fresh.close();
+    },
+  );
 }

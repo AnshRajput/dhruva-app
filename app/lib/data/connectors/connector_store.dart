@@ -475,10 +475,7 @@ List<Person> _people(String raw) {
   try {
     final v = jsonDecode(raw);
     if (v is! List) return const [];
-    return [
-      for (final e in v)
-        if (Person.fromJson(e) case final p?) p,
-    ];
+    return [for (final e in v) ?Person.fromJson(e)];
   } on FormatException {
     return const [];
   }

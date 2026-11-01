@@ -185,7 +185,7 @@ void main() {
       await store.upsertItems('notifications', drafts);
       // Make the first 100 the oldest by updated_at.
       await db.customStatement(
-        "UPDATE items SET updated_at = 1 WHERE external_id IN "
+        'UPDATE items SET updated_at = 1 WHERE external_id IN '
         "(${[for (var i = 0; i < 100; i++) "'n$i'"].join(',')})",
       );
       final hits = await index.search('zebra', limit: 5000);

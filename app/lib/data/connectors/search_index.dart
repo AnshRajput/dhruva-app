@@ -79,12 +79,12 @@ Future<bool> _tryEnableFts5(AppDatabase db) async {
     );
     await db.customStatement(
       'CREATE TRIGGER IF NOT EXISTS items_fts_ad AFTER DELETE ON items BEGIN '
-      "INSERT INTO items_fts(items_fts, rowid, title, body, summary) "
+      'INSERT INTO items_fts(items_fts, rowid, title, body, summary) '
       "VALUES ('delete', old.id, old.title, old.body, old.summary); END",
     );
     await db.customStatement(
       'CREATE TRIGGER IF NOT EXISTS items_fts_au AFTER UPDATE ON items BEGIN '
-      "INSERT INTO items_fts(items_fts, rowid, title, body, summary) "
+      'INSERT INTO items_fts(items_fts, rowid, title, body, summary) '
       "VALUES ('delete', old.id, old.title, old.body, old.summary); "
       'INSERT INTO items_fts(rowid, title, body, summary) '
       'VALUES (new.id, new.title, new.body, new.summary); END',
