@@ -176,6 +176,12 @@ class FolderConnector extends BaseConnector {
         if (isIndexableName(e.name) && e.size >= 0) e,
     ];
     final ids = {for (final e in entries) e.id};
+    // "312 of 340 files ready": the 340 is what the folder holds right now.
+    await store.saveAccount(
+      id,
+      config: {...account.config, 'total': entries.length},
+      onlyIfExists: true,
+    );
 
     // What is already indexed, grouped by the owning file (`flags.fileId`; a
     // file's sections are separate rows). One query, no per-file scans.

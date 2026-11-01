@@ -36,7 +36,12 @@ class SearchInChips extends StatelessWidget {
     required this.onAuto,
     required this.onToggle,
     required this.onConnect,
+    this.focusTitles = const [],
   });
+
+  /// Titles of the items this thread is ABOUT (`/ask/new?focus=`): shown
+  /// first as "About" chips, always on.
+  final List<String> focusTitles;
 
   final AskSourceSelection selection;
 
@@ -70,6 +75,15 @@ class SearchInChips extends StatelessWidget {
             key: const ValueKey('search-in-chips'),
             scrollDirection: Axis.horizontal,
             children: [
+              for (var i = 0; i < focusTitles.length; i++)
+                _SourceChip(
+                  chipKey: ValueKey('search-in-focus-$i'),
+                  icon: Icons.description_outlined,
+                  label: focusTitles[i],
+                  trailing: 'About',
+                  state: _ChipState.filled,
+                  semantics: 'About ${focusTitles[i]}. Always searched.',
+                ),
               _SourceChip(
                 chipKey: const ValueKey('search-in-auto'),
                 icon: Icons.auto_awesome_outlined,
@@ -134,7 +148,7 @@ class _SourceChip extends StatelessWidget {
     required this.label,
     required this.state,
     required this.semantics,
-    required this.onTap,
+    this.onTap,
     this.trailing,
   });
 
@@ -144,7 +158,9 @@ class _SourceChip extends StatelessWidget {
   final String? trailing;
   final _ChipState state;
   final String semantics;
-  final VoidCallback onTap;
+
+  /// Null: a label, not a control (the focus chip).
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +191,7 @@ class _SourceChip extends StatelessWidget {
       padding: EdgeInsets.only(right: tokens.spacing.sm),
       child: Semantics(
         key: chipKey,
-        button: true,
+        button: onTap != null,
         selected: state == _ChipState.filled || state == _ChipState.outlined,
         label: semantics,
         excludeSemantics: true,
@@ -194,26 +210,33 @@ class _SourceChip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(tokens.radius.full),
                 border: Border.all(color: border, width: 1.5),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 18, color: fg),
-                  SizedBox(width: tokens.spacing.xs),
-                  Text(
-                    label,
-                    style: theme.textTheme.labelLarge?.copyWith(color: fg),
-                  ),
-                  if (trailing != null) ...[
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 18, color: fg),
                     SizedBox(width: tokens.spacing.xs),
-                    Text(
-                      trailing!,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(color: fg),
                       ),
                     ),
+                    if (trailing != null) ...[
+                      SizedBox(width: tokens.spacing.xs),
+                      Text(
+                        trailing!,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

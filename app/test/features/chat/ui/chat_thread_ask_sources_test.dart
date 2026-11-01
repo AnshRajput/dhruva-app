@@ -191,6 +191,47 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('Ask about a file: Files pinned, the file shown as an About '
+      'chip, Auto off', (tester) async {
+    final handle = tester.ensureSemantics();
+    final modelId = await insertModel();
+    final store = ConnectorStore(db: db);
+    await store.saveAccount('folder');
+    await store.upsertItems('folder', [
+      const ItemDraft(
+        externalId: 'doc:budget.md',
+        kind: ItemKind.file,
+        title: 'budget.md',
+        body: 'The Q4 budget needs approval.',
+        flags: {'fileId': 'doc:budget.md'},
+      ),
+    ]);
+    final id = (await db.select(db.items).get()).single.id;
+    await pump(
+      tester,
+      ChatRouteArgs(
+        initialModelId: modelId,
+        initialSources: const {AskSource.files},
+        focusItemIds: [id],
+      ),
+      connectors: const {
+        ConnectorIds.calendar: true,
+        ConnectorIds.contacts: true,
+        ConnectorIds.folder: true,
+      },
+    );
+    expect(find.byKey(const ValueKey('search-in-focus-0')), findsOneWidget);
+    expect(find.text('budget.md'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('About budget.md. Always searched.'),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsLabel(RegExp(r'^Auto, off')), findsOneWidget);
+    expect(find.bySemanticsLabel('Files, searched'), findsOneWidget);
+    expect(find.bySemanticsLabel('Calendar, not searched'), findsOneWidget);
+    handle.dispose();
+  });
+
   testWidgets('a grounded answer shows source chips that open the item', (
     tester,
   ) async {

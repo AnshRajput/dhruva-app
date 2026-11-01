@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/connectors/ask_retrieval.dart';
 import '../../data/connectors/connector.dart';
+import '../../features/chat/state/chat_controller.dart' show ChatRouteArgs;
 import 'connector_providers.dart';
 
 /// Searches the connectors' items for an Ask question.
@@ -15,6 +16,29 @@ final askRetrieverProvider = FutureProvider<AskRetriever>((ref) async {
     store: ref.watch(connectorStoreProvider),
   );
 });
+
+/// The items a thread is ABOUT (`ChatRouteArgs.focusItemIds`), in the order
+/// the route listed them; ids that no longer exist are dropped.
+final askFocusItemsProvider = FutureProvider.autoDispose
+    .family<List<ConnectorItem>, ChatRouteArgs>((ref, args) async {
+      if (args.focusItemIds.isEmpty) return const [];
+      try {
+        final byId = {
+          for (final i
+              in await ref
+                  .watch(connectorStoreProvider)
+                  .itemsByIds(args.focusItemIds))
+            i.id: i,
+        };
+        return [
+          for (final id in args.focusItemIds)
+            if (byId[id] != null) byId[id]!,
+        ];
+      } on Object {
+        // The thread still works, just without the focus.
+        return const [];
+      }
+    });
 
 /// Names of stored contacts, for Auto's "a known contact name" rule in the
 /// live chip preview. Empty on any failure (the preview just shows less).

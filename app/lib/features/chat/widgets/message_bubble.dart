@@ -43,6 +43,14 @@ class MessageBubble extends StatelessWidget {
   /// action (e.g. previews/tests that don't wire it).
   final VoidCallback? onReport;
 
+  /// Keeps this reply in the Library (Saved). Null hides the action.
+  final Future<void> Function()? onSave;
+
+  /// How many open to-dos this reply holds (the "Extract to-dos" output) and
+  /// the tap that adds them to the Library. Zero / null hides the action.
+  final int todoCount;
+  final Future<void> Function()? onAddTodos;
+
   /// Opens a cited connector item (the chip under a grounded answer). Null
   /// hides the chips (previews/tests that don't wire it).
   final ValueChanged<ItemSource>? onOpenItemSource;
@@ -57,6 +65,9 @@ class MessageBubble extends StatelessWidget {
     this.onRegenerate,
     this.onEdit,
     this.onReport,
+    this.onSave,
+    this.todoCount = 0,
+    this.onAddTodos,
     this.onOpenItemSource,
   });
 
@@ -165,6 +176,9 @@ class MessageBubble extends StatelessWidget {
                 message: message,
                 onRegenerate: onRegenerate,
                 onReport: onReport,
+                onSave: onSave,
+                todoCount: todoCount,
+                onAddTodos: onAddTodos,
               ),
             ],
             if (isUser && onEdit != null) ...[
@@ -272,8 +286,18 @@ class _MetadataRow extends StatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
   final VoidCallback? onReport;
+  final Future<void> Function()? onSave;
+  final int todoCount;
+  final Future<void> Function()? onAddTodos;
 
-  const _MetadataRow({required this.message, this.onRegenerate, this.onReport});
+  const _MetadataRow({
+    required this.message,
+    this.onRegenerate,
+    this.onReport,
+    this.onSave,
+    this.todoCount = 0,
+    this.onAddTodos,
+  });
 
   @override
   State<_MetadataRow> createState() => _MetadataRowState();
@@ -281,6 +305,18 @@ class _MetadataRow extends StatefulWidget {
 
 class _MetadataRowState extends State<_MetadataRow> {
   bool _copied = false;
+  bool _saved = false;
+  bool _todosAdded = false;
+
+  Future<void> _save() async {
+    await widget.onSave?.call();
+    if (mounted) setState(() => _saved = true);
+  }
+
+  Future<void> _addTodos() async {
+    await widget.onAddTodos?.call();
+    if (mounted) setState(() => _todosAdded = true);
+  }
 
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.message.content));
@@ -302,11 +338,16 @@ class _MetadataRowState extends State<_MetadataRow> {
         message.tokCount != null && message.genMs != null && message.genMs! > 0
         ? (message.tokCount! / (message.genMs! / 1000)).toStringAsFixed(1)
         : null;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    // A Wrap, not a Row: with Save, to-dos, report and regenerate beside the
+    // time and speed, a narrow phone would overflow by a few pixels.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(_relativeTime(message.createdAt), style: style),
-        if (tokPerSec != null) Text(' · $tokPerSec tok/s', style: style),
+        Text(
+          '${_relativeTime(message.createdAt)}'
+          '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
+          style: style,
+        ),
         if (message.content.isNotEmpty) ...[
           SizedBox(width: tokens.spacing.xs),
           TtsButton(messageId: message.id, text: message.content),
@@ -323,6 +364,40 @@ class _MetadataRowState extends State<_MetadataRow> {
               _copied ? Icons.check : Icons.copy,
               size: 16,
               color: _copied ? tokens.success : color,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+        if (widget.onSave != null && message.content.isNotEmpty) ...[
+          SizedBox(width: tokens.spacing.xs),
+          IconButton(
+            key: const ValueKey('save-reply'),
+            onPressed: _saved ? null : _save,
+            tooltip: _saved ? 'Saved to Library' : 'Save to Library',
+            icon: Icon(
+              _saved ? Icons.check : Icons.bookmark_border_rounded,
+              size: 16,
+              color: _saved ? tokens.success : color,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+        if (widget.onAddTodos != null && widget.todoCount > 0) ...[
+          SizedBox(width: tokens.spacing.xs),
+          IconButton(
+            key: const ValueKey('add-todos'),
+            onPressed: _todosAdded ? null : _addTodos,
+            tooltip: _todosAdded
+                ? 'Added to to-dos'
+                : 'Add ${widget.todoCount} to your to-dos',
+            icon: Icon(
+              _todosAdded ? Icons.check : Icons.checklist_rounded,
+              size: 16,
+              color: _todosAdded ? tokens.success : color,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),

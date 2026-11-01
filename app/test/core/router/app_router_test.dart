@@ -12,13 +12,13 @@ import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/main.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../support/app_harness.dart' show streamSafeTestDb;
 import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -31,7 +31,7 @@ void main() {
   late ChatRepository repo;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = streamSafeTestDb();
     repo = ChatRepository(db: db);
     // appRouter is a top-level singleton shared across the whole test
     // process (imported, not constructed per-test) — reset its location

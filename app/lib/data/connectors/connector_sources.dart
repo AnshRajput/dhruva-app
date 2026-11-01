@@ -159,3 +159,25 @@ abstract interface class NotificationAccess {
 /// Whether the phone is charging (folder indexing runs only then, unless the
 /// user asks).
 typedef ChargingProbe = Future<bool> Function();
+
+// ---- hand-off to other apps -------------------------------------------------
+
+/// Why [ExternalOpener] could not open something; [message] is user-ready.
+final class OpenFailure implements Exception {
+  final String message;
+  const OpenFailure(this.message);
+  @override
+  String toString() => 'OpenFailure: $message';
+}
+
+/// Hands a file or an app over to the phone: the OS viewer for a file of the
+/// connected folder, the launcher for the app a notification came from. Both
+/// are user-tapped, read-only hand-offs; nothing here reads content.
+abstract interface class ExternalOpener {
+  /// Opens [entryId] (a file inside the folder granted as [grantId]) in the
+  /// phone's own viewer. Throws [OpenFailure] with a reason the user can act on.
+  Future<void> openFile(String grantId, String entryId);
+
+  /// Launches the app [package]. False when it is gone or has no launcher entry.
+  Future<bool> launchApp(String package);
+}

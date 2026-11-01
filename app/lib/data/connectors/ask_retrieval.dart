@@ -10,6 +10,7 @@ library;
 
 import 'dart:math' as math;
 
+import '../docs/bm25.dart';
 import '../docs/grounding.dart' show excerptBudgetChars;
 import 'ask_sources.dart';
 import 'connector.dart';
@@ -85,12 +86,17 @@ class AskRetriever {
     required DateTime now,
     required int budgetChars,
     List<String> mentioned = const [],
+    List<ConnectorItem> focus = const [],
   }) async {
     final searched = connectorSourcesOf(sources);
-    if (searched.isEmpty || budgetChars <= 0) {
+    if ((searched.isEmpty && focus.isEmpty) || budgetChars <= 0) {
       return AskRetrieval(buildSourcesBlock(const [], maxChars: 0), searched);
     }
     final lists = <List<ConnectorItem>>[];
+    // Focus items (the file / notification the user is asking about) go
+    // first, the parts that best match the question ahead of the rest, so a
+    // long file keeps the section that answers it inside the budget.
+    final focusFirst = _focusByRelevance(question, focus);
 
     if (searched.contains(AskSource.calendar)) {
       final start = DateTime(now.year, now.month, now.day);
@@ -112,12 +118,34 @@ class AskRetriever {
     }
     // Calendar's direct list leads (it is first in [lists]); the rest take
     // turns by rank.
-    final merged = interleaveItems(lists);
+    final merged = [
+      ...focusFirst,
+      for (final i in interleaveItems(lists))
+        if (!focusFirst.any((f) => f.id == i.id)) i,
+    ];
     return AskRetrieval(
-      buildSourcesBlock(merged, maxChars: budgetChars),
+      buildSourcesBlock(
+        merged,
+        maxChars: budgetChars,
+        // A focused file's sections may be long; give them room.
+        maxItemChars: focus.isEmpty ? 1200 : 2500,
+      ),
       searched,
     );
   }
+}
+
+List<ConnectorItem> _focusByRelevance(
+  String question,
+  List<ConnectorItem> focus,
+) {
+  if (focus.length < 2) return focus;
+  final index = Bm25Index([for (final i in focus) i.body]);
+  final order = <int>{
+    for (final h in index.search(question)) h.index,
+    for (var i = 0; i < focus.length; i++) i,
+  };
+  return [for (final i in order) focus[i]];
 }
 
 /// Connector sources the user has opted into (an account row exists), read

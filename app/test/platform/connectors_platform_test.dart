@@ -71,6 +71,17 @@ void main() {
       );
     });
 
+    test('Inbox "Open app": launcher visibility by intent, never '
+        'QUERY_ALL_PACKAGES', () {
+      final queries = RegExp(
+        r'<queries>.*?</queries>',
+        dotAll: true,
+      ).firstMatch(code)!.group(0)!;
+      expect(queries, contains('android.intent.action.MAIN'));
+      expect(queries, contains('android.intent.category.LAUNCHER'));
+      expect(code, isNot(contains('QUERY_ALL_PACKAGES')));
+    });
+
     test('the plugin manifest declares nothing (no permission sneaks in)', () {
       final pm = File(
         'third_party/dhruva_connectors/android/src/main/AndroidManifest.xml',
@@ -176,6 +187,38 @@ void main() {
       expect(folder, contains('".."'));
       expect(folder, contains('cacheDir'));
       expect(folder, contains('too_large'));
+    });
+
+    test('opening a file (Wave 3B) is confined to the grant, read-only', () {
+      // Open and fetch go through the same containment check.
+      expect(folder, contains('fun confinedDocumentUri'));
+      expect(
+        RegExp(
+          r'fun open\([^)]*\)\s*\{\s*val docUri = confinedDocumentUri',
+        ).hasMatch(folder),
+        isTrue,
+        reason: 'open() must resolve its URI through confinedDocumentUri',
+      );
+      expect(
+        RegExp(
+          r'fun fetch\([^)]*\)\s*\{\s*val docUri = confinedDocumentUri',
+        ).hasMatch(folder),
+        isTrue,
+      );
+      expect(folder, contains('ACTION_VIEW'));
+    });
+
+    test('channel method names agree between Dart and Kotlin', () {
+      final plugin = File(
+        '$kotlin/DhruvaConnectorsPlugin.kt',
+      ).readAsStringSync();
+      final dart = File(
+        'lib/data/connectors/system_sources.dart',
+      ).readAsStringSync();
+      for (final m in ['folder.open', 'apps.launch']) {
+        expect(plugin, contains('"$m"'), reason: m);
+        expect(dart, contains("'$m'"), reason: m);
+      }
     });
 
     test('the picker asks for a tree with a read-only persistable grant', () {

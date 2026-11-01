@@ -30,7 +30,7 @@ class AskSelectionNotifier extends Notifier<AskSelectionState> {
     // A prefilled route (`/ask/new?sources=...`) arrives with those sources
     // pinned, so the user sees exactly what will be searched before sending.
     return AskSelectionState(
-      selection: pinned.isEmpty
+      selection: pinned.isEmpty && args.focusItemIds.isEmpty
           ? AskSourceSelection.autoSelection
           : AskSourceSelection(auto: false, pinned: pinned),
       draft: args.initialDraft ?? '',

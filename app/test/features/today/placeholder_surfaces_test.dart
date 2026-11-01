@@ -1,4 +1,5 @@
-// Wave 1 placeholder surfaces (Today, Inbox, Library, timeline, connectors):
+// Wave 1 placeholder surfaces (Today, Inbox, Library, timeline): the Connectors,
+// Library and Inbox screens themselves are covered by the Wave 3B tests.
 // they match the comps' structure and every empty state ends in a working
 // next action (no dead ends).
 
@@ -152,7 +153,7 @@ void main() {
       expect(find.text('Nothing on your day yet'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('day-connect-calendar')));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
+      expect(find.text('Connectors'), findsOneWidget);
     });
 
     testWidgets('"Set up inbox" opens Inbox full-screen, with a back button', (
@@ -180,25 +181,8 @@ void main() {
         await tester.ensureVisible(find.byKey(ValueKey(key)));
         await tester.tap(find.byKey(ValueKey(key)));
         await tester.pumpAndSettle();
-        expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
+        expect(find.text('Connectors'), findsOneWidget);
       }
-    });
-  });
-
-  group('Connectors placeholder', () {
-    testWidgets('is never a dead end: Ask and Actions both work', (
-      tester,
-    ) async {
-      await pumpDhruvaApp(tester, location: '/settings/connectors');
-      expect(find.text('Calendar'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('connectors-open-actions')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Actions'), findsOneWidget);
-
-      await pumpDhruvaApp(tester, location: '/settings/connectors');
-      await tester.tap(find.byKey(const ValueKey('connectors-open-ask')));
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Personas'), findsOneWidget);
     });
   });
 
@@ -224,13 +208,6 @@ void main() {
         expect(btn, findsOneWidget, reason: key);
         expect(tester.widget<FilledButton>(btn).onPressed, isNotNull);
       }
-    });
-
-    testWidgets('folder row leads to the connect placeholder', (tester) async {
-      await pumpDhruvaApp(tester, location: '/library');
-      await tester.tap(find.byKey(const ValueKey('library-connect-folder')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
     });
 
     testWidgets('Documents action opens the document Action', (tester) async {
@@ -266,7 +243,7 @@ void main() {
       expect(tester.widget<FilledButton>(action).onPressed, isNotNull);
       await tester.tap(action);
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
+      expect(find.text('Connectors'), findsOneWidget);
     });
   });
 

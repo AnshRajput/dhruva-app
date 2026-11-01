@@ -30,7 +30,10 @@ import '../../features/characters/ui/characters_gallery_screen.dart';
 import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
+import '../../features/inbox/ui/inbox_item_screen.dart';
 import '../../features/inbox/ui/inbox_screen.dart';
+import '../../features/library/ui/file_search_screen.dart';
+import '../../features/library/ui/library_lists_screen.dart';
 import '../../features/library/ui/library_screen.dart';
 import '../../features/models_hub/ui/advanced_search_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
@@ -44,6 +47,7 @@ import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/appearance_screen.dart';
 import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
+import '../../features/settings/ui/ledger_screen.dart';
 import '../../features/settings/ui/notifications_screen.dart';
 import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
@@ -124,6 +128,20 @@ final appRouter = GoRouter(
         ),
       ],
     ),
+    // Library sub-pages (full-screen, outside the shell): file search and the
+    // "See all" lists.
+    GoRoute(
+      path: '/library/search',
+      builder: (context, state) => const FileSearchScreen(),
+    ),
+    GoRoute(
+      path: '/library/documents',
+      builder: (context, state) => const DocumentsScreen(),
+    ),
+    GoRoute(
+      path: '/library/saved',
+      builder: (context, state) => const SavedScreen(),
+    ),
     // Settings opens full-screen from the gear on Today.
     GoRoute(
       path: '/settings',
@@ -132,6 +150,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/connectors',
       builder: (context, state) => const ConnectorsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/connectors/ledger',
+      builder: (context, state) => const LedgerScreen(),
     ),
     GoRoute(
       path: '/settings/about-me',
@@ -169,6 +191,16 @@ final appRouter = GoRouter(
       path: '/inbox/connect',
       builder: (context, state) => const InboxScreen(standalone: true),
     ),
+    // One notification in full (opened from an Inbox row).
+    GoRoute(
+      path: '/inbox/item/:id',
+      builder: (context, state) {
+        final id = int.tryParse(state.pathParameters['id']!);
+        return id == null
+            ? const InboxScreen(standalone: true)
+            : InboxItemScreen(itemId: id);
+      },
+    ),
     GoRoute(
       path: '/day',
       builder: (context, state) => const DayTimelineScreen(),
@@ -185,12 +217,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/ask/new',
       builder: (context, state) {
-        final q = parseAskNewQuery(state.uri.queryParameters);
+        final q = parseAskNewQuery(
+          state.uri.queryParameters,
+          focus: state.uri.queryParametersAll['focus'] ?? const [],
+        );
         return ChatThreadScreen(
           args: ChatRouteArgs(
             initialModelId: state.extra is int ? state.extra! as int : null,
             initialDraft: q.draft,
             initialSources: q.sources,
+            focusItemIds: q.focus,
           ),
         );
       },

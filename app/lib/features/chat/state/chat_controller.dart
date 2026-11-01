@@ -21,6 +21,7 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
@@ -78,6 +79,13 @@ final class ChatRouteArgs {
   /// Empty = Auto.
   final Set<AskSource> initialSources;
 
+  /// Connector items (a Library file's sections, one Inbox notification) the
+  /// new chat is ABOUT: `/ask/new?focus=<item id>` (repeatable). They ride on
+  /// the one Ask mechanism: the sources block always leads with them, then
+  /// whatever the "Search in" selection finds. Shown as "About" chips in the
+  /// row; never instructions to the model.
+  final List<int> focusItemIds;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
@@ -85,6 +93,7 @@ final class ChatRouteArgs {
     this.initialPrompt,
     this.initialDraft,
     this.initialSources = const {},
+    this.focusItemIds = const [],
   });
 
   @override
@@ -96,7 +105,8 @@ final class ChatRouteArgs {
       other.initialPrompt == initialPrompt &&
       other.initialDraft == initialDraft &&
       other.initialSources.length == initialSources.length &&
-      other.initialSources.containsAll(initialSources);
+      other.initialSources.containsAll(initialSources) &&
+      listEquals(other.focusItemIds, focusItemIds);
 
   @override
   int get hashCode => Object.hash(
@@ -106,6 +116,7 @@ final class ChatRouteArgs {
     initialPrompt,
     initialDraft,
     Object.hashAllUnordered(initialSources),
+    Object.hashAll(focusItemIds),
   );
 }
 
@@ -1178,9 +1189,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final active = wantedConnectors.isEmpty
         ? const <AskSource>{}
         : wantedConnectors.intersection(await connectedAskSources(store));
+    // "Ask about this file / notification": the focused items lead the block
+    // even when no connector source is selected.
+    final focus = await ref.read(askFocusItemsProvider(args).future);
 
     SourcesBlock? block;
-    if (active.isNotEmpty) {
+    if (active.isNotEmpty || focus.isNotEmpty) {
       final now = store.now;
       final promptChars =
           SafetyGuard.systemInstruction.length +
@@ -1202,6 +1216,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
               now: now,
               budgetChars: budget,
               mentioned: mentionedContacts(question, names),
+              focus: focus,
             );
         block = retrieval.block;
       } finally {
