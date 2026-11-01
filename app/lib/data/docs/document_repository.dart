@@ -113,6 +113,30 @@ final class DocumentRepository {
     ];
   }
 
+  /// Every attached document across all chats, newest first (the Library's
+  /// Documents list). Live.
+  Stream<List<DocumentInfo>> watchAllDocuments() {
+    final q = _db.select(_db.attachedDocuments)
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.createdAt),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
+    return q.watch().map(
+      (rows) => [
+        for (final r in rows)
+          DocumentInfo(
+            id: r.id,
+            conversationId: r.conversationId,
+            name: r.name,
+            mime: r.mime,
+            pageCount: r.pageCount,
+            charCount: r.charCount,
+            createdAt: r.createdAt,
+          ),
+      ],
+    );
+  }
+
   /// Removes the document and (FK cascade) its chunks.
   Future<void> removeDocument(int id) async {
     await (_db.delete(

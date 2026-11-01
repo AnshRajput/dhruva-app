@@ -32,7 +32,8 @@ import java.util.concurrent.Executors
  * that as "needs the app open".
  *
  * Methods: calendar.permission | calendar.request | calendar.events,
- * app.settings, folder.pick | reachable | list | fetch | release,
+ * app.settings, apps.launch, folder.pick | reachable | list | fetch | open |
+ * release,
  * notifications.granted | settings | capture | excluded | queueDir,
  * power.charging.
  */
@@ -128,6 +129,16 @@ class DhruvaConnectorsPlugin :
                     )
                     null
                 }
+                "folder.open" -> {
+                    FolderAccess.open(
+                        context,
+                        activity,
+                        FolderAccess.treeUri(requireArg(call, "id")),
+                        requireArg(call, "entryId"),
+                    )
+                    result.success(true)
+                }
+                "apps.launch" -> result.success(launchApp(requireArg(call, "package")))
                 "folder.release" -> {
                     FolderAccess.release(context, FolderAccess.treeUri(requireArg(call, "id")))
                     result.success(null)
@@ -279,6 +290,23 @@ class DhruvaConnectorsPlugin :
             }
         }
         startSettings(general)
+    }
+
+    /**
+     * Opens the launcher activity of [pkg] (the app a notification came from).
+     * False when the app is gone or has no launcher entry; never throws for
+     * that, so the UI can say so.
+     */
+    private fun launchApp(pkg: String): Boolean {
+        val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
+        return try {
+            val a = activity
+            if (a != null) a.startActivity(intent)
+            else context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun startSettings(intent: Intent) {

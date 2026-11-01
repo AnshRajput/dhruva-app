@@ -10,6 +10,7 @@ import 'package:dhruva/data/characters/character_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/main.dart';
+import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +34,14 @@ List<Override> todayStubOverrides() => [
   notificationGroupsProvider.overrideWith((ref) => Stream.value(const [])),
 ];
 
+/// An in-memory DB whose query streams close the moment the last listener
+/// goes. Library and Inbox watch drift streams; with drift's default (keep the
+/// cache one event-loop turn) a stream cancelled when the widget tree is torn
+/// down leaves a timer behind and fails the test's pending-timer check.
+AppDatabase streamSafeTestDb() => AppDatabase(
+  DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
+);
+
 const harnessDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
@@ -53,7 +62,7 @@ Future<AppDatabase> pumpDhruvaApp(
 }) async {
   await tester.binding.setSurfaceSize(surface);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final db = AppDatabase(NativeDatabase.memory());
+  final db = streamSafeTestDb();
   addTearDown(db.close);
   appRouter.go(location);
   await tester.pumpWidget(

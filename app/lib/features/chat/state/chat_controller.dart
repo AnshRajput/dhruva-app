@@ -21,18 +21,25 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/ask_providers.dart';
+import '../../../core/di/connector_providers.dart' show connectorStoreProvider;
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/profile/user_profile.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
+import '../../../data/connectors/ask_retrieval.dart';
+import '../../../data/connectors/ask_sources.dart';
+import '../../../data/connectors/connector.dart' show ConnectorItem;
+import '../../../data/connectors/sources_block.dart' show SourcesBlock;
 import '../../../data/docs/bm25.dart';
 import '../../../data/docs/document_extractor.dart';
 import '../../../data/docs/document_repository.dart';
@@ -40,7 +47,7 @@ import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
-import 'connector_grounding.dart';
+import 'ask_selection.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
 import 'think_tag_parser.dart';
@@ -64,27 +71,30 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
-  /// Connector sources pinned for this thread (`calendar`, `contacts`,
-  /// `folder`, `notifications`): every question is answered from matching
-  /// items on the phone, quoted inside a delimited sources block. Today's
-  /// "Prep", "Plan my day" and "Ask my files" open Ask this way.
-  final Set<String> pinnedSources;
+  /// Text to PREFILL the composer with (not sent): `/ask/new?q=...`, e.g.
+  /// Today's "Prep me for `<event>`". Only meaningful for a new draft.
+  final String? initialDraft;
 
-  /// An event (connector item id) that "Prep" focuses on: it is always put in
-  /// the sources block and its title/attendees drive the search, so the
-  /// event's text never has to be typed into the prompt itself.
-  final int? focusEventId;
+  /// Sources pinned in the "Search in" row (`/ask/new?sources=calendar,...`).
+  /// Empty = Auto.
+  final Set<AskSource> initialSources;
+
+  /// Connector items (a Library file's sections, one Inbox notification) the
+  /// new chat is ABOUT: `/ask/new?focus=<item id>` (repeatable). They ride on
+  /// the one Ask mechanism: the sources block always leads with them, then
+  /// whatever the "Search in" selection finds. Shown as "About" chips in the
+  /// row; never instructions to the model.
+  final List<int> focusItemIds;
 
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
-    this.pinnedSources = const {},
-    this.focusEventId,
+    this.initialDraft,
+    this.initialSources = const {},
+    this.focusItemIds = const [],
   });
-
-  String get _pinnedKey => (pinnedSources.toList()..sort()).join(',');
 
   @override
   bool operator ==(Object other) =>
@@ -93,8 +103,10 @@ final class ChatRouteArgs {
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
       other.initialPrompt == initialPrompt &&
-      other._pinnedKey == _pinnedKey &&
-      other.focusEventId == focusEventId;
+      other.initialDraft == initialDraft &&
+      other.initialSources.length == initialSources.length &&
+      other.initialSources.containsAll(initialSources) &&
+      listEquals(other.focusItemIds, focusItemIds);
 
   @override
   int get hashCode => Object.hash(
@@ -102,8 +114,9 @@ final class ChatRouteArgs {
     initialModelId,
     characterId,
     initialPrompt,
-    _pinnedKey,
-    focusEventId,
+    initialDraft,
+    Object.hashAllUnordered(initialSources),
+    Object.hashAll(focusItemIds),
   );
 }
 
@@ -192,6 +205,10 @@ final class ChatThreadState {
   /// token: the thread offers Stop / Try again in plain words.
   final bool firstTokenTimedOut;
 
+  /// "Looking through your calendar and files…" while Ask searches the
+  /// user's data for the turn in flight; null otherwise.
+  final String? searchingLabel;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -218,6 +235,7 @@ final class ChatThreadState {
     this.heatStoppedMessageIds = const {},
     this.warmingSince,
     this.firstTokenTimedOut = false,
+    this.searchingLabel,
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -265,6 +283,8 @@ final class ChatThreadState {
     DateTime? warmingSince,
     bool clearWarmingSince = false,
     bool? firstTokenTimedOut,
+    String? searchingLabel,
+    bool clearSearchingLabel = false,
   }) {
     return ChatThreadState(
       conversationId: conversationId ?? this.conversationId,
@@ -303,6 +323,9 @@ final class ChatThreadState {
           ? null
           : (warmingSince ?? this.warmingSince),
       firstTokenTimedOut: firstTokenTimedOut ?? this.firstTokenTimedOut,
+      searchingLabel: clearSearchingLabel
+          ? null
+          : (searchingLabel ?? this.searchingLabel),
     );
   }
 }
@@ -446,6 +469,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   /// Citations offered to the reply being generated (empty when ungrounded).
   List<DocSource> _activeSources = const [];
+
+  /// Connector items offered to the reply being generated (what the model
+  /// saw, in citation order); empty when no connector source was searched.
+  List<ConnectorItem> _activeItems = const [];
 
   @override
   Future<ChatThreadState> build() async {
@@ -1099,6 +1126,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     required List<MessageInfo> historyMessages,
     required String systemPrompt,
     required SamplingParams samplingParams,
+    int reservedChars = 0,
   }) async {
     if (state.value!.documents.isEmpty) return null;
     final question = historyMessages
@@ -1119,27 +1147,127 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       budgetChars: excerptBudgetChars(
         contextTokens: samplingParams.contextLength,
         maxAnswerTokens: samplingParams.maxTokens,
-        promptChars: promptChars,
+        promptChars: promptChars + reservedChars,
       ),
     );
     return buildGroundedPrompt(question: question, excerpts: excerpts);
   }
 
-  /// The question rewritten around a sources block of connector items, or
-  /// null when nothing is pinned for this thread.
-  Future<String?> _groundOnConnectors(List<MessageInfo> historyMessages) async {
-    if (args.pinnedSources.isEmpty) return null;
+  /// Decides what this turn is grounded in and builds the user turn that
+  /// replaces the plain question: the attached documents (as before), the
+  /// user's connected sources (calendar, contacts, files, mail), both, or
+  /// neither (null: an ordinary answer).
+  ///
+  /// Which sources comes from the "Search in" row ([askSelectionProvider]):
+  /// Auto picks by rules from the question; pinned sources are used as chosen.
+  /// A source the user has not connected is skipped (its chip offers Connect).
+  Future<_Grounding?> _ground({
+    required int conversationId,
+    required List<MessageInfo> historyMessages,
+    required String systemPrompt,
+    required SamplingParams samplingParams,
+  }) async {
     final question = historyMessages
         .where((m) => m.role == MessageRole.user)
         .lastOrNull
         ?.content;
     if (question == null) return null;
-    return groundOnConnectors(
-      ref,
+    final hasDocs = state.value!.documents.isNotEmpty;
+    final selection = ref.read(askSelectionProvider(args)).selection;
+    final store = ref.read(connectorStoreProvider);
+    // Contact names only matter when they can change the answer.
+    final needNames =
+        selection.auto || selection.pinned.contains(AskSource.contacts);
+    final names = needNames ? await store.contactNames() : const <String>[];
+    final wanted = selection.resolve(
       question: question,
-      sources: args.pinnedSources,
-      focusEventId: args.focusEventId,
+      contactNames: names,
+      hasDocuments: hasDocs,
     );
+    final docsWanted = wanted.contains(AskSource.docs) && hasDocs;
+    final wantedConnectors = connectorSourcesOf(wanted);
+    final active = wantedConnectors.isEmpty
+        ? const <AskSource>{}
+        : wantedConnectors.intersection(await connectedAskSources(store));
+    // "Ask about this file / notification": the focused items lead the block
+    // even when no connector source is selected.
+    final focus = await ref.read(askFocusItemsProvider(args).future);
+
+    SourcesBlock? block;
+    if (active.isNotEmpty || focus.isNotEmpty) {
+      final now = store.now;
+      final promptChars =
+          SafetyGuard.systemInstruction.length +
+          systemPrompt.length +
+          historyMessages.fold<int>(0, (n, m) => n + m.content.length);
+      var budget = askSourceBudgetChars(
+        contextTokens: samplingParams.contextLength,
+        maxAnswerTokens: samplingParams.maxTokens,
+        promptChars: promptChars,
+      );
+      // Documents share the room when both are in play.
+      if (docsWanted) budget ~/= 2;
+      _setSearching(searchingLabelFor(active));
+      try {
+        final retrieval = await (await ref.read(askRetrieverProvider.future))
+            .retrieve(
+              question: question,
+              sources: active,
+              now: now,
+              budgetChars: budget,
+              mentioned: mentionedContacts(question, names),
+              focus: focus,
+            );
+        block = retrieval.block;
+      } finally {
+        _clearSearching();
+      }
+    }
+    final docs = docsWanted
+        ? await _groundQuestion(
+            conversationId: conversationId,
+            historyMessages: historyMessages,
+            systemPrompt: systemPrompt,
+            samplingParams: samplingParams,
+            reservedChars: block?.text.length ?? 0,
+          )
+        : null;
+    if (block == null) {
+      return docs == null
+          ? null
+          : _Grounding(docs.prompt, docs.sources, const []);
+    }
+    return _Grounding(
+      buildSourcedPrompt(
+        question: question,
+        block: block,
+        now: ref.read(connectorStoreProvider).now,
+        docExcerpts: docs?.excerptsText,
+      ),
+      docs?.sources ?? const [],
+      block.items,
+    );
+  }
+
+  void _setSearching(String label) {
+    final cur = state.value;
+    if (cur == null || _disposed) return;
+    state = AsyncData(cur.copyWith(searchingLabel: label));
+  }
+
+  void _clearSearching() {
+    final cur = state.value;
+    if (cur == null || _disposed || cur.searchingLabel == null) return;
+    state = AsyncData(cur.copyWith(clearSearchingLabel: true));
+  }
+
+  /// The current live row of a source chip (a persisted citation can point at
+  /// an item that has since been deleted or revoked: null).
+  Future<ConnectorItem?> loadSourceItem(ItemSource source) async {
+    final items = await ref.read(connectorStoreProvider).itemsByIds([
+      source.itemId,
+    ]);
+    return items.firstOrNull;
   }
 
   // ---- Streaming machinery -------------------------------------------------
@@ -1292,31 +1420,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (continued != null) turns.add(const ChatTurn.user(_continuePrompt));
     final samplingParams = current.samplingParams;
     _activeSources = const [];
+    _activeItems = const [];
     try {
       // A continuation extends an already-grounded answer; never re-ground.
       final grounded = continued != null
           ? null
-          : await _groundQuestion(
+          : await _ground(
               conversationId: conversationId,
               historyMessages: historyMessages,
               systemPrompt: current.systemPrompt,
               samplingParams: samplingParams,
             );
-      // Pinned connector sources (Today's Prep / Plan / Ask my files): answer
-      // from items on the phone, quoted in a sources block. Documents win if
-      // both apply (a doc chat is never pinned, in practice).
-      final fromConnectors = continued != null || grounded != null
-          ? null
-          : await _groundOnConnectors(historyMessages);
-      if (fromConnectors != null) {
-        final last = turns.lastIndexWhere((t) => t.role == EngineRole.user);
-        if (last >= 0) {
-          turns[last] = ChatTurn.user(
-            fromConnectors,
-            images: turns[last].images,
-          );
-        }
-      }
       if (grounded != null) {
         // Swap the plain question for the grounded prompt, on this request
         // only: the stored message (and so the history shown/exported) keeps
@@ -1327,11 +1441,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             grounded.prompt,
             images: turns[last].images,
           );
-          _activeSources = grounded.sources;
+          _activeSources = grounded.docSources;
+          _activeItems = grounded.items;
         }
       }
     } catch (e) {
       // Never answer a document question ungrounded: fail the turn instead.
+      _clearSearching();
       _onError(e);
       return;
     }
@@ -1579,7 +1695,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
         : citedSources(answer, _activeSources);
-    if (sources.isNotEmpty) unawaited(_repo.setSources(id, sources));
+    final itemSources = _activeItems.isEmpty || answer.trim().isEmpty
+        ? const <ItemSource>[]
+        : citedItemSources(answer, _activeItems);
+    if (sources.isNotEmpty || itemSources.isNotEmpty) {
+      unawaited(_repo.setSources(id, sources, items: itemSources));
+    }
     final updatedMessages = [
       for (final m in current.messages)
         if (m.id == id)
@@ -1588,6 +1709,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
+            itemSources: itemSources.isEmpty ? null : itemSources,
           )
         else
           m,
@@ -1789,4 +1911,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           },
     ];
   }
+}
+
+/// What a turn is grounded in: the replacement user turn plus the citations
+/// it offers (document pages and connector items).
+final class _Grounding {
+  final String prompt;
+  final List<DocSource> docSources;
+  final List<ConnectorItem> items;
+  const _Grounding(this.prompt, this.docSources, this.items);
 }

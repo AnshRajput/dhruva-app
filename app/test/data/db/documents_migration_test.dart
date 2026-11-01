@@ -58,7 +58,7 @@ void main() {
     await v5.close();
 
     final v6 = AppDatabase(NativeDatabase(file));
-    expect(v6.schemaVersion, 7);
+    expect(v6.schemaVersion, 8);
 
     // Existing data survives; the new column defaults to null.
     final rows = await v6.select(v6.messages).get();

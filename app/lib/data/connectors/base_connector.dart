@@ -34,6 +34,13 @@ abstract class BaseConnector implements Connector {
   /// (the folder index) check it and stop.
   bool get syncCancelled => _cancelled;
 
+  /// Asks a running sync to stop at its next checkpoint (the "Cancel" button
+  /// on a manual folder index). What is already stored stays. No-op when
+  /// nothing is running.
+  void cancelSync() {
+    if (_syncing) _cancelled = true;
+  }
+
   @override
   Stream<ConnectorStatus> get status => _controller.stream;
 

@@ -485,16 +485,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('up-next-prep')));
       await settle(tester);
       final uri = Uri.parse(h.visited.single);
-      expect(uri.path, '/chat/new');
+      expect(uri.path, '/ask/new');
       expect(
-        uri.queryParameters['prompt'],
+        uri.queryParameters['q'],
         'Prep me for my 9:30 AM meeting: who is attending, what do I know '
         'about them, and any related notes.',
       );
-      expect(uri.queryParameters['sources'], 'calendar,contacts,folder');
-      expect(int.tryParse(uri.queryParameters['event']!), isNotNull);
+      expect(uri.queryParameters['sources'], 'calendar,contacts,files');
+      expect(int.tryParse(uri.queryParametersAll['focus']!.single), isNotNull);
       // The event's own (untrusted) title never rides in the prompt.
-      expect(uri.queryParameters['prompt'], isNot(contains('Design sync')));
+      expect(uri.queryParameters['q'], isNot(contains('Design sync')));
     });
 
     todayTest('tapping the event opens a read-only sheet with Open in '
@@ -687,9 +687,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('today-action-plan')));
       await settle(tester);
       final uri = Uri.parse(h.visited.single);
-      expect(uri.path, '/chat/new');
+      expect(uri.path, '/ask/new');
       expect(uri.queryParameters['sources'], 'calendar');
-      expect(uri.queryParameters['prompt'], startsWith('Plan my day'));
+      expect(uri.queryParameters['q'], startsWith('Plan my day'));
     });
 
     todayTest('Plan my day without a calendar sends you to connect it', (
@@ -722,8 +722,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('today-action-files')));
       await settle(tester);
       final uri = Uri.parse(h.visited.single);
-      expect(uri.path, '/chat/new');
-      expect(uri.queryParameters['sources'], 'folder');
+      expect(uri.path, '/ask/new');
+      expect(uri.queryParameters['sources'], 'files');
     });
 
     todayTest('Draft reply carries the clipboard into Actions', (tester) async {

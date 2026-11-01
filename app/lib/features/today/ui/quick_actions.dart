@@ -13,8 +13,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
+import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
 
 /// Max characters of clipboard text carried in the router URL (mirrors the
@@ -60,7 +62,7 @@ class QuickActionsRow extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref, {
     required String connectorId,
-    required String sources,
+    required AskSource source,
     required String needs,
     String? prompt,
   }) {
@@ -75,10 +77,7 @@ class QuickActionsRow extends ConsumerWidget {
       unawaited(context.push('/settings/connectors'));
       return;
     }
-    final p = prompt == null
-        ? ''
-        : 'prompt=${Uri.encodeQueryComponent(prompt)}&';
-    unawaited(context.push('/chat/new?${p}sources=$sources'));
+    unawaited(context.push(askNewLocation(q: prompt, sources: {source})));
   }
 
   @override
@@ -105,7 +104,7 @@ class QuickActionsRow extends ConsumerWidget {
           context,
           ref,
           connectorId: ConnectorIds.calendar,
-          sources: 'calendar',
+          source: AskSource.calendar,
           needs: 'Connect your calendar',
           prompt: planMyDayPrompt,
         ),
@@ -118,7 +117,7 @@ class QuickActionsRow extends ConsumerWidget {
           context,
           ref,
           connectorId: ConnectorIds.folder,
-          sources: 'folder',
+          source: AskSource.files,
           needs: 'Connect a folder',
         ),
       ),

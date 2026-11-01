@@ -14,6 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
+import '../../../core/router/ask_route.dart';
+import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_facts.dart';
 import '../state/today_data.dart';
@@ -109,8 +111,9 @@ Future<void> openCalendarSettings(WidgetRef ref) async {
   }
 }
 
-/// "Prep" for a meeting: Ask opens with the question typed for the user and
-/// Calendar + Contacts + Files pinned. The event's own text stays out of the
+/// "Prep" for a meeting: Ask (the one `/ask/new` mechanism) opens with the
+/// question typed for the user, Calendar + Contacts + Files pinned and the
+/// event focused. The event's own text stays out of the
 /// prompt (it is untrusted); Ask quotes the event itself in the sources block.
 void prepForEvent(BuildContext context, ConnectorItem event) {
   final when = event.startsAt == null
@@ -121,8 +124,11 @@ void prepForEvent(BuildContext context, ConnectorItem event) {
       'them, and any related notes.';
   unawaited(
     context.push(
-      '/chat/new?prompt=${Uri.encodeQueryComponent(prompt)}'
-      '&sources=calendar,contacts,folder&event=${event.id}',
+      askNewLocation(
+        q: prompt,
+        sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
+        focus: [event.id],
+      ),
     ),
   );
 }

@@ -8,7 +8,7 @@
 /// the brief. The brief is only ever written while the app is open.
 ///
 /// All navigation from here pushes FULL-SCREEN routes only (`/settings`,
-/// `/actions`, `/day`, `/chat/new`, ...), never a shell-branch route.
+/// `/actions`, `/day`, `/ask/new`, ...), never a shell-branch route.
 library;
 
 import 'dart:async';

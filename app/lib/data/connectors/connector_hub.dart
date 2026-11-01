@@ -72,6 +72,30 @@ final class ConnectorHub {
     }
   }
 
+  /// App resume: re-reads every OS grant (so access given or taken away in
+  /// system settings shows up at once), reads right away from a source that
+  /// just became usable (notification access switched on: what the listener
+  /// queued appears now, not at the next 6 h job), then keeps the background
+  /// job in step with what is connected.
+  Future<void> onResume() async {
+    final before = {for (final c in all) c.id: c.currentStatus.state};
+    await Future.wait(all.map((c) => c.refreshStatus()));
+    for (final c in all) {
+      final was = before[c.id];
+      final fixed =
+          c.currentStatus.state == ConnectorState.connected &&
+          (was == ConnectorState.needsAttention ||
+              was == ConnectorState.permissionDenied);
+      if (!fixed) continue;
+      try {
+        await c.sync();
+      } catch (_) {
+        // The card shows what is wrong; resume must not throw.
+      }
+    }
+    await syncBackgroundJob();
+  }
+
   /// In sync order.
   List<Connector> get all => [calendar, folder, notifications, contacts];
 

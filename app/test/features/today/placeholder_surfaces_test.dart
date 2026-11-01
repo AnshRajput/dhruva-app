@@ -185,23 +185,6 @@ void main() {
     });
   });
 
-  group('Connectors placeholder', () {
-    testWidgets('is never a dead end: Ask and Actions both work', (
-      tester,
-    ) async {
-      await pumpDhruvaApp(tester, location: '/settings/connectors');
-      expect(find.text('Calendar'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('connectors-open-actions')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Actions'), findsOneWidget);
-
-      await pumpDhruvaApp(tester, location: '/settings/connectors');
-      await tester.tap(find.byKey(const ValueKey('connectors-open-ask')));
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Personas'), findsOneWidget);
-    });
-  });
-
   group('Library', () {
     testWidgets('always has Documents, Saved and To-dos with next steps', (
       tester,
@@ -224,13 +207,6 @@ void main() {
         expect(btn, findsOneWidget, reason: key);
         expect(tester.widget<FilledButton>(btn).onPressed, isNotNull);
       }
-    });
-
-    testWidgets('folder row leads to the connect placeholder', (tester) async {
-      await pumpDhruvaApp(tester, location: '/library');
-      await tester.tap(find.byKey(const ValueKey('library-connect-folder')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
     });
 
     testWidgets('Documents action opens the document Action', (tester) async {
@@ -266,7 +242,7 @@ void main() {
       expect(tester.widget<FilledButton>(action).onPressed, isNotNull);
       await tester.tap(action);
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
+      expect(find.text('Connectors'), findsOneWidget);
     });
   });
 

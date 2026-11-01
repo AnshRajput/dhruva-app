@@ -165,7 +165,7 @@ Future<TodayHarness> pumpToday(
         builder: (context, state) => home ?? const TodayScreen(),
       ),
       GoRoute(path: '/day', builder: (_, _) => const DayTimelineScreen()),
-      stub('/chat/new'),
+      stub('/ask/new'),
       stub('/actions'),
       stub('/settings'),
       stub('/settings/connectors'),
