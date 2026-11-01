@@ -176,30 +176,37 @@ class FolderConnector extends BaseConnector {
     ];
     final ids = {for (final e in entries) e.id};
 
-    // What is already indexed: file id -> (mtime, size) of its first section.
-    final known = <String, ({int mtime, int size})>{};
-    final stored = await store.itemsOf(id, kind: ItemKind.file);
-    final storedIds = <String>{};
-    for (final i in stored) {
-      final base = i.externalId.split('#').first;
-      storedIds.add(base);
-      if (i.externalId == base) {
-        known[base] = (
+    // What is already indexed, grouped by the owning file (`flags.fileId`; a
+    // file's sections are separate rows). One query, no per-file scans.
+    final rowsByFile = <String, List<String>>{};
+    final known = <String, ({int mtime, int size, bool retry})>{};
+    for (final i in await store.itemsOf(id, kind: ItemKind.file)) {
+      final fileId = (i.flags['fileId'] as String?) ?? i.externalId;
+      rowsByFile.putIfAbsent(fileId, () => []).add(i.externalId);
+      if (i.externalId == fileId) {
+        known[fileId] = (
           mtime: (i.flags['mtime'] as int?) ?? -1,
           size: (i.flags['size'] as int?) ?? -1,
+          retry: i.flags['retry'] == true,
         );
       }
     }
     // Files that left the folder leave the index.
-    for (final gone in storedIds.where((s) => !ids.contains(s))) {
-      await store.removeByIdPrefix(id, gone);
-    }
+    await store.removeByExternalIds(id, [
+      for (final e in rowsByFile.entries)
+        if (!ids.contains(e.key)) ...e.value,
+    ]);
 
     var read = 0, changed = 0, processed = 0;
     for (final entry in entries) {
       final mtime = entry.modified.millisecondsSinceEpoch ~/ 1000;
       final old = known[entry.id];
-      if (old != null && old.mtime == mtime && old.size == entry.size) continue;
+      if (old != null &&
+          old.mtime == mtime &&
+          old.size == entry.size &&
+          !old.retry) {
+        continue;
+      }
       if (!isExplicit &&
           processed > 0 &&
           processed % _chargeRecheckEvery == 0 &&
@@ -209,34 +216,59 @@ class FolderConnector extends BaseConnector {
       }
       processed++;
       final drafts = await _fetchAndExtract(grant, entry, mtime);
-      await store.removeByIdPrefix(id, entry.id);
-      final r = await store.upsertItems(id, drafts);
+      // A transient failure on an already-indexed file keeps its old sections.
+      if (drafts == null && old != null) continue;
+      final fresh =
+          drafts ?? [_placeholder(entry, mtime, 'unreadable', retry: true)];
+      await store.removeByExternalIds(id, rowsByFile[entry.id] ?? const []);
+      final r = await store.upsertItems(id, fresh);
       read++;
       changed += r.changed;
     }
     return SyncResult(read: read, changed: changed);
   }
 
-  Future<List<ItemDraft>> _fetchAndExtract(
+  Map<String, Object?> _flags(
+    FolderEntry entry,
+    int mtime,
+    Map<String, Object?> extra,
+  ) => {
+    'fileId': entry.id,
+    'mtime': mtime,
+    'size': entry.size,
+    'name': entry.name,
+    ...extra,
+  };
+
+  /// A row that makes the file findable by name when its text cannot be read.
+  /// [retry] marks a transient failure: it is tried again at the next sync
+  /// even though the file is unchanged.
+  ItemDraft _placeholder(
+    FolderEntry entry,
+    int mtime,
+    String reason, {
+    bool retry = false,
+  }) => ItemDraft(
+    externalId: entry.id,
+    kind: ItemKind.file,
+    title: entry.name,
+    sentAt: entry.modified,
+    flags: _flags(entry, mtime, {
+      'unreadable': reason,
+      if (retry) 'retry': true,
+    }),
+  );
+
+  /// The file's rows, or null if it could not be copied out of the folder
+  /// right now (transient: the caller keeps or retries).
+  Future<List<ItemDraft>?> _fetchAndExtract(
     String grant,
     FolderEntry entry,
     int mtime,
   ) async {
-    Map<String, Object?> flags(Map<String, Object?> extra) => {
-      'mtime': mtime,
-      'size': entry.size,
-      'name': entry.name,
-      ...extra,
-    };
-    ItemDraft placeholder(String reason) => ItemDraft(
-      externalId: entry.id,
-      kind: ItemKind.file,
-      title: entry.name,
-      sentAt: entry.modified,
-      flags: flags({'unreadable': reason}),
-    );
-
-    if (entry.size > maxDocumentBytes) return [placeholder('tooLarge')];
+    if (entry.size > maxDocumentBytes) {
+      return [_placeholder(entry, mtime, 'tooLarge')];
+    }
     await cacheDirectory.create(recursive: true);
     // A fresh random-ish name: never the file's own name (no traversal, no
     // collisions between two files called notes.md).
@@ -252,11 +284,12 @@ class FolderConnector extends BaseConnector {
       try {
         doc = await extractor(temp.path, entry.name);
       } on DocumentException catch (e) {
-        return [placeholder(e.kind.name)];
+        // Deterministic (scanned, encrypted, too long ...): not retried.
+        return [_placeholder(entry, mtime, e.kind.name)];
       }
-      return _sections(entry, doc, flags);
+      return _sections(entry, mtime, doc);
     } on FolderFetchException {
-      return [placeholder('unreadable')];
+      return null;
     } finally {
       try {
         if (temp.existsSync()) temp.deleteSync();
@@ -268,8 +301,8 @@ class FolderConnector extends BaseConnector {
 
   List<ItemDraft> _sections(
     FolderEntry entry,
+    int mtime,
     ExtractedDocument doc,
-    Map<String, Object?> Function(Map<String, Object?>) flags,
   ) {
     final sections = <({int page, StringBuffer text})>[];
     for (final c in doc.chunks) {
@@ -281,17 +314,7 @@ class FolderConnector extends BaseConnector {
       if (sections.last.text.isNotEmpty) sections.last.text.write('\n');
       sections.last.text.write(c.text);
     }
-    if (sections.isEmpty) {
-      return [
-        ItemDraft(
-          externalId: entry.id,
-          kind: ItemKind.file,
-          title: entry.name,
-          sentAt: entry.modified,
-          flags: flags({'unreadable': 'empty'}),
-        ),
-      ];
-    }
+    if (sections.isEmpty) return [_placeholder(entry, mtime, 'empty')];
     return [
       for (var i = 0; i < sections.length; i++)
         ItemDraft(
@@ -300,7 +323,7 @@ class FolderConnector extends BaseConnector {
           title: entry.name,
           body: sections[i].text.toString(),
           sentAt: entry.modified,
-          flags: flags({
+          flags: _flags(entry, mtime, {
             'mime': doc.mime,
             'section': i + 1,
             'page': sections[i].page,

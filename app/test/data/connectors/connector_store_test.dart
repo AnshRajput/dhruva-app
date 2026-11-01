@@ -136,7 +136,8 @@ void main() {
     );
 
     test(
-      'removeByIdPrefix removes a file and its sections, not look-alikes',
+      'removeByExternalIds is exact: % and _ in ids are not wildcards, other '
+      'sources are untouched',
       () async {
         ItemDraft f(String id) =>
             ItemDraft(externalId: id, kind: ItemKind.file);
@@ -146,11 +147,13 @@ void main() {
           f('content://a/doc%2F1_xyz'),
           f('content://a/doc%2F1%x#2'),
         ]);
-        final n = await store.removeByIdPrefix(
-          'folder',
+        await store.upsertItems('calendar', [f('content://a/doc%2F1_x')]);
+        final n = await store.removeByExternalIds('folder', [
           'content://a/doc%2F1_x',
-        );
+          'content://a/doc%2F1_x#2',
+        ]);
         expect(n, 2);
+        expect(await store.countItems('calendar'), 1);
         expect(
           (await store.itemsOf('folder')).map((i) => i.externalId),
           unorderedEquals([

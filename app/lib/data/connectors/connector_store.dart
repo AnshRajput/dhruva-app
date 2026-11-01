@@ -193,18 +193,24 @@ class ConnectorStore {
     return _deleteIds(stale);
   }
 
-  /// Deletes [source] items whose [ItemRow.externalId] is [prefix] or starts
-  /// with `prefix#` (the sections of one file). Matched in Dart so the `%` and
-  /// `_` in SAF uris are never treated as LIKE wildcards.
-  Future<int> removeByIdPrefix(String source, String prefix) async {
-    final rows = await (_db.select(
-      _db.items,
-    )..where((t) => t.source.equals(source))).get();
-    final hit = [
-      for (final r in rows)
-        if (r.externalId == prefix || r.externalId.startsWith('$prefix#')) r.id,
-    ];
-    return _deleteIds(hit);
+  /// Deletes [source] items with exactly these external ids (a file's section
+  /// rows, for instance). Exact match in chunks: ids such as SAF uris contain
+  /// `%` and `_`, which must never be treated as wildcards.
+  Future<int> removeByExternalIds(
+    String source,
+    Iterable<String> externalIds,
+  ) async {
+    final ids = externalIds.toSet().toList();
+    var n = 0;
+    for (var i = 0; i < ids.length; i += 500) {
+      final chunk = ids.sublist(i, (i + 500).clamp(0, ids.length));
+      n +=
+          await (_db.delete(_db.items)
+                ..where((t) => t.source.equals(source))
+                ..where((t) => t.externalId.isIn(chunk)))
+              .go();
+    }
+    return n;
   }
 
   /// Deletes [source] items older than [cutoff] (by sentAt, else updatedAt).

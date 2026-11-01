@@ -254,22 +254,92 @@ void main() {
       },
     );
 
-    test('files that cannot be read get a placeholder and are not retried '
-        'forever; the rest still index', () async {
-      kit.folder.addFile('good.txt', 'fine', id: 'good');
-      kit.folder.addFile('bad.txt', 'x', id: 'bad');
-      kit.folder.unreadable.add('bad');
+    test(
+      'a file that cannot be copied out gets a findable-by-name placeholder '
+      'and is retried next sync until it works; the rest still index',
+      () async {
+        kit.folder.addFile('good.txt', 'fine', id: 'good');
+        kit.folder.addFile('bad.txt', 'recovered text', id: 'bad');
+        kit.folder.unreadable.add('bad');
+        await connect();
+        final r = await kit.hub.folder.indexNow();
+        expect(r.read, 2);
+        final bad = (await kit.hub.store.itemsOf(
+          'folder',
+        )).firstWhere((i) => i.externalId == 'bad');
+        expect(bad.flags['unreadable'], 'unreadable');
+        expect(bad.flags['retry'], true);
+        expect(bad.title, 'bad.txt'); // still findable by name
+
+        // Unchanged file, but the failure was transient: tried again.
+        kit.folder.fetched.clear();
+        await kit.hub.folder.indexNow();
+        expect(kit.folder.fetched, ['bad']);
+
+        kit.folder.unreadable.clear();
+        await kit.hub.folder.indexNow();
+        final fixed = (await kit.hub.store.itemsOf(
+          'folder',
+        )).firstWhere((i) => i.externalId == 'bad');
+        expect(fixed.body, 'recovered text');
+        expect(fixed.flags['unreadable'], isNull);
+        kit.folder.fetched.clear();
+        await kit.hub.folder.indexNow();
+        expect(kit.folder.fetched, isEmpty);
+      },
+    );
+
+    test('a transient failure on an already-indexed, changed file keeps its '
+        'old text', () async {
+      kit.folder.addFile('a.txt', 'old words', id: 'a');
       await connect();
-      final r = await kit.hub.folder.indexNow();
-      expect(r.read, 2);
-      final bad = (await kit.hub.store.itemsOf(
-        'folder',
-      )).firstWhere((i) => i.externalId == 'bad');
-      expect(bad.flags['unreadable'], 'unreadable');
-      expect(bad.title, 'bad.txt'); // still findable by name
-      kit.folder.fetched.clear();
       await kit.hub.folder.indexNow();
+      kit.folder.addFile(
+        'a.txt',
+        'new words',
+        id: 'a',
+        modified: DateTime.utc(2026, 11, 1),
+      );
+      kit.folder.unreadable.add('a');
+      await kit.hub.folder.indexNow();
+      expect((await kit.hub.store.itemsOf('folder')).single.body, 'old words');
+    });
+
+    test('a deterministic extraction failure (e.g. a scanned PDF) is a '
+        'placeholder and is NOT retried', () async {
+      final stub = ConnectorTestKit.create(
+        db,
+        extractor: (path, name) async => throw const DocumentException(
+          DocumentFailureKind.noText,
+          'No text layer.',
+        ),
+      );
+      addTearDown(stub.dispose);
+      stub.folder.nextPick = const FolderGrant(id: 'g', name: 'Scans');
+      stub.folder.addFile('scan.pdf', 'x', id: 'scan');
+      await stub.hub.folder.connect();
+      await stub.hub.folder.indexNow();
+      final item = (await stub.hub.store.itemsOf('folder')).single;
+      expect(item.flags['unreadable'], 'noText');
+      expect(item.flags['retry'], isNull);
+      stub.folder.fetched.clear();
+      await stub.hub.folder.indexNow();
+      expect(stub.folder.fetched, isEmpty);
+    });
+
+    test('a "#" in a file name does not confuse sections with files '
+        '(no churn, no wrong deletes)', () async {
+      kit.folder.addFile('C#notes.md', 'sharp notes', id: 'dir/C#notes.md');
+      kit.folder.addFile('C.md', 'plain', id: 'C');
+      await connect();
+      await kit.hub.folder.indexNow();
+      kit.folder.fetched.clear();
+      expect((await kit.hub.folder.indexNow()).read, 0);
       expect(kit.folder.fetched, isEmpty);
+      expect(
+        (await kit.hub.store.itemsOf('folder')).map((i) => i.externalId),
+        unorderedEquals(['dir/C#notes.md', 'C']),
+      );
     });
 
     test(
