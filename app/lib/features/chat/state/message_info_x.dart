@@ -10,6 +10,7 @@ library;
 
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/db/database.dart' show MessageStatus;
+import '../../../data/docs/grounding.dart' show DocSource;
 
 export '../../../data/db/database.dart' show MessageRole, MessageStatus;
 
@@ -23,6 +24,7 @@ extension MessageInfoCopy on MessageInfo {
     int? tokCount,
     int? genMs,
     bool? reported,
+    List<DocSource>? sources,
   }) {
     return MessageInfo(
       id: id,
@@ -39,6 +41,7 @@ extension MessageInfoCopy on MessageInfo {
       createdAt: createdAt,
       parentMessageId: parentMessageId,
       reported: reported ?? this.reported,
+      sources: sources ?? this.sources,
     );
   }
 }

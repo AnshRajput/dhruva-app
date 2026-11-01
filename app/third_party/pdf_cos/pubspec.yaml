@@ -1,0 +1,23 @@
+name: pdf_cos
+description: >-
+  COS object layer for PDF: tokenizer, parser, filters (incl. CCITT, JBIG2,
+  JPEG 2000), xref machinery, encryption, and serializer. Pure Dart, web-ready.
+version: 14.0.0
+repository: https://github.com/ben-milanko/dart-pdf/tree/main/packages/pdf_cos
+issue_tracker: https://github.com/ben-milanko/dart-pdf/issues
+topics:
+  - pdf
+  - parser
+  - serialization
+  - encryption
+# Throwaway RSA test key used by the PKI known-answer tests.
+false_secrets:
+  - /test/pki_test.dart
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  archive: ^4.6.0  # dhruva: maxOutputSize (bounded decode) needs 4.6
+  crypto: ^3.0.0

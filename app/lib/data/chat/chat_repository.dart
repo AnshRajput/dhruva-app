@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../core/failures/app_failure.dart';
 import '../db/database.dart';
+import '../docs/grounding.dart';
 import 'chat_export.dart';
 import 'models/sampling_params.dart';
 
@@ -71,6 +72,10 @@ final class MessageInfo {
   /// The user reported this reply (see `data/safety/report_repository.dart`).
   final bool reported;
 
+  /// Document citations this reply was grounded in (chat with a document);
+  /// empty for an ordinary reply.
+  final List<DocSource> sources;
+
   const MessageInfo({
     required this.id,
     required this.conversationId,
@@ -84,6 +89,7 @@ final class MessageInfo {
     required this.createdAt,
     this.parentMessageId,
     this.reported = false,
+    this.sources = const [],
   });
 }
 
@@ -431,6 +437,18 @@ final class ChatRepository {
     await _touchUpdatedAt(message.conversationId);
   }
 
+  /// Records the document citations behind a grounded reply (shown as the
+  /// bubble's "Sources" row).
+  Future<void> setSources(int messageId, List<DocSource> sources) {
+    return (_db.update(
+      _db.messages,
+    )..where((t) => t.id.equals(messageId))).write(
+      MessagesCompanion(
+        sourcesJson: Value(sources.isEmpty ? null : encodeSources(sources)),
+      ),
+    );
+  }
+
   /// Ordered oldest-first (then by id, to break same-millisecond ties
   /// deterministically).
   Future<List<MessageInfo>> getMessages(int conversationId) async {
@@ -625,5 +643,6 @@ final class ChatRepository {
     createdAt: row.createdAt,
     parentMessageId: row.parentMessageId,
     reported: row.reported,
+    sources: decodeSources(row.sourcesJson),
   );
 }

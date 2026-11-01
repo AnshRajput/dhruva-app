@@ -24,6 +24,7 @@ class _V4Database extends AppDatabase {
       await m.createTable(messages);
       await m.createTable(characters);
       await customStatement('ALTER TABLE messages DROP COLUMN reported');
+      await customStatement('ALTER TABLE messages DROP COLUMN sources_json');
       await customStatement(
         'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
         'ON messages (conversation_id)',
@@ -56,7 +57,7 @@ void main() {
     await v4.close();
 
     final v5 = AppDatabase(NativeDatabase(file));
-    expect(v5.schemaVersion, 5);
+    expect(v5.schemaVersion, 6);
     final rows = await v5.select(v5.messages).get();
     expect(rows, hasLength(1));
     expect(rows.single.content, 'hello');

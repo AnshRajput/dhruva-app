@@ -21,6 +21,7 @@ import '../../vision/widgets/image_lightbox.dart';
 import '../../voice/widgets/tts_button.dart';
 import '../state/message_info_x.dart';
 import 'reasoning_block.dart';
+import 'sources_block.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageInfo message;
@@ -141,6 +142,8 @@ class MessageBubble extends StatelessWidget {
                 ],
               ),
             ),
+            if (!isUser && !isStreaming && message.sources.isNotEmpty)
+              SourcesBlock(sources: message.sources),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
               _MetadataRow(
