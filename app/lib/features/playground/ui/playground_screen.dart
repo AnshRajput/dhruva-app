@@ -153,7 +153,7 @@ class _InstallMorePrompt extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final message = installedCount == 0
-        ? 'The Playground runs one prompt through two models side by side so you '
+        ? 'Compare runs one prompt through two models side by side so you '
               'can compare their answers and speed. Install two GGUF models to '
               'try it.'
         : 'You have one model installed. Add one more to compare two side by '

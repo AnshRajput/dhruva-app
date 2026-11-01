@@ -175,7 +175,6 @@ void main() {
             deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
             onboardingStoreProvider.overrideWith((ref) async => store),
             prefsStoreProvider.overrideWith((ref) async => prefs),
-            prefsStoreProvider.overrideWith((ref) async => prefs),
             onboardingDownloadControllerProvider.overrideWith(
               _ReadyStubController.new,
             ),

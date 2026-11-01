@@ -8,6 +8,7 @@ import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import '../../../support/device_health_fakes.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
