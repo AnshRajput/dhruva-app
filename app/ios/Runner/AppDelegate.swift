@@ -7,6 +7,7 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    BackupExclusion.apply()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -47,6 +48,33 @@ enum DeviceHealthChannel {
         "charging": state == .charging || state == .full,
         "thermal": thermal,
       ])
+    }
+  }
+}
+
+/// Backup lockdown (daily-assistant spec B1). Marks the app's data
+/// directories (Documents: Drift DB; Application Support: models, flags,
+/// later the connector index) `NSURLIsExcludedFromBackupKey` so iCloud and
+/// iTunes/Finder backups never contain chats or connector data. The flag on a
+/// directory covers everything created inside it later; direct children are
+/// marked too as belt and braces. Runs on every launch (cheap, idempotent).
+enum BackupExclusion {
+  static func apply() {
+    let fm = FileManager.default
+    let roots: [URL] = [
+      fm.urls(for: .documentDirectory, in: .userDomainMask).first,
+      fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+    ].compactMap { $0 }
+    for var root in roots {
+      try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try? root.setResourceValues(values)
+      let children = (try? fm.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: nil)) ?? []
+      for var child in children {
+        try? child.setResourceValues(values)
+      }
     }
   }
 }
