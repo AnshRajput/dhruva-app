@@ -20,10 +20,21 @@ class FolderBlock extends ConsumerWidget {
 
   Future<void> _choose(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final status = await ref.read(connectorActionsProvider).chooseFolder();
-    if (status.state == ConnectorState.needsAttention &&
-        status.detail != null) {
-      messenger.showSnackBar(SnackBar(content: Text(status.detail!)));
+    try {
+      final status = await ref.read(connectorActionsProvider).chooseFolder();
+      if (status.state == ConnectorState.needsAttention &&
+          status.detail != null) {
+        messenger.showSnackBar(SnackBar(content: Text(status.detail!)));
+      }
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't open the folder picker. Try again, or check that "
+            'the file manager is enabled in system settings.',
+          ),
+        ),
+      );
     }
   }
 

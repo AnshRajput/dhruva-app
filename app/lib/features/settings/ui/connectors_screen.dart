@@ -142,22 +142,48 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
     final c = widget.entry.connector;
     final status = widget.entry.status;
     final copy = copyFor(c.id);
     final connected = status.isConnected;
     final line = statusLine(status, when: (d) => _whenText(context, d));
 
-    final trailing = connected
-        ? const Icon(Icons.chevron_right, size: 20)
-        : FilledButton.tonal(
-            key: ValueKey('connector-${c.id}-action'),
-            onPressed: _working ? null : _connect,
-            child: Text(copy.connectLabel),
-          );
+    final action = FilledButton.tonal(
+      key: ValueKey('connector-${c.id}-action'),
+      onPressed: _working ? null : _connect,
+      child: Text(copy.connectLabel),
+    );
 
+    return LayoutBuilder(
+      builder: (context, box) {
+        // On a narrow phone (360dp) a trailing button leaves the text column
+        // ~160dp: the action drops under the text instead.
+        final narrow = box.maxWidth < 420;
+        final trailing = connected
+            ? const Icon(Icons.chevron_right, size: 20)
+            : (narrow ? null : action);
+        return _body(
+          context,
+          copy: copy,
+          line: line,
+          trailing: trailing,
+          below: !connected && narrow ? action : null,
+        );
+      },
+    );
+  }
+
+  Widget _body(
+    BuildContext context, {
+    required ConnectorCopy copy,
+    required StatusLine line,
+    required Widget? trailing,
+    required Widget? below,
+  }) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final c = widget.entry.connector;
+    final connected = widget.entry.status.isConnected;
     return InkWell(
       key: ValueKey('connector-${c.id}'),
       onTap: connected
@@ -177,18 +203,16 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  // Wrap: the chip drops to its own line before a name can break
+                  // mid-word.
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: tokens.spacing.sm,
+                    runSpacing: tokens.spacing.xs,
                     children: [
-                      Flexible(
-                        child: Text(
-                          copy.name,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                      if (c.id == ConnectorIds.notifications) ...[
-                        SizedBox(width: tokens.spacing.sm),
+                      Text(copy.name, style: theme.textTheme.titleMedium),
+                      if (c.id == ConnectorIds.notifications)
                         const _AndroidChip(),
-                      ],
                     ],
                   ),
                   SizedBox(height: tokens.spacing.xs),
@@ -200,14 +224,20 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (below != null) ...[
+                    SizedBox(height: tokens.spacing.md),
+                    below,
+                  ],
                 ],
               ),
             ),
-            SizedBox(width: tokens.spacing.sm),
-            Padding(
-              padding: EdgeInsets.only(top: tokens.spacing.xs),
-              child: trailing,
-            ),
+            if (trailing != null) ...[
+              SizedBox(width: tokens.spacing.sm),
+              Padding(
+                padding: EdgeInsets.only(top: tokens.spacing.xs),
+                child: trailing,
+              ),
+            ],
           ],
         ),
       ),

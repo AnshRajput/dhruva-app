@@ -446,57 +446,55 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
             ),
             SizedBox(width: tokens.spacing.md),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // Wide: the app chip sits beside the title (as in the comp).
+                  // On a phone-width column the title keeps the whole line and
+                  // the chip drops below it, so a long app name never crushes it.
+                  final narrow = box.maxWidth < 300;
+                  final chip = _AppChip(label: item.appLabel);
+                  final title = Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: item.isRead
+                          ? FontWeight.w400
+                          : FontWeight.w700,
+                    ),
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(
-                          item.title,
+                      if (narrow)
+                        title
+                      else
+                        Row(
+                          children: [
+                            Flexible(child: title),
+                            SizedBox(width: tokens.spacing.sm),
+                            chip,
+                          ],
+                        ),
+                      if (line.isNotEmpty) ...[
+                        SizedBox(height: tokens.spacing.xs),
+                        Text(
+                          line,
+                          key: ValueKey('inbox-line-${item.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: item.isRead
-                                ? FontWeight.w400
-                                : FontWeight.w700,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
-                      ),
-                      SizedBox(width: tokens.spacing.sm),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(
-                            tokens.radius.full,
-                          ),
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: tokens.spacing.sm,
-                            vertical: tokens.spacing.xs / 2,
-                          ),
-                          child: Text(
-                            item.appLabel,
-                            style: theme.textTheme.labelSmall,
-                          ),
-                        ),
-                      ),
+                      ],
+                      if (narrow) ...[
+                        SizedBox(height: tokens.spacing.xs),
+                        chip,
+                      ],
                     ],
-                  ),
-                  if (line.isNotEmpty) ...[
-                    SizedBox(height: tokens.spacing.xs),
-                    Text(
-                      line,
-                      key: ValueKey('inbox-line-${item.id}'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
+                  );
+                },
               ),
             ),
             SizedBox(width: tokens.spacing.sm),
@@ -579,6 +577,40 @@ class _InboxSkeleton extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The app-name pill. Capped so a very long app name ellipsises instead of
+/// overflowing its row.
+class _AppChip extends StatelessWidget {
+  const _AppChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 160),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(tokens.radius.full),
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: tokens.spacing.sm,
+            vertical: tokens.spacing.xs / 2,
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall,
+          ),
         ),
       ),
     );

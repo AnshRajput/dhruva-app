@@ -15,11 +15,13 @@ import 'package:dhruva/features/inbox/ui/inbox_item_screen.dart';
 import 'package:dhruva/features/inbox/ui/inbox_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/app_harness.dart' show harnessDeviceInfo;
 import '../../support/connector_ui_harness.dart';
+import '../../support/load_fonts.dart';
 
 Finder _key(String k) => find.byKey(ValueKey(k));
 
@@ -233,6 +235,53 @@ void main() {
       await tester.tap(_key('inbox-filter-all'));
       await tester.pumpAndSettle();
       expect(find.text('#design-crit'), findsOneWidget);
+    });
+
+    testWidgets('360dp with the real font: long app names never crush the '
+        'title or overflow', (tester) async {
+      await loadAppFonts();
+      final ui = await pumpConnectorScreen(
+        tester,
+        const InboxScreen(),
+        surface: const Size(360, 800),
+      );
+      ui.kit.notifications.granted = true;
+      await ui.kit.hub.notifications.connect();
+      final at = DateTime.now();
+      await ui.kit.hub.store.upsertItems('notifications', [
+        _draft(
+          '1',
+          pkg: 'o',
+          app: 'Microsoft Outlook',
+          at: at,
+          title: 'Standup moved to 10:30',
+        ),
+        _draft(
+          '2',
+          pkg: 'g',
+          app: 'Google Pay for Business',
+          at: at,
+          title: 'Invoice 2041 paid',
+        ),
+        _draft(
+          '3',
+          pkg: 'x',
+          app: 'Some Long App Name N',
+          at: at,
+          title: 'Hello there',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      // The title keeps real room, and is not ellipsised to a stub.
+      for (final title in [
+        'Standup moved to 10:30',
+        'Invoice 2041 paid',
+        'Hello there',
+      ]) {
+        final t = tester.renderObject<RenderParagraph>(find.text(title));
+        expect(t.didExceedMaxLines, isFalse, reason: title);
+      }
     });
 
     testWidgets('a cached summary replaces the raw text', (tester) async {

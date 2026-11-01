@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/connector_ui_harness.dart';
 import '../../../support/fake_connector_sources.dart';
+import '../../../support/load_fonts.dart';
 
 /// The screen with the app-root resume hook the real app has.
 class _Host extends ConsumerWidget {
@@ -44,6 +45,30 @@ void main() {
       expect(find.textContaining('one-time codes'), findsOneWidget);
       expect(find.textContaining('Gmail'), findsNothing);
       expect(find.text('Android'), findsOneWidget);
+    });
+
+    testWidgets('360dp with the real font: names stay whole, the action sits '
+        'under the text, nothing overflows', (tester) async {
+      await loadAppFonts();
+      await pumpConnectorScreen(
+        tester,
+        const _Host(),
+        surface: const Size(360, 800),
+      );
+      expect(tester.takeException(), isNull);
+      for (final id in ['calendar', 'contacts', 'folder', 'notifications']) {
+        final row = tester.getRect(_key('connector-$id'));
+        final button = tester.getRect(_key('connector-$id-action'));
+        expect(button.right, lessThanOrEqualTo(row.right), reason: id);
+      }
+      // Names are one unbroken line (not wrapped mid-word).
+      expect(tester.getSize(find.text('Notifications')).height, lessThan(30));
+      expect(tester.getSize(find.text('Notes folder')).height, lessThan(30));
+      // The action is below the name, not squeezing it.
+      expect(
+        tester.getTopLeft(_key('connector-notifications-action')).dy,
+        greaterThan(tester.getBottomLeft(find.text('Notifications')).dy),
+      );
     });
 
     testWidgets('notifications are not listed where the platform has no '

@@ -98,6 +98,15 @@ class _ConnectorSheetState extends ConsumerState<ConnectorSheet> {
           ),
         ),
       );
+    } catch (_) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            "Couldn't disconnect ${copy.name}. Try again, or turn it off "
+            'in system settings.',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _working = false);
     }
