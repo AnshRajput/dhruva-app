@@ -175,7 +175,11 @@ List<StoredChunk> selectExcerpts({
 final class GroundedPrompt {
   final String prompt;
   final List<DocSource> sources;
-  const GroundedPrompt(this.prompt, this.sources);
+
+  /// Just the tagged excerpts ("Excerpts:\n[p.3]\n..."), for Ask turns that
+  /// also search connector sources and need one combined prompt.
+  final String excerptsText;
+  const GroundedPrompt(this.prompt, this.sources, {this.excerptsText = ''});
 }
 
 /// Builds the user turn that replaces the plain [question] when documents
@@ -194,17 +198,19 @@ GroundedPrompt buildGroundedPrompt({
       'After each fact, cite its page like [p.3].',
     )
     ..writeln();
+  final ex = StringBuffer();
   if (excerpts.isEmpty) {
-    b.writeln('Excerpts: (none found)');
+    ex.writeln('Excerpts: (none found)');
   } else {
-    b.writeln('Excerpts:');
+    ex.writeln('Excerpts:');
     for (final e in excerpts) {
-      b.writeln('[p.${e.page}]${multiDoc ? ' (${e.docName})' : ''}');
-      b.writeln(e.text);
-      b.writeln();
+      ex.writeln('[p.${e.page}]${multiDoc ? ' (${e.docName})' : ''}');
+      ex.writeln(e.text);
+      ex.writeln();
     }
   }
   b
+    ..write(ex)
     ..writeln('Question: ${question.trim()}')
     ..write('Answer:');
 
@@ -223,7 +229,11 @@ GroundedPrompt buildGroundedPrompt({
       ),
     );
   }
-  return GroundedPrompt(b.toString(), sources);
+  return GroundedPrompt(
+    b.toString(),
+    sources,
+    excerptsText: ex.toString().trimRight(),
+  );
 }
 
 String _snippet(String text, {int max = 160}) {
