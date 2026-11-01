@@ -7,6 +7,7 @@
 /// detected and reported rather than OCR'd.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -16,6 +17,7 @@ import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 
 import 'doc_chunker.dart';
+import 'pdf_inflate_guard.dart';
 
 /// Hard file-size limit.
 const maxDocumentBytes = 20 * 1024 * 1024;
@@ -23,6 +25,10 @@ const maxDocumentBytes = 20 * 1024 * 1024;
 /// Hard extracted-text limit (about 100k tokens, far past any phone context
 /// but the retrieval index stays small enough to hold in memory).
 const maxDocumentChars = 400000;
+
+/// A read that runs longer than this is killed (the isolate is cancellable,
+/// unlike `Isolate.run`) as a backstop for inputs the guards do not model.
+const _extractTimeout = Duration(seconds: 60);
 
 /// A PDF with fewer characters than this has no usable text layer.
 const _minUsableChars = 50;
@@ -85,9 +91,26 @@ Future<ExtractedDocument> extractDocumentFile(String path, String name) async {
       'That file is over 20 MB. Choose a smaller document.',
     );
   }
-  final result = await Isolate.run(() => _extractInIsolate(path, name));
-  final doc = result.doc;
-  if (doc == null) throw result.failure!;
+  final port = ReceivePort();
+  final isolate = await Isolate.spawn(
+    (SendPort out) => out.send(_extractInIsolate(path, name)),
+    port.sendPort,
+    onExit: port.sendPort, // a crash without a result arrives as null.
+  );
+  final Object? message = await port.first.timeout(
+    _extractTimeout,
+    onTimeout: () => null,
+  );
+  isolate.kill(priority: Isolate.immediate);
+  port.close();
+  if (message is! _Result) {
+    throw const DocumentException(
+      DocumentFailureKind.unreadable,
+      "Couldn't read that file in a reasonable time. It may be too complex.",
+    );
+  }
+  final doc = message.doc;
+  if (doc == null) throw message.failure!;
   return doc;
 }
 
@@ -180,6 +203,15 @@ ExtractedDocument _extractText(
 }
 
 ExtractedDocument _extractPdf(Uint8List bytes, String name) {
+  // Refuse decompression bombs before the parser (which has no output cap)
+  // ever sees the stream.
+  if (!pdfInflateWithinLimits(bytes)) {
+    throw const DocumentException(
+      DocumentFailureKind.tooLarge,
+      'That PDF expands to far more data than a normal document, so Dhruva '
+      "won't open it. It may be damaged or unsafe.",
+    );
+  }
   final PdfDocument doc;
   try {
     doc = PdfDocument.open(bytes);

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 /// Builds a minimal, valid, text-bearing PDF with one page per entry of
@@ -48,4 +49,36 @@ Uint8List buildTinyPdf(List<String> pages) {
     'startxref\n$xrefAt\n%%EOF\n',
   );
   return Uint8List.fromList(latin1.encode(out.toString()));
+}
+
+/// Builds a one-page PDF whose content stream is [content] compressed with
+/// FlateDecode. With a highly repetitive [content] this is a decompression
+/// bomb: a few KB on disk, hundreds of MB inflated.
+Uint8List buildFlatePdf(List<int> content) {
+  final data = ZLibEncoder(level: 9).convert(content);
+  final b = BytesBuilder();
+  final offs = <int>[];
+  void w(String s) => b.add(latin1.encode(s));
+  w('%PDF-1.4\n');
+  for (final o in [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '
+        '/Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>',
+  ]) {
+    offs.add(b.length);
+    w('${offs.length} 0 obj\n$o\nendobj\n');
+  }
+  offs.add(b.length);
+  w('5 0 obj\n<< /Length ${data.length} /Filter /FlateDecode >>\nstream\n');
+  b.add(data);
+  w('\nendstream\nendobj\n');
+  final x = b.length;
+  w('xref\n0 6\n0000000000 65535 f \n');
+  for (final o in offs) {
+    w('${o.toString().padLeft(10, '0')} 00000 n \n');
+  }
+  w('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n$x\n%%EOF\n');
+  return b.takeBytes();
 }
