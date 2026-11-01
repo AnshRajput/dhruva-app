@@ -58,7 +58,15 @@ Uint8List _measured(
     'bufferPeakLive=${(DecodeBufferStats.peakLiveBytes / _mb).toStringAsFixed(1)} MB',
   );
   expect(out.length, expectedLength);
-  expect(rssDelta, lessThan(3 * _cap), reason: '$name real memory growth');
+  // RSS has a fixed noise floor (allocator pages, zlib state) that no longer
+  // scales with the 4 MB stage cap, so 3x the cap alone (12 MB) is below it.
+  // The blow-ups this guards against were hundreds of MB.
+  const rssFloor = 32 * _mb;
+  expect(
+    rssDelta,
+    lessThan(3 * _cap > rssFloor ? 3 * _cap : rssFloor),
+    reason: '$name real memory growth',
+  );
   if (usesBuffer) {
     expect(
       DecodeBufferStats.allocations,

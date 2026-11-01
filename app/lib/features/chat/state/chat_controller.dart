@@ -24,7 +24,11 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
+import '../../../core/device_health/device_guard_policy.dart';
+import '../../../core/device_health/device_health.dart';
+import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/di/speed_providers.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
@@ -149,6 +153,11 @@ final class ChatThreadState {
   /// composer until dismissed.
   final String? documentError;
 
+  /// Assistant messages cut short by the battery & heat guard (thermal
+  /// critical). The partial text is kept; the thread shows a note under it.
+  /// Session-only, same precedent as [reasoningDurationMs].
+  final Set<int> heatStoppedMessageIds;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -172,6 +181,7 @@ final class ChatThreadState {
     this.documents = const [],
     this.extractingDocName,
     this.documentError,
+    this.heatStoppedMessageIds = const {},
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -215,6 +225,7 @@ final class ChatThreadState {
     bool clearExtractingDocName = false,
     String? documentError,
     bool clearDocumentError = false,
+    Set<int>? heatStoppedMessageIds,
   }) {
     return ChatThreadState(
       conversationId: conversationId ?? this.conversationId,
@@ -247,6 +258,8 @@ final class ChatThreadState {
       documentError: clearDocumentError
           ? null
           : (documentError ?? this.documentError),
+      heatStoppedMessageIds:
+          heatStoppedMessageIds ?? this.heatStoppedMessageIds,
     );
   }
 }
@@ -320,7 +333,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// flush-timer). This flag is set synchronously at the entry of every
   /// generation path BEFORE the first `await`, checked by all of them, and
   /// cleared on every exit path — so exactly one turn is ever in flight.
-  bool _turnInFlight = false;
+  bool get _turnInFlight => _turnInFlightFlag;
+  set _turnInFlight(bool value) {
+    if (value == _turnInFlightFlag) return;
+    _turnInFlightFlag = value;
+    // Mirror into the app-wide engine lease so a speed test never starts
+    // while a turn is in flight.
+    value ? _lease.chatEnter() : _lease.chatLeave();
+  }
+
+  bool _turnInFlightFlag = false;
+
+  /// Captured in [build] (a plain object, safe to use after provider disposal).
+  late EngineLease _lease;
 
   /// Set when the streamed reply tripped [SafetyGuard.blocks]: further
   /// tokens are dropped and the reply is replaced by the notice.
@@ -331,6 +356,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// has no free-text-detail column beyond `errorKind`'s label), so a
   /// failure's exact text is only available for the current app session.
   final Map<int, String> _errorDetails = {};
+
+  /// True while this controller holds a [deviceHealthProvider] polling lease
+  /// (only while a generation is in flight).
+  bool _holdsHealthLease = false;
+
+  /// The assistant message the heat guard asked the engine to stop.
+  int? _heatStoppedId;
 
   ChatRepository get _repo => ref.read(chatRepositoryProvider);
   DocumentRepository get _docs => ref.read(documentRepositoryProvider);
@@ -353,11 +385,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   @override
   Future<ChatThreadState> build() async {
+    _lease = ref.read(engineLeaseProvider);
     ref.onDispose(() {
       _disposed = true;
       unawaited(_genSub?.cancel());
       _flushTimer?.cancel();
+      _releaseHealthLease();
     });
+    // Heat guard: a critical reading while this thread is streaming stops the
+    // reply gracefully. The poller only runs while a generation holds a lease.
+    ref.listen(deviceHealthProvider, (_, health) => _stopIfTooHot(health));
 
     final conversationId = args.conversationId;
     if (conversationId == null) {
@@ -486,14 +523,28 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// [_loadInFlight]) so a second call can never start a second
   /// `engine.load()`/isolate while the first is still awaiting.
   Future<void> ensureModelLoaded() {
-    return _loadInFlight ??= _ensureModelLoaded().whenComplete(() {
-      _loadInFlight = null;
-    });
+    return _loadInFlight ??= () {
+      _lease.chatEnter();
+      return _ensureModelLoaded().whenComplete(() {
+        _loadInFlight = null;
+        _lease.chatLeave();
+      });
+    }();
   }
 
   Future<void> _ensureModelLoaded() async {
     final current = state.value;
     if (current == null || current.modelId == null || current.isGenerating) {
+      return;
+    }
+    // A speed test owns the engine (it swaps the loaded model): don't load or
+    // generate underneath it. Surfaces as the "model is busy" error card.
+    if (_lease.speedTestRunning) {
+      state = AsyncData(
+        current.copyWith(
+          modelLoadError: const EngineStateFailure('a speed test is running'),
+        ),
+      );
       return;
     }
     final engine = ref.read(engineServiceProvider);
@@ -1008,6 +1059,11 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       return;
     }
 
+    if (!_holdsHealthLease) {
+      _holdsHealthLease = ref
+          .read(deviceHealthProvider.notifier)
+          .startPollingIfEnabled();
+    }
     state = AsyncData(
       current.copyWith(
         isGenerating: true,
@@ -1124,6 +1180,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             if (!completer.isCompleted) completer.complete();
           },
         );
+    // A reading taken before the stream existed (or an unchanged "critical",
+    // which the listener never re-reports) must still stop this reply.
+    if (_holdsHealthLease) _stopIfTooHot(ref.read(deviceHealthProvider));
     await completer.future;
   }
 
@@ -1325,6 +1384,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         awaitingFirstToken: false,
         liveTokPerSec: 0,
         clearStreamingMessageId: true,
+        heatStoppedMessageIds: _heatStoppedId == id
+            ? {...current.heatStoppedMessageIds, id}
+            : null,
       ),
     );
     _resetStreamState();
@@ -1398,7 +1460,37 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _flushTimer = null;
     _keepAliveLink?.close();
     _keepAliveLink = null;
+    _heatStoppedId = null;
+    _releaseHealthLease();
     _turnInFlight = false;
+  }
+
+  void _stopIfTooHot(DeviceHealth health) {
+    final id = _activeAssistantId;
+    if (id == null || _heatStoppedId != null) return;
+    if (DeviceGuardPolicy.thermalAction(health.thermal) == ThermalAction.stop) {
+      _heatStoppedId = id;
+      unawaited(cancel());
+    }
+  }
+
+  void _releaseHealthLease() {
+    if (!_holdsHealthLease) return;
+    _holdsHealthLease = false;
+    // Notifier may already be gone when the whole container is disposing.
+    if (ref.mounted) ref.read(deviceHealthProvider.notifier).stopPolling();
+  }
+
+  /// Heat guard action: stop any in-flight reply (partial text is kept), then
+  /// switch this conversation to [model] (the smallest installed one).
+  Future<void> useLighterModel(InstalledModelInfo model) async {
+    if (state.value?.isGenerating ?? false) await cancel();
+    // ponytail: poll for the cancel to land; an event-driven wait needs a
+    // completer threaded through _resetStreamState, not worth it for a tap.
+    for (var i = 0; i < 100 && _turnInFlight; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    await switchModel(model);
   }
 
   /// Raw failure text for a finalized error message's "Copy error details"

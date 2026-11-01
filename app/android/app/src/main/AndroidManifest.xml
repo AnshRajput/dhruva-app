@@ -74,6 +74,33 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity-alias>
+        <!-- Quick Settings tile "Ask Dhruva": opens a new chat via the same
+             `route` intent the launcher shortcuts use. BIND_QUICK_SETTINGS_TILE
+             restricts binding to the system. -->
+        <service
+            android:name=".DhruvaTileService"
+            android:exported="true"
+            android:label="@string/tile_label"
+            android:icon="@drawable/ic_tile_star"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
+        <!-- Home-screen widget (4x1, resizable to 2x1). Exported so the launcher
+             can send APPWIDGET_UPDATE; the actions it triggers are PendingIntents
+             we own. -->
+        <receiver
+            android:name=".DhruvaWidgetProvider"
+            android:exported="true"
+            android:label="@string/tile_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dhruva_widget_info"/>
+        </receiver>
         <!-- background_downloader runs its download via a WorkManager worker that
              promotes itself to a foreground service (Config.runInForeground). On
              API 34+, WorkManager's SystemForegroundService starts foreground with

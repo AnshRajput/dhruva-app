@@ -21,6 +21,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/di/speed_providers.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../engine_bindings/engine_service.dart';
 
@@ -155,6 +156,11 @@ class PlaygroundController extends Notifier<PlaygroundState> {
   }) async {
     final trimmed = prompt.trim();
     if (trimmed.isEmpty || state.isRunning) return;
+    // ponytail: a speed test owns the engine for ~20s; the run button is a
+    // no-op until it ends rather than a new error state.
+    final lease = ref.read(engineLeaseProvider);
+    if (lease.speedTestRunning) return;
+    lease.chatEnter();
     _aborted = false;
     // Model B waits its turn while A loads + streams (single-session, ADR-001),
     // so mark it queued rather than idle/"Ready" — it never reads as inert.
@@ -170,6 +176,7 @@ class PlaygroundController extends Notifier<PlaygroundState> {
         await _runSlot(engine, modelB, isA: false, prompt: trimmed);
       }
     } finally {
+      lease.chatLeave();
       _flushTimer?.cancel();
       // Hand the shared single-session engine back (see header) so chat
       // reloads its own model on the next send.

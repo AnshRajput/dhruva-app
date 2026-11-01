@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/benchmark/speed_result.dart';
 import '../../data/downloads/download_manager.dart';
 import '../../data/models/starter_catalog.dart';
 import '../../features/characters/state/installed_models_provider.dart'
@@ -33,6 +34,7 @@ import '../../features/characters/state/installed_models_provider.dart'
 import '../../features/chat/state/installed_models_provider.dart'
     as chat_installed;
 import '../../features/models_hub/state/downloads_controller.dart';
+import '../../features/models_hub/state/speed_test_controller.dart';
 import '../../features/models_hub/state/storage_controller.dart';
 import '../../features/playground/state/playground_installed_models_provider.dart'
     as playground_installed;
@@ -101,6 +103,10 @@ class AppShell extends ConsumerWidget {
       if (model != null) {
         final readyRepo = model.repoId;
         final readyFile = model.fileName;
+        // One-time, dismissible offer — shown on the Installed tab.
+        ref
+            .read(speedTestOfferProvider.notifier)
+            .offer(speedKey(readyRepo, readyFile));
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(

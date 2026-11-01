@@ -32,6 +32,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'support/device_health_fakes.dart';
 import 'support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -76,6 +77,7 @@ void main() {
       ProviderScope(
         overrides: [
           engineServiceProvider.overrideWithValue(FakeEngineService()),
+          ...deviceHealthTestOverrides(),
           downloadManagerProvider.overrideWith((ref) async => manager),
           appDatabaseProvider.overrideWithValue(db),
           modelsDirectoryProvider.overrideWith((ref) async => modelsDir),

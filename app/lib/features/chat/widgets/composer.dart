@@ -48,6 +48,10 @@ class Composer extends ConsumerStatefulWidget {
   /// without passing this.
   final bool isMultimodal;
   final void Function(String text, Uint8List? imageBytes) onSend;
+
+  /// Asked before a send clears the input; false keeps the draft untouched
+  /// (battery guard's "confirm before starting"). Null = always send.
+  final Future<bool> Function()? beforeSend;
   final VoidCallback onCancel;
   final VoidCallback onOpenSettings;
 
@@ -77,6 +81,7 @@ class Composer extends ConsumerStatefulWidget {
     this.documentError,
     this.isMultimodal = false,
     required this.onSend,
+    this.beforeSend,
     required this.onCancel,
     required this.onOpenSettings,
   });
@@ -105,8 +110,10 @@ class _ComposerState extends ConsumerState<Composer> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (widget.isGenerating || (!_hasText && _attachedImage == null)) return;
+    final gate = widget.beforeSend;
+    if (gate != null && !(await gate()) || !mounted) return;
     final text = _controller.text;
     final image = _attachedImage;
     _controller.clear();
@@ -208,9 +215,11 @@ class _ComposerState extends ConsumerState<Composer> {
 
   void _removeAttachedImage() => setState(() => _attachedImage = null);
 
-  void _extractText() {
+  Future<void> _extractText() async {
     final image = _attachedImage;
     if (image == null) return;
+    final gate = widget.beforeSend;
+    if (gate != null && !(await gate()) || !mounted) return;
     _controller.clear();
     setState(() {
       _attachedImage = null;
