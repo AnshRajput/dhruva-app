@@ -201,6 +201,10 @@ void main() {
       // so its timer doesn't outlive the test.
       expect(find.textContaining('is ready — start chatting'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
+      // It has an action ("Start chatting"), which makes Flutter keep a
+      // snackbar until dismissed: this one must go away by itself.
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('is ready — start chatting'), findsNothing);
     },
   );
 }

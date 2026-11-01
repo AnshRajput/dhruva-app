@@ -9,6 +9,7 @@ import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/core/theme/brand_star.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
@@ -23,10 +24,14 @@ import '../../../support/fake_connector_sources.dart';
 
 class _FakeOnboardingStore implements OnboardingStore {
   bool complete = false;
+  int completes = 0;
   @override
   Future<bool> isComplete() async => complete;
   @override
-  Future<void> markComplete() async => complete = true;
+  Future<void> markComplete() async {
+    completes++;
+    complete = true;
+  }
 }
 
 /// Keeps the flow off the real download pipeline (platform channels) for the
@@ -150,6 +155,30 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Get started'), findsOneWidget);
+  });
+
+  testWidgets('welcome sits balanced: the same space above the mark as below '
+      'the last button', (tester) async {
+    await _pump(tester);
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    await tester.pumpAndSettle();
+    final top = tester.getTopLeft(find.byType(DhruvaStar)).dy;
+    final bottom = 900 - tester.getBottomLeft(find.text('Skip for now')).dy;
+    // The skip button's tap target is taller than its label, so allow a
+    // button's worth of slack; a top-hugging layout is hundreds of px off.
+    expect((top - bottom).abs(), lessThan(24));
+    expect(top, greaterThan(80));
+  });
+
+  testWidgets('finishing twice (a second tap while Today slides in) runs '
+      'once', (tester) async {
+    final store = await _pump(tester);
+    await tester.tap(find.text('Skip for now'));
+    await tester.pump(); // the first finish is still saving
+    await tester.tap(find.text('Skip for now'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(store.completes, 1);
+    expect(find.text('chat-home'), findsOneWidget);
   });
 
   testWidgets('skip on welcome marks onboarding done and lands on Today', (

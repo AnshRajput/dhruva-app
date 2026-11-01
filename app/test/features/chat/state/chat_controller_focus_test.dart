@@ -228,6 +228,47 @@ void main() {
     },
   );
 
+  test(
+    'Prep (Today): the focused event is quoted in LOCAL time, the answer '
+    'shows its source chip, and the stored message is only the question',
+    () async {
+      await store.saveAccount('calendar');
+      await store.upsertItems('calendar', [
+        ItemDraft(
+          externalId: 'e1',
+          kind: ItemKind.event,
+          title: 'Budget review',
+          startsAt: DateTime(2026, 11, 2, 11),
+          flags: {'end': DateTime(2026, 11, 2, 12).millisecondsSinceEpoch},
+        ),
+      ]);
+      final id = (await db.select(db.items).get()).single.id;
+      final (container, engine, args) = await open(
+        focus: [id],
+        sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
+      );
+      await container
+          .read(chatControllerProvider(args).notifier)
+          .sendMessage('Prep me for my 11:00 AM meeting.');
+      final prompt = engine.lastMessages!.last.content;
+      expect(prompt, contains('[1] event | Budget review | Mon 2 Nov, 11:00'));
+      expect(prompt, contains('\u201312:00'));
+      expect(prompt, isNot(contains('T0')));
+      expect(prompt, isNot(contains('Z |')));
+
+      final state = container.read(chatControllerProvider(args)).value!;
+      final user = state.messages.firstWhere((m) => m.role == MessageRole.user);
+      expect(user.content, 'Prep me for my 11:00 AM meeting.');
+      // The scripted answer cites nothing, and the chip is there anyway.
+      final reply = state.messages.lastWhere(
+        (m) => m.role == MessageRole.assistant,
+      );
+      expect(reply.itemSources.map((s) => s.label), [
+        'Mon 2 Nov, Budget review',
+      ]);
+    },
+  );
+
   test('a focus item that no longer exists is simply ignored', () async {
     final (container, engine, args) = await open(focus: [9999]);
     await container
