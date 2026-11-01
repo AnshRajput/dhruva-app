@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/device_health/device_guard_policy.dart';
+import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -17,11 +19,13 @@ import '../../../data/chat/chat_repository.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/installed_models_provider.dart';
+import '../state/lighter_model.dart';
 import '../state/message_info_x.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
 import '../widgets/empty_states.dart';
+import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
 import '../widgets/report_sheet.dart';
@@ -238,7 +242,13 @@ class _ThreadScaffold extends ConsumerWidget {
                         : SuggestedPrompts(
                             onSelect: (prompt) {
                               onScrollToBottom();
-                              controller.sendMessage(prompt);
+                              unawaited(
+                                _confirmStart(context, ref).then((ok) {
+                                  if (ok) {
+                                    unawaited(controller.sendMessage(prompt));
+                                  }
+                                }),
+                              );
                             },
                             // Vision is advertised ("analyze photos") but has
                             // no guided path from a loaded text model — surface
@@ -336,6 +346,24 @@ class _ThreadScaffold extends ConsumerWidget {
                   ),
           ),
           if (state.modelLoading) const LinearProgressIndicator(),
+          if (state.isGenerating &&
+              DeviceGuardPolicy.thermalAction(
+                    ref.watch(deviceHealthProvider.select((h) => h.thermal)),
+                  ) ==
+                  ThermalAction.warn)
+            Builder(
+              builder: (context) {
+                final lighter = lighterModel(
+                  ref.watch(installedModelsProvider).value ?? const [],
+                  state.model,
+                );
+                return HeatBanner(
+                  onUseLighterModel: lighter == null
+                      ? null
+                      : () => controller.useLighterModel(lighter),
+                );
+              },
+            ),
           // Designer BLOCKING #1: chat-spec.md §7.1 — "no composer visible
           // on this state" whenever there's no model to send to (fresh
           // draft with none picked yet, OR an existing conversation whose
@@ -347,6 +375,7 @@ class _ThreadScaffold extends ConsumerWidget {
             Composer(
               isGenerating: state.isGenerating,
               isMultimodal: state.isMultimodal,
+              beforeSend: () => _confirmStart(context, ref),
               onSend: (text, imageBytes) {
                 onScrollToBottom();
                 controller.sendMessage(text, imageBytes: imageBytes);
@@ -381,7 +410,7 @@ class _ThreadScaffold extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final canAct = !state.isGenerating;
-    return MessageBubble(
+    final bubble = MessageBubble(
       message: message,
       isStreaming: isStreamingMessage,
       reasoningDurationMs: state.reasoningDurationMs[message.id],
@@ -390,7 +419,11 @@ class _ThreadScaffold extends ConsumerWidget {
           !state.reasoningDurationMs.containsKey(message.id),
       attachedImage: state.attachedImages[message.id],
       onRegenerate: message.role == MessageRole.assistant && canAct
-          ? () => controller.regenerate(message.id)
+          ? () => unawaited(
+              _confirmStart(context, ref).then((ok) {
+                if (ok) unawaited(controller.regenerate(message.id));
+              }),
+            )
           : null,
       onEdit: message.role == MessageRole.user && canAct
           ? () => _editMessage(context, message)
@@ -407,6 +440,56 @@ class _ThreadScaffold extends ConsumerWidget {
             )
           : null,
     );
+    if (!state.heatStoppedMessageIds.contains(message.id)) return bubble;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [bubble, const HeatStoppedNote()],
+    );
+  }
+
+  /// Battery guard, before a generation starts: a low-battery warning is a
+  /// one-time snackbar (non-blocking); critically low asks first. Returns
+  /// whether to go ahead.
+  Future<bool> _confirmStart(BuildContext context, WidgetRef ref) async {
+    final health = ref.read(deviceHealthProvider.notifier);
+    final advice = await health.preGenerationAdvice();
+    if (!context.mounted) return false;
+    final percent = ref.read(deviceHealthProvider).batteryPercent;
+    switch (advice) {
+      case BatteryAdvice.none:
+        return true;
+      case BatteryAdvice.warn:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Battery is at $percent%. Replies use a lot of power.',
+            ),
+          ),
+        );
+        return true;
+      case BatteryAdvice.confirm:
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Battery is almost empty'),
+            content: Text(
+              'Your battery is at $percent% and not charging. Generating a '
+              'reply could drain it. Continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Not now'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        );
+        return go == true;
+    }
   }
 
   Future<void> _editMessage(BuildContext context, MessageInfo message) async {
