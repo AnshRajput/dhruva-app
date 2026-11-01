@@ -1,4 +1,4 @@
-// QA (Loop-4 attack list #8): navigation — deep links, back behavior, and
+// QA (Loop-4 attack list #8, updated for the daily-assistant shell): navigation — deep links, back behavior, and
 // state preservation across bottom-nav tab switches, driven through the
 // real `appRouter` singleton + `DhruvaApp` (same harness shape as
 // app_shell_test.dart).
@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -35,7 +36,7 @@ void main() {
     // appRouter is a top-level singleton shared across the whole test
     // process (imported, not constructed per-test) — reset its location
     // before every test so navigation state never leaks between tests.
-    appRouter.go('/chat');
+    appRouter.go('/ask');
   });
 
   tearDown(() async {
@@ -105,12 +106,12 @@ void main() {
     expect(find.textContaining('Zero telemetry'), findsOneWidget);
   });
 
-  testWidgets('back navigation from a pushed About page returns to /chat', (
+  testWidgets('back navigation from a pushed About page returns to Ask', (
     tester,
   ) async {
     await pumpApp(tester);
-    // Confirms we're starting on the Chat tab/home.
-    expect(find.text('Chats'), findsOneWidget);
+    // Confirms we're starting on the Ask tab (the old Chat tab).
+    expect(find.byTooltip('Personas'), findsOneWidget);
 
     unawaited(appRouter.push('/settings/about'));
     await tester.pumpAndSettle();
@@ -120,12 +121,12 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chats'), findsOneWidget);
+    expect(find.byTooltip('Personas'), findsOneWidget);
     expect(find.text('Dhruva AI'), findsNothing);
   });
 
   testWidgets(
-    'chat list scroll position survives a visit to the Models tab and back',
+    'chat list scroll position survives a visit to the Library tab and back',
     (tester) async {
       final baseTime = DateTime.utc(2026, 1, 1);
       for (var i = 0; i < 30; i++) {
@@ -162,13 +163,18 @@ void main() {
           .pixels;
       expect(offsetAfterScroll, greaterThan(0));
 
-      // Visit the Models tab...
-      await tester.tap(find.text('Models'));
+      // Visit the Library tab...
+      await tester.tap(find.text('Library'));
       await tester.pumpAndSettle();
-      expect(find.text('Chats'), findsNothing);
+      expect(find.byTooltip('Personas'), findsNothing);
 
-      // ...and back to Chat.
-      await tester.tap(find.text('Chat'));
+      // ...and back to Ask.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Ask'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final verticalListAfter = find.byWidgetPredicate(

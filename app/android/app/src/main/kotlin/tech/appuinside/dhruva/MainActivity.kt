@@ -43,6 +43,12 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    // FlutterActivity treats an intent extra named `route` as the engine's
+    // initial route, so a shortcut `route=new_chat` would hit go_router as
+    // "/new_chat" before IntentInbox runs. Always boot at "/"; IntentInbox
+    // owns shortcut routing.
+    override fun getInitialRoute(): String = "/"
+
     // singleTop: a share/shortcut while the app is open lands here, not onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

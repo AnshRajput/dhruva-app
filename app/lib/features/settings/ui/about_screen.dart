@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../app_info.dart';
@@ -48,7 +49,7 @@ class AboutScreen extends StatelessWidget {
             SizedBox(height: tokens.spacing.md),
             Center(
               child: Text(
-                'Dhruva AI',
+                AppIdentity.productName,
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),

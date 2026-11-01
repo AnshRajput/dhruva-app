@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
@@ -331,7 +332,7 @@ class _ComposerState extends ConsumerState<Composer> {
                             decoration: InputDecoration(
                               filled: false,
                               border: InputBorder.none,
-                              hintText: 'Message Dhruva…',
+                              hintText: 'Message ${AppIdentity.shortName}…',
                               hintStyle: theme.textTheme.bodyLarge?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),

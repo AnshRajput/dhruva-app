@@ -1,4 +1,4 @@
-/// Characters gallery (Loop 5) — the `/characters` tab: a grid of built-in +
+/// Personas gallery (Loop 5, formerly the Characters tab; now `/personas`, reached from Ask): a grid of built-in +
 /// user characters, a "+ Create" affordance, and a file → parse → preview →
 /// save import entry point for community character cards.
 library;
@@ -29,7 +29,7 @@ class CharactersGalleryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Characters'),
+        title: const Text('Personas'),
         actions: [
           PopupMenuButton<bool>(
             tooltip: 'Import a character card',
@@ -125,7 +125,7 @@ class _GalleryBody extends ConsumerWidget {
               DhruvaStar(size: 72, color: theme.colorScheme.primary),
               SizedBox(height: tokens.spacing.lg),
               Text(
-                'No characters yet',
+                'No personas yet',
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
@@ -140,7 +140,7 @@ class _GalleryBody extends ConsumerWidget {
               SizedBox(height: tokens.spacing.lg),
               FilledButton(
                 onPressed: () => context.push('/characters/new'),
-                child: const Text('Create a character'),
+                child: const Text('Create a persona'),
               ),
             ],
           ),

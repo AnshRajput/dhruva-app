@@ -99,8 +99,8 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('No characters yet'), findsOneWidget);
-    expect(find.text('Create a character'), findsOneWidget);
+    expect(find.text('No personas yet'), findsOneWidget);
+    expect(find.text('Create a persona'), findsOneWidget);
   });
 
   testWidgets('the "+ Create" FAB navigates to /characters/new', (

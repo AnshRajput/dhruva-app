@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -265,7 +266,7 @@ class _ThreadScaffold extends ConsumerWidget {
                                 false,
                             onGetVisionModel: () => context.push('/models/hub'),
                             onSwitchModel: () => _pickModel(context),
-                            onOpenWorkflows: () => context.push('/workflows'),
+                            onOpenWorkflows: () => context.push('/actions'),
                           ),
                   )
                 : Stack(
@@ -645,7 +646,9 @@ class _ThreadScaffold extends ConsumerWidget {
     await SharePlus.instance.share(
       ShareParams(
         text: content,
-        subject: state.title.isEmpty ? 'Dhruva conversation' : state.title,
+        subject: state.title.isEmpty
+            ? '${AppIdentity.shortName} conversation'
+            : state.title,
       ),
     );
   }

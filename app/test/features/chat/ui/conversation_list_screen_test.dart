@@ -55,7 +55,7 @@ void main() {
               Text('thread:${state.pathParameters['id']}'),
         ),
         GoRoute(
-          path: '/models',
+          path: '/models/hub',
           builder: (context, state) => const Text('models hub'),
         ),
       ],

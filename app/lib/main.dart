@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/crash/crash_log.dart';
 import 'core/di/speed_providers.dart';
+import 'core/identity/app_identity.dart';
 import 'core/intents/intent_inbox.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/appearance_providers.dart';
 import 'features/onboarding/state/onboarding_controller.dart';
 import 'features/settings/app_info.dart';
 
@@ -37,7 +39,14 @@ Future<void> main() async {
     final done = await container.read(onboardingCompleteProvider.future);
     if (!done) appRouter.go('/onboarding');
   } catch (_) {
-    // Onboarding is a nicety, not a gate — fall through to chat on any error.
+    // Onboarding is a nicety, not a gate — fall through to Today on any error.
+  }
+  try {
+    // Load the saved theme mode before the first frame so a user who chose
+    // Light/Dark never sees a flash of the system theme.
+    await container.read(themeModeProvider.future);
+  } catch (_) {
+    // Unreadable prefs fall back to following the system.
   }
 
   runApp(
@@ -48,31 +57,40 @@ Future<void> main() async {
   // After the first frame, so the router has consumed its initial location
   // and a cold-start share/selection isn't overwritten by it.
   WidgetsBinding.instance.addPostFrameCallback(
-    (_) => unawaited(IntentInbox(navigate: appRouter.push).start()),
+    (_) => unawaited(IntentInbox(navigate: navigateFromIntent).start()),
   );
 }
 
-class DhruvaApp extends StatelessWidget {
+/// Intent targets that are shell branches (`/today`, `/ask`, ...) must `go`:
+/// pushing one builds a second shell whose branch renders blank.
+void navigateFromIntent(String location) {
+  if (isShellLocation(location)) {
+    appRouter.go(location);
+  } else {
+    unawaited(appRouter.push(location));
+  }
+}
+
+class DhruvaApp extends ConsumerWidget {
   const DhruvaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Real theming from design-tokens.json (ADR-003). Dark is the
-    // hero/default — `meta.defaultTheme` is "dark" and the website the app
-    // must match is dark, so we pin `themeMode.dark` (not `.system`): that is
-    // what makes the app open in the striking navy/gold palette the mockups
-    // show, instead of the flat light theme a light-preference device was
-    // defaulting into. The light theme still exists (`AppTheme.light`, kept
-    // as `theme:`) for a future in-app appearance toggle; every screen reads
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Saved choice (Settings > Appearance); until it loads (or if it can't),
+    // follow the system.
+    final themeMode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
+    // Real theming from design-tokens.json (ADR-003). Follows the system
+    // light/dark by default (the owner-approved daily-assistant direction);
+    // Settings > Appearance can pin Light or Dark. Every screen reads
     // Theme.of(context)'s semantic roles, so both modes light up unchanged.
     return MaterialApp.router(
-      title: 'Dhruva',
+      title: AppIdentity.productName,
       // The debug ribbon otherwise lands in every debug-build capture, which
       // makes store screenshots and design review unusable.
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
+      themeMode: themeMode,
       routerConfig: appRouter,
     );
   }

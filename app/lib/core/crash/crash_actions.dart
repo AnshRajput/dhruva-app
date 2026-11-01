@@ -1,10 +1,11 @@
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../identity/app_identity.dart';
 import '../safety/report_mail.dart';
 import 'crash_log.dart';
 
-const crashSubject = 'Dhruva AI crash report';
+const crashSubject = '${AppIdentity.productName} crash report';
 
 /// Opens the system share sheet. The user picks the destination.
 Future<void> shareCrashReport(List<CrashRecord> records) =>

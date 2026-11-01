@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -599,7 +600,7 @@ class _PermissionDeniedView extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            'Dhruva needs the microphone to hear you. Enable it in your '
+            '${AppIdentity.shortName} needs the microphone to hear you. Enable it in your '
             'device\'s app settings, then try again.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(

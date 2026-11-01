@@ -35,9 +35,9 @@ class CharacterDetailScreen extends ConsumerWidget {
       data: (character) {
         if (character == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Character')),
+            appBar: AppBar(title: const Text('Persona')),
             body: const EmptyStateView(
-              message: 'Character not found.',
+              message: 'Persona not found.',
               icon: Icons.person_off_outlined,
             ),
           );
@@ -46,7 +46,7 @@ class CharacterDetailScreen extends ConsumerWidget {
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
       error: (error, stack) => Scaffold(
-        appBar: AppBar(title: const Text('Character')),
+        appBar: AppBar(title: const Text('Persona')),
         body: ErrorStateView(
           error: error,
           onRetry: () => ref.invalidate(characterByIdProvider(characterId)),

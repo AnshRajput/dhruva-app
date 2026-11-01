@@ -1,4 +1,4 @@
-/// Settings screen (Amendment 4b, lands the credit-row shortcut from
+/// Settings screen (opened from the gear on Today; Amendment 4b, lands the credit-row shortcut from
 /// Amendment 2b): Storage summary + link to the Models hub's Installed tab,
 /// Data (clear all chat history behind a double confirmation), About (a
 /// slim tile to the dedicated `/settings/about` keepsake page + the credit
@@ -11,9 +11,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
+import '../../../core/theme/appearance_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/update/shorebird_update_banner.dart' show updIosReady;
 import '../../../core/update/shorebird_update_service.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../state/storage_summary_provider.dart';
 import '../widgets/credit_row.dart';
 import '../widgets/version_text.dart';
@@ -29,6 +32,46 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
         children: const [
+          _SectionHeader('Appearance'),
+          _AppearanceTile(),
+          _ReduceTransparencyTile(),
+          _SectionHeader('Models'),
+          _NavTile(
+            tileKey: 'settings-models',
+            icon: Icons.widgets_outlined,
+            title: 'Models & downloads',
+            subtitle: 'Discover, installed, voice, speed test',
+            route: '/settings/models',
+          ),
+          _NavTile(
+            tileKey: 'settings-compare',
+            icon: Icons.science_outlined,
+            title: 'Compare models',
+            subtitle: 'Run one prompt through two models',
+            route: '/settings/models/compare',
+          ),
+          _NavTile(
+            tileKey: 'settings-ai-news',
+            icon: Icons.newspaper_outlined,
+            title: 'AI news',
+            subtitle: 'Small models worth trying (opt-in)',
+            route: '/settings/models/compare?tab=news',
+          ),
+          _NavTile(
+            tileKey: 'settings-voice',
+            icon: Icons.record_voice_over_outlined,
+            title: 'Voice',
+            subtitle: 'Speech models for talking hands-free',
+            route: '/settings/models?tab=voice',
+          ),
+          _SectionHeader('Connectors'),
+          _NavTile(
+            tileKey: 'settings-connectors',
+            icon: Icons.link_outlined,
+            title: 'Connectors',
+            subtitle: 'Calendar, contacts, folder, notifications',
+            route: '/settings/connectors',
+          ),
           _SectionHeader('Storage'),
           _StorageTile(),
           _SectionHeader('Data'),
@@ -44,6 +87,83 @@ class SettingsScreen extends StatelessWidget {
           CreditRow(),
         ],
       ),
+    );
+  }
+}
+
+/// Plain navigation row to a full-screen route.
+class _NavTile extends StatelessWidget {
+  final String tileKey;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String route;
+
+  const _NavTile({
+    required this.tileKey,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.route,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      key: ValueKey(tileKey),
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push(route),
+    );
+  }
+}
+
+/// Appearance: System / Light / Dark, persisted (`themeModeProvider`).
+class _AppearanceTile extends ConsumerWidget {
+  const _AppearanceTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.md,
+        vertical: tokens.spacing.xs,
+      ),
+      child: SegmentedButton<ThemeMode>(
+        key: const ValueKey('appearance-segments'),
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: ThemeMode.system, label: Text('System')),
+          ButtonSegment(value: ThemeMode.light, label: Text('Light')),
+          ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
+        ],
+        selected: {mode},
+        onSelectionChanged: (s) =>
+            ref.read(themeModeProvider.notifier).set(s.single),
+      ),
+    );
+  }
+}
+
+/// iOS only: solid bars instead of the translucent glass approximation.
+class _ReduceTransparencyTile extends ConsumerWidget {
+  const _ReduceTransparencyTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!isCupertinoChrome(context)) return const SizedBox.shrink();
+    final on = ref.watch(reduceTransparencyProvider).value ?? false;
+    return SwitchListTile(
+      key: const ValueKey('reduce-transparency-switch'),
+      secondary: const Icon(Icons.blur_off_outlined),
+      title: const Text('Reduce transparency'),
+      subtitle: const Text('Use solid tab and app bars instead of blur.'),
+      value: on,
+      onChanged: (v) => ref.read(reduceTransparencyProvider.notifier).set(v),
     );
   }
 }
@@ -92,7 +212,7 @@ class _StorageTile extends ConsumerWidget {
         _ => const Text('Loading…'),
       },
       trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push('/models'),
+      onTap: () => context.push('/settings/models'),
     );
   }
 }
@@ -279,7 +399,7 @@ class _AboutTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: const Icon(Icons.info_outline),
-      title: const Text('About Dhruva AI'),
+      title: const Text('About ${AppIdentity.productName}'),
       subtitle: const VersionText(),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/settings/about'),

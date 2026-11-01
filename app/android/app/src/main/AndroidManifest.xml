@@ -22,7 +22,15 @@
          Their absence was the 0.2.2 "app crashes when a download starts" regression. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Backup lockdown (daily-assistant spec B1): chats, the model index and,
+         later, connector data must never leave the phone via Google backup or
+         a device-to-device transfer. allowBackup/fullBackupContent cover
+         Android 11 and below; dataExtractionRules (excluding every domain, for
+         both cloud-backup and device-transfer) covers Android 12+. -->
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="Dhruva AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

@@ -1,4 +1,4 @@
-/// Conversation list (chat-spec.md §6.2) — the app's `/chat` home tab.
+/// Conversation list (chat-spec.md §6.2) — now the Ask tab (`/ask`).
 /// Pinned-first ordering straight from `ChatRepository.listConversations`,
 /// folder chip filter, swipe/menu actions, FAB new-chat
 /// flow (model picker if multiple installed / auto if one / models-hub CTA
@@ -46,7 +46,7 @@ class _ConversationListScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Download a model to start chatting.')),
       );
-      unawaited(context.push('/models'));
+      unawaited(context.push('/models/hub'));
       return;
     }
     int modelId;
@@ -73,7 +73,7 @@ class _ConversationListScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Download a model to talk hands-free.')),
       );
-      unawaited(context.push('/models'));
+      unawaited(context.push('/models/hub'));
       return;
     }
     int modelId;
@@ -106,7 +106,7 @@ class _ConversationListScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chats'),
+        title: const Text('Ask'),
         actions: [
           const ChatSearchAction(),
           // WS5: a labelled, always-present voice entry — not an unlabelled
@@ -118,8 +118,13 @@ class _ConversationListScreenState
             label: const Text('Talk'),
           ),
           IconButton(
-            tooltip: 'Workflows',
-            onPressed: () => context.push('/workflows'),
+            tooltip: 'Personas',
+            onPressed: () => context.push('/personas'),
+            icon: const Icon(Icons.theater_comedy_outlined),
+          ),
+          IconButton(
+            tooltip: 'Actions',
+            onPressed: () => context.push('/actions'),
             icon: const Icon(Icons.auto_awesome_outlined),
           ),
           SizedBox(width: tokens.spacing.xs),
@@ -216,7 +221,7 @@ class _ConversationBody extends ConsumerWidget {
                 ? (hasAnyModel
                       ? NoConversationsView(onNewChat: onNewChat)
                       : NoModelInstalledView(
-                          onBrowseModels: () => context.push('/models'),
+                          onBrowseModels: () => context.push('/models/hub'),
                         ))
                 : ListView.builder(
                     itemCount: state.conversations.length,

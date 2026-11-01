@@ -1,5 +1,5 @@
-/// "Quick workflows" strip on the conversation list: the handful of most useful
-/// one-tap text verbs plus "All". Chips push `/workflows?id=<id>` (the router
+/// "Quick actions" strip on the conversation list: the handful of most useful
+/// one-tap text verbs plus "All". Chips push `/actions?id=<id>` (the router
 /// opens that workflow's sheet) so `features/chat` never imports
 /// `features/workflows` (ADR-002); the ids here mirror its catalog.
 library;
@@ -35,7 +35,7 @@ class WorkflowStrip extends StatelessWidget {
             tokens.spacing.xs,
           ),
           child: Text(
-            'QUICK WORKFLOWS',
+            'QUICK ACTIONS',
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
@@ -57,14 +57,14 @@ class WorkflowStrip extends StatelessWidget {
                     color: theme.colorScheme.primary,
                   ),
                   label: Text(label),
-                  onPressed: () => context.push('/workflows?id=$id'),
+                  onPressed: () => context.push('/actions?id=$id'),
                 ),
                 SizedBox(width: tokens.spacing.xs),
               ],
               ActionChip(
                 label: const Text('All'),
                 avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
-                onPressed: () => context.push('/workflows'),
+                onPressed: () => context.push('/actions'),
               ),
             ],
           ),

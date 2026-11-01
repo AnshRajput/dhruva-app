@@ -3,6 +3,7 @@
 /// failure reads the same way on every models_hub screen.
 library;
 
+import '../identity/app_identity.dart';
 import 'app_failure.dart';
 
 /// Renders any [AppFailure] leaf to a short, honest, user-facing sentence.
@@ -15,7 +16,7 @@ String friendlyFailureMessage(AppFailure failure) {
     NetworkRateLimitFailure() =>
       'Hugging Face is rate-limiting requests — wait a moment and retry.',
     NetworkGatedFailure() =>
-      'This repo requires Hugging Face sign-in, which Dhruva doesn\'t '
+      'This repo requires Hugging Face sign-in, which ${AppIdentity.shortName} doesn\'t '
           'support yet.',
     NetworkHttpFailure(:final statusCode) =>
       'Hugging Face returned an error (HTTP $statusCode).',

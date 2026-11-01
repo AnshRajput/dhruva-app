@@ -1,10 +1,11 @@
 // WS2: the guided first-run flow. Welcome states the value; "pick" shows the
 // curated catalog ONLY (no raw HF firehose, no quant menu) with the
 // device-appropriate model badged "Recommended" and pre-selected; skipping
-// marks onboarding done (shown once) and lands in chat.
+// marks onboarding done (shown once) and lands on Today.
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/features/onboarding/ui/onboarding_screen.dart';
@@ -54,6 +55,8 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
 );
 
+final prefs = MemoryPrefsStore();
+
 Future<_FakeOnboardingStore> _pump(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(420, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -67,7 +70,7 @@ Future<_FakeOnboardingStore> _pump(WidgetTester tester) async {
         builder: (context, state) => const OnboardingScreen(),
       ),
       GoRoute(
-        path: '/chat',
+        path: '/today',
         builder: (context, state) => const Text('chat-home'),
       ),
     ],
@@ -77,6 +80,7 @@ Future<_FakeOnboardingStore> _pump(WidgetTester tester) async {
       overrides: [
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         onboardingStoreProvider.overrideWith((ref) async => store),
+        prefsStoreProvider.overrideWith((ref) async => prefs),
         onboardingDownloadControllerProvider.overrideWith(
           _StubDownloadController.new,
         ),
@@ -99,7 +103,7 @@ void main() {
     expect(find.text('Get started'), findsOneWidget);
   });
 
-  testWidgets('skip on welcome marks onboarding done and lands in chat', (
+  testWidgets('skip on welcome marks onboarding done and lands on Today', (
     tester,
   ) async {
     final store = await _pump(tester);
@@ -110,6 +114,8 @@ void main() {
 
     expect(store.complete, isTrue); // shown once
     expect(find.text('chat-home'), findsOneWidget);
+    // A new user has nothing that "moved": the upgrade sheet is suppressed.
+    expect(prefs.values['what_moved_dismissed'], 'true');
   });
 
   testWidgets(
@@ -150,7 +156,7 @@ void main() {
             builder: (context, state) => const OnboardingScreen(),
           ),
           GoRoute(
-            path: '/chat',
+            path: '/ask',
             builder: (context, state) => const Text('chat-home'),
           ),
           GoRoute(
@@ -168,6 +174,7 @@ void main() {
           overrides: [
             deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
             onboardingStoreProvider.overrideWith((ref) async => store),
+            prefsStoreProvider.overrideWith((ref) async => prefs),
             onboardingDownloadControllerProvider.overrideWith(
               _ReadyStubController.new,
             ),

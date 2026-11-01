@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="shortcut_today">Today</string>
+    <string name="shortcut_ask">Ask</string>
     <string name="shortcut_new_chat">New chat</string>
-    <string name="shortcut_workflows">Workflows</string>
+    <string name="shortcut_workflows">Actions</string>
     <string name="tile_label">Ask Dhruva</string>
-    <string name="widget_description">Start a chat, open Workflows, or talk hands-free. Runs on your device.</string>
+    <string name="widget_description">Start a chat, open Actions, or talk hands-free. Runs on your device.</string>
     <string name="widget_ask">Ask Dhruva…</string>
     <string name="widget_ask_short">Ask…</string>
     <string name="widget_cd_ask">Ask Dhruva, start a new chat</string>
-    <string name="widget_cd_workflows">Workflows</string>
+    <string name="widget_cd_workflows">Actions</string>
     <string name="widget_cd_talk">Talk hands-free</string>
 </resources>

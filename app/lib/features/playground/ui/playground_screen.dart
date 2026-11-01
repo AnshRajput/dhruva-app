@@ -25,15 +25,19 @@ import '../state/playground_controller.dart';
 import '../state/playground_installed_models_provider.dart';
 
 class PlaygroundScreen extends StatelessWidget {
-  const PlaygroundScreen({super.key});
+  /// 0 = Compare, 1 = AI news (`?tab=news`).
+  final int initialTabIndex;
+
+  const PlaygroundScreen({super.key, this.initialTabIndex = 0});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Playground'),
+          title: const Text('Compare models'),
           actions: const [
             Padding(
               padding: EdgeInsets.only(right: 12),
@@ -42,7 +46,7 @@ class PlaygroundScreen extends StatelessWidget {
           ],
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Playground'),
+              Tab(text: 'Compare'),
               Tab(text: 'AI news'),
             ],
           ),
@@ -149,7 +153,7 @@ class _InstallMorePrompt extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final message = installedCount == 0
-        ? 'The Playground runs one prompt through two models side by side so you '
+        ? 'Compare runs one prompt through two models side by side so you '
               'can compare their answers and speed. Install two GGUF models to '
               'try it.'
         : 'You have one model installed. Add one more to compare two side by '
@@ -231,7 +235,7 @@ class _InstallMorePrompt extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.lg),
         FilledButton(
-          onPressed: () => GoRouter.of(context).go('/models'),
+          onPressed: () => GoRouter.of(context).push('/models/hub'),
           child: const Text('Browse models'),
         ),
       ],

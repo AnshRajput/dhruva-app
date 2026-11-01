@@ -20,6 +20,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import '../../../support/device_health_fakes.dart';
 
 final _redPng = File('test/assets/red_64.png').readAsBytesSync();

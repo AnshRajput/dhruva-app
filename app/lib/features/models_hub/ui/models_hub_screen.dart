@@ -219,9 +219,9 @@ class _VoiceBundleCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: () => context.go('/chat'),
+                      onPressed: () => context.go('/ask'),
                       icon: const Icon(Icons.record_voice_over_outlined),
-                      label: const Text('Go to Chats to talk'),
+                      label: const Text('Go to Ask to talk'),
                     ),
                   ),
                 ],
