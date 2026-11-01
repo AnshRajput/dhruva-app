@@ -9,10 +9,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/di/library_providers.dart';
 import '../../../core/profile/user_profile.dart';
 import '../../../core/settings/prefs_store.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
+import 'brief_compose.dart';
 import 'brief_facts.dart';
 
 /// "Now" for Today. Tests override it.
@@ -159,26 +161,53 @@ List<NotificationGroup> digestGroups(
   return out;
 }
 
-/// The fact list behind the brief (see `brief_facts.dart`).
-final briefFactsProvider = Provider<List<BriefFact>>((ref) {
+/// The notification groups with what the user marked read removed: the one
+/// view of notifications every Today surface (brief facts, Needs you, the
+/// day summary) reads, so "Mark all read" means the same everywhere.
+final unreadNotificationGroupsProvider = Provider<List<NotificationGroup>>((
+  ref,
+) {
+  final groups = ref.watch(notificationGroupsProvider).value ?? const [];
+  return unreadGroups(groups, ref.watch(notificationsReadAtProvider).value);
+});
+
+/// Open to-dos in the Library (0 while it loads or when the store is absent).
+final openTodoCountProvider = Provider<int>((ref) {
+  final todos = ref.watch(todosProvider).value ?? const [];
+  return todos.where((t) => !t.done).length;
+});
+
+/// The rule-written brief (see `brief_compose.dart`): sentences and the facts
+/// they cite. Empty until every input has answered, so a half-loaded day never
+/// reads as a different day.
+final dayBriefProvider = Provider<DayBrief>((ref) {
   final now = ref.watch(nowProvider);
   final calendar = ref.watch(calendarEntryProvider);
   final events = ref.watch(todayEventsProvider);
   final groups = ref.watch(notificationGroupsProvider);
-  // Nothing is a fact until every input has answered: a half-loaded day would
-  // read as a different day and invalidate a good cached brief.
+  final readAt = ref.watch(notificationsReadAtProvider);
   bool pending(AsyncValue<Object?> v) => !v.hasValue && !v.hasError;
-  if (!ref.watch(connectorsLoadedProvider) || pending(events)) return const [];
-  if (pending(groups)) return const [];
-  return gatherFacts(
+  if (!ref.watch(connectorsLoadedProvider) || pending(events)) {
+    return DayBrief.empty;
+  }
+  if (pending(groups) || readAt.isLoading) return DayBrief.empty;
+  return composeBrief(
     now: now,
     todaysEvents: events.value ?? const [],
-    notificationGroups: groups.value ?? const [],
+    upcoming: ref.watch(upNextEventsProvider).value ?? const [],
+    notificationGroups: ref.watch(unreadNotificationGroupsProvider),
     calendarConnected: calendar?.status.isConnected ?? false,
     calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
+    name: ref.watch(todayNameProvider),
+    openTodos: ref.watch(openTodoCountProvider),
   );
 });
+
+/// The facts behind the brief.
+final briefFactsProvider = Provider<List<BriefFact>>(
+  (ref) => ref.watch(dayBriefProvider).facts,
+);
 
 /// Today's greeting name from About me, or null.
 final todayNameProvider = Provider<String?>((ref) {
@@ -191,7 +220,7 @@ final todayNameProvider = Provider<String?>((ref) {
 final daySummaryProvider = Provider<String>((ref) {
   final now = ref.watch(nowProvider);
   final events = ref.watch(todayEventsProvider).value ?? const [];
-  final groups = ref.watch(notificationGroupsProvider).value ?? const [];
+  final groups = ref.watch(unreadNotificationGroupsProvider);
   return daySummary(
     meetings: events.where((e) => !isAllDay(e)).length,
     replies: needsYou(groups, now, limit: 99).length,

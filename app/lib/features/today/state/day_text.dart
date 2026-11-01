@@ -76,3 +76,16 @@ String ageLabel(DateTime then, DateTime now) {
   if (h < 24) return '${h}h ago';
   return 'yesterday';
 }
+
+/// "Tomorrow" or the weekday for an event on a later day than [now]; null for
+/// today (and for the past, which Up next never shows).
+String? dayLabel(DateTime start, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final days = DateTime(
+    start.year,
+    start.month,
+    start.day,
+  ).difference(today).inDays;
+  if (days <= 0) return null;
+  return days == 1 ? 'Tomorrow' : _weekdays[start.weekday - 1];
+}

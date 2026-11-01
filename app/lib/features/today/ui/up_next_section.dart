@@ -282,11 +282,19 @@ class _UpNextCard extends ConsumerWidget {
                         formatRange(context, first),
                         style: theme.textTheme.titleMedium,
                       ),
-                      if (when != null && !isAllDay(first))
-                        InfoPill(
-                          relativeStart(when, now),
-                          pillKey: const ValueKey('up-next-relative'),
-                        ),
+                      if (when != null)
+                        // Later days read "Tomorrow" / "Monday"; today reads
+                        // "in 1h 48m" (timed events only).
+                        if (!isAllDay(first))
+                          InfoPill(
+                            relativeStart(when, now),
+                            pillKey: const ValueKey('up-next-relative'),
+                          )
+                        else if (dayLabel(when, now) case final day?)
+                          InfoPill(
+                            day,
+                            pillKey: const ValueKey('up-next-relative'),
+                          ),
                     ],
                   ),
                   SizedBox(height: tokens.spacing.xs),
@@ -309,10 +317,9 @@ class _UpNextCard extends ConsumerWidget {
                                   AvatarStack(people: people),
                                   SizedBox(width: tokens.spacing.sm),
                                   Expanded(
-                                    child: Text(
-                                      people.map((p) => p.name).join(', '),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    child: AttendeeLine(
+                                      key: const ValueKey('up-next-people'),
+                                      names: [for (final p in people) p.name],
                                       style: theme.textTheme.bodyMedium
                                           ?.copyWith(
                                             color: scheme.onSurfaceVariant,
@@ -357,7 +364,7 @@ class _UpNextCard extends ConsumerWidget {
               indent: tokens.spacing.lg,
               endIndent: tokens.spacing.lg,
             ),
-            _SecondEvent(event: events[1], contacts: contacts),
+            _SecondEvent(event: events[1], contacts: contacts, now: now),
           ],
         ],
       ),
@@ -366,9 +373,25 @@ class _UpNextCard extends ConsumerWidget {
 }
 
 class _SecondEvent extends StatelessWidget {
-  const _SecondEvent({required this.event, required this.contacts});
+  const _SecondEvent({
+    required this.event,
+    required this.contacts,
+    required this.now,
+  });
   final ConnectorItem event;
   final Map<String, ConnectorItem> contacts;
+  final DateTime now;
+
+  /// "9:30 AM", or "Tomorrow 9:30 AM" / "Monday 9:30 AM" / "Tomorrow all day"
+  /// when it is not today (Up next crosses midnight).
+  String _timeText(BuildContext context, DateTime? start) {
+    final day = start == null ? null : dayLabel(start, now);
+    final time = isAllDay(event) || start == null
+        ? 'All day'
+        : formatClock(context, start);
+    if (day == null) return time;
+    return isAllDay(event) ? day : '$day $time';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -388,9 +411,7 @@ class _SecondEvent extends StatelessWidget {
         child: Row(
           children: [
             Text(
-              isAllDay(event) || start == null
-                  ? 'All day'
-                  : formatClock(context, start),
+              _timeText(context, start),
               key: const ValueKey('up-next-second-time'),
               style: theme.textTheme.titleSmall?.copyWith(
                 color: scheme.onSurfaceVariant,

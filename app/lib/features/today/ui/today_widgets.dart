@@ -166,6 +166,63 @@ List<Attendee> attendeesOf(
   return out;
 }
 
+/// The names of [names] on ONE line that never cuts a name in half: as many
+/// whole names as fit, then "+N" for the rest ("Ravi, Sana +2"). The first name
+/// always shows; only when it alone is wider than the line does it ellipsize.
+class AttendeeLine extends StatelessWidget {
+  const AttendeeLine({super.key, required this.names, this.style});
+
+  final List<String> names;
+  final TextStyle? style;
+
+  /// What [names] reads as in [maxWidth]; pure over the measuring function so
+  /// it is testable without a render tree.
+  static String fit(
+    List<String> names,
+    double maxWidth,
+    double Function(String) measure,
+  ) {
+    if (names.isEmpty) return '';
+    for (var k = names.length; k > 1; k--) {
+      final text =
+          '${names.take(k).join(', ')}${k < names.length ? ' +${names.length - k}' : ''}';
+      if (measure(text) <= maxWidth) return text;
+    }
+    return names.length == 1
+        ? names.first
+        : '${names.first} +${names.length - 1}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = style ?? DefaultTextStyle.of(context).style;
+    final scaler = MediaQuery.textScalerOf(context);
+    final dir = Directionality.of(context);
+    return LayoutBuilder(
+      builder: (context, c) {
+        double measure(String t) {
+          final tp = TextPainter(
+            text: TextSpan(text: t, style: base),
+            textDirection: dir,
+            textScaler: scaler,
+            maxLines: 1,
+          )..layout();
+          final w = tp.width;
+          tp.dispose();
+          return w;
+        }
+
+        return Text(
+          fit(names, c.maxWidth, measure),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        );
+      },
+    );
+  }
+}
+
 /// Overlapping avatar circles, "+N" past [max].
 class AvatarStack extends StatelessWidget {
   const AvatarStack({

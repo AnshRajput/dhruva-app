@@ -2,10 +2,10 @@
 /// the approved comps, with B's timeline behind "See day".
 ///
 /// Real data from the Wave 2A connectors: a greeting with the name from About
-/// me, the date and a one-line day summary, the brief (a fact list that the
-/// on-device model words, every phrase citing a fact), Up next, Needs you, and
-/// on Android the notification digest. Pull to refresh re-syncs and rewrites
-/// the brief. The brief is only ever written while the app is open.
+/// me, the date and a one-line day summary, the brief (written by rules from
+/// the day's facts, every phrase citing the fact it rests on), Up next, Needs you, and
+/// on Android the notification digest. Pull to refresh re-syncs. The optional
+/// "Rewrite in my words" only ever runs while the app is open, on a tap.
 ///
 /// All navigation from here pushes FULL-SCREEN routes only (`/settings`,
 /// `/actions`, `/day`, `/ask/new`, ...), never a shell-branch route.
@@ -28,10 +28,10 @@ import '../../../core/update/shorebird_update_banner.dart';
 import '../../../core/update/shorebird_update_service.dart';
 import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
+import '../../../core/widgets/route_transition_guard.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_controller.dart';
 import '../state/brief_facts.dart';
-import '../state/brief_writer.dart';
 import '../state/day_text.dart';
 import '../state/today_data.dart';
 import 'brief_card.dart';
@@ -76,7 +76,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     unawaited(resumeConnectors(ref).whenComplete(_onOpen));
   }
 
-  /// Write a new brief only if the cached one is stale (see BriefController).
+  /// Drops a cached rewrite that no longer matches the day (BriefController).
   void _onOpen() {
     if (!mounted) return;
     // Foreground only: data arriving while the app is in the background never
@@ -91,13 +91,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
       final hub = await ref.read(connectorHubProvider.future);
       await hub.sync.refresh();
     } on Object {
-      // Each connector shows its own failure; the brief can still be rewritten.
-    }
-    if (!mounted) return;
-    final brief = ref.read(briefControllerProvider.notifier);
-    if (ref.read(briefFactsProvider).isNotEmpty) {
-      // Not awaited: the spinner is for the sync; the card shows "Writing…".
-      unawaited(brief.regenerate());
+      // Each connector shows its own failure on its card.
     }
   }
 
@@ -125,22 +119,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             ),
       );
     });
-    // First facts arrive (calendar just connected) or a model just landed:
-    // write the brief if it is due.
-    // Also when the sources change under a shown brief (a meeting appears
-    // after the first sync): the controller drops it and writes a new one.
+    // The sources change under a shown rewrite (a meeting appears after the
+    // first sync): the controller drops it. The rule-written brief itself just
+    // recomputes.
     ref.listen(briefFactsProvider, (prev, next) {
       if (next.isNotEmpty && !sameFactSources(prev ?? const [], next)) {
-        _onOpen();
-      }
-    });
-    ref.listen(briefControllerProvider.select((s) => s.value?.model), (
-      prev,
-      next,
-    ) {
-      if (prev == BriefModelStatus.none &&
-          next != null &&
-          next != BriefModelStatus.none) {
         _onOpen();
       }
     });
@@ -151,108 +134,114 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     final inboxAvailable = ref.watch(inboxAvailableProvider);
     final loaded = ref.watch(connectorsLoadedProvider);
     final waiting = needsYou(
-      ref.watch(notificationGroupsProvider).value ?? const [],
+      ref.watch(unreadNotificationGroupsProvider),
       today,
     );
 
-    return ChromeScaffold(
-      appBar: AdaptiveAppBar(
-        automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DhruvaStar(size: 16, color: scheme.primary),
-            SizedBox(width: tokens.spacing.sm),
-            Text(AppIdentity.wordmark, style: theme.textTheme.titleLarge),
+    // Arriving from onboarding's "Continue to Today": taps that are still
+    // landing on the old button must not hit Today's cards while it slides in.
+    return RouteTransitionGuard(
+      child: ChromeScaffold(
+        appBar: AdaptiveAppBar(
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DhruvaStar(size: 16, color: scheme.primary),
+              SizedBox(width: tokens.spacing.sm),
+              Text(AppIdentity.wordmark, style: theme.textTheme.titleLarge),
+            ],
+          ),
+          actions: [
+            IconButton(
+              key: const ValueKey('today-settings'),
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.push('/settings'),
+            ),
+            SizedBox(width: tokens.spacing.xs),
           ],
         ),
-        actions: [
-          IconButton(
-            key: const ValueKey('today-settings'),
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push('/settings'),
-          ),
-          SizedBox(width: tokens.spacing.xs),
-        ],
-      ),
-      bodyBuilder: (context, inset) => RefreshIndicator(
-        onRefresh: _refresh,
-        edgeOffset: inset.top,
-        child: ListView(
-          key: const ValueKey('today-list'),
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.only(
-            top: inset.top + tokens.spacing.xs,
-            bottom: inset.bottom + tokens.spacing.xl2,
-          ),
-          children: [
-            // Update / crash nudges used to sit on the Chats home; Today is home now.
-            const _SystemBanners(),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    greetingWithName(today, name),
-                    key: const ValueKey('today-greeting'),
-                    style: theme.textTheme.headlineMedium,
-                  ),
-                  SizedBox(height: tokens.spacing.xs),
-                  Text(
-                    summary.isEmpty
-                        ? formatDayLine(today)
-                        : '${formatDayLine(today)} · $summary',
-                    key: const ValueKey('today-date-line'),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (widget.statusPill != null || warming) ...[
-                    SizedBox(height: tokens.spacing.sm),
-                    Wrap(
-                      spacing: tokens.spacing.sm,
-                      children: [
-                        if (widget.statusPill != null) widget.statusPill!,
-                        if (warming)
-                          const Chip(
-                            key: ValueKey('model-warming-pill'),
-                            avatar: SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            label: Text('Warming up your model'),
-                          ),
-                      ],
-                    ),
-                  ],
-                  SizedBox(height: tokens.spacing.base),
-                  const BriefCard(),
-                  SizedBox(height: tokens.spacing.base),
-                  const QuickActionsRow(),
-                  const UpNextSection(),
-                  const NeedsYouSection(),
-                  const DigestCard(),
-                  if (loaded && !inboxAvailable && waiting.isEmpty) ...[
-                    SizedBox(height: tokens.spacing.lg),
-                    NextStepCard(
-                      icon: Icons.inbox_outlined,
-                      title: 'Set up your inbox',
-                      body:
-                          'Messages that need a reply, in one calm list with a '
-                          'drafted answer you edit and send yourself.',
-                      actionLabel: 'Set up inbox',
-                      actionKey: const ValueKey('today-setup-inbox'),
-                      // Full-screen route, NOT the shell's /inbox branch.
-                      onAction: () => context.push('/inbox/connect'),
-                    ),
-                  ],
-                ],
-              ),
+        bodyBuilder: (context, inset) => RefreshIndicator(
+          onRefresh: _refresh,
+          edgeOffset: inset.top,
+          child: ListView(
+            key: const ValueKey('today-list'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(
+              top: inset.top + tokens.spacing.xs,
+              bottom: inset.bottom + tokens.spacing.xl2,
             ),
-          ],
+            children: [
+              // Update / crash nudges used to sit on the Chats home; Today is home now.
+              const _SystemBanners(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      greetingWithName(today, name),
+                      key: const ValueKey('today-greeting'),
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    SizedBox(height: tokens.spacing.xs),
+                    Text(
+                      summary.isEmpty
+                          ? formatDayLine(today)
+                          : '${formatDayLine(today)} · $summary',
+                      key: const ValueKey('today-date-line'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (widget.statusPill != null || warming) ...[
+                      SizedBox(height: tokens.spacing.sm),
+                      Wrap(
+                        spacing: tokens.spacing.sm,
+                        children: [
+                          if (widget.statusPill != null) widget.statusPill!,
+                          if (warming)
+                            const Chip(
+                              key: ValueKey('model-warming-pill'),
+                              avatar: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              label: Text('Warming up your model'),
+                            ),
+                        ],
+                      ),
+                    ],
+                    SizedBox(height: tokens.spacing.base),
+                    const BriefCard(),
+                    SizedBox(height: tokens.spacing.base),
+                    const QuickActionsRow(),
+                    const UpNextSection(),
+                    const NeedsYouSection(),
+                    const DigestCard(),
+                    if (loaded && !inboxAvailable && waiting.isEmpty) ...[
+                      SizedBox(height: tokens.spacing.lg),
+                      NextStepCard(
+                        icon: Icons.inbox_outlined,
+                        title: 'Set up your inbox',
+                        body:
+                            'Messages that need a reply, in one calm list with a '
+                            'drafted answer you edit and send yourself.',
+                        actionLabel: 'Set up inbox',
+                        actionKey: const ValueKey('today-setup-inbox'),
+                        // Full-screen route, NOT the shell's /inbox branch.
+                        onAction: () => context.push('/inbox/connect'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,13 +1,17 @@
-/// The written brief and its cache. The brief is cached WITH its numbered
-/// facts, so a tapped phrase still opens the right source and "How this was
-/// written" shows exactly what the model was given.
+/// The model's rewrite of the brief and its cache. Only a rewrite that passed
+/// the grounding check is ever stored (`checkRewrite`); it is cached WITH the
+/// numbered facts it was checked against, so a tapped phrase still opens the
+/// right source and "How this was written" shows exactly what it rests on.
 ///
-/// Freshness: a brief is regenerated on open when it is older than
-/// [briefMaxAge] or from another calendar day. It is never generated in the
-/// background (see `BriefController`).
+/// The rule-written brief is never cached: it is recomputed from the data on
+/// every build. A cached rewrite is shown only while it is fresh ([briefMaxAge]
+/// and the same calendar day) AND the facts are unchanged. It is never written
+/// in the background (see `BriefController`).
 library;
 
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../../core/settings/prefs_store.dart';
 import 'brief_facts.dart';
@@ -15,6 +19,11 @@ import 'brief_parser.dart';
 
 const briefMaxAge = Duration(hours: 3);
 const _cacheKey = briefCachePrefsKey;
+
+/// Bumped when what a cached brief means changes. Version 1 held unchecked
+/// model text, which small models filled with invented details: it is never
+/// shown again.
+const _cacheVersion = 2;
 
 final class WrittenBrief {
   const WrittenBrief({
@@ -41,13 +50,14 @@ final class WrittenBrief {
   }
 
   Map<String, Object> toJson() => {
+    'v': _cacheVersion,
     'writtenAt': writtenAt.millisecondsSinceEpoch,
     'raw': raw,
     'facts': [for (final f in facts) f.toJson()],
   };
 
   static WrittenBrief? fromJson(Object? j) {
-    if (j is! Map) return null;
+    if (j is! Map || j['v'] != _cacheVersion) return null;
     final at = j['writtenAt'];
     final raw = j['raw'];
     final facts = j['facts'];
@@ -70,6 +80,20 @@ bool isBriefFresh(
   if (age.isNegative || age >= maxAge) return false;
   final w = brief.writtenAt;
   return w.year == now.year && w.month == now.month && w.day == now.day;
+}
+
+/// The rewrite to show now: only while it is fresh AND checked against exactly
+/// today's [facts]. Anything else describes a different day.
+WrittenBrief? shownRewrite(
+  WrittenBrief? rewrite,
+  List<BriefFact> facts,
+  DateTime now,
+) {
+  if (rewrite == null || facts.isEmpty) return null;
+  if (!listEquals(rewrite.facts, facts) || !isBriefFresh(rewrite, now)) {
+    return null;
+  }
+  return rewrite;
 }
 
 /// A cached brief quotes calendar events and notifications. Once the user

@@ -1,7 +1,8 @@
-/// The deterministic FACT LIST behind Today's brief. Rules, not a model, decide
-/// what is worth saying (next events with attendees, conflicts, messages that
-/// look like they need a reply, a notification digest). The on-device model
-/// only phrases these numbered facts; every sentence it writes must cite one.
+/// The building blocks of Today's brief: numbered facts and the rules that read
+/// the day (who is waiting on you, event times, attendee names). Rules, not a
+/// model, decide what is worth saying (`brief_compose.dart` turns them into
+/// sentences). The optional on-device rewrite only rewords those sentences and
+/// is checked against these facts (`brief_grounding.dart`).
 ///
 /// Facts carry text that came from other people (event titles, notification
 /// text), so they are UNTRUSTED: they only ever reach a prompt through the
@@ -13,12 +14,11 @@ import 'dart:ui' show PlatformDispatcher;
 
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
-import 'event_info.dart';
 
-enum FactKind { event, notification }
+enum FactKind { event, notification, todo }
 
-/// One numbered fact. [ref] says what a tap opens: `event:<item id>` or
-/// `notif:<package>`.
+/// One numbered fact. [ref] says what a tap opens: `event:<item id>`
+/// (`event:0` is the day timeline), `notif:<package>` or `todos:`.
 final class BriefFact {
   const BriefFact({
     required this.n,
@@ -135,15 +135,17 @@ DateTime? eventEnd(ConnectorItem e) {
 
 bool isAllDay(ConnectorItem e) => e.flags['allDay'] == true;
 
-/// "9:45 PM" or "21:45", following the phone's 12/24 h setting, so fact text
-/// reads like the cards beside it. [use24] overrides the setting (tests).
+/// "9:45 PM" or "21:45", following the phone's 12/24 h setting (the same
+/// setting the cards beside it read), in the phone's local time. [use24]
+/// overrides the setting (tests).
 String clock(DateTime d, {bool? use24}) {
-  final m = d.minute.toString().padLeft(2, '0');
+  final l = d.toLocal();
+  final m = l.minute.toString().padLeft(2, '0');
   if (use24 ?? PlatformDispatcher.instance.alwaysUse24HourFormat) {
-    return '${d.hour}:$m';
+    return '${l.hour.toString().padLeft(2, '0')}:$m';
   }
-  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
-  return '$h:$m ${d.hour < 12 ? 'AM' : 'PM'}';
+  final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
+  return '$h:$m ${l.hour < 12 ? 'AM' : 'PM'}';
 }
 
 String oneLine(String s, int max) {
@@ -166,130 +168,27 @@ List<String> attendeeNames(ConnectorItem e, Map<String, String> contactNames) {
   return names;
 }
 
-/// Gathers the facts for the brief, in the order worth saying them. Pure.
-///
-/// "No meetings" is a fact only once the calendar is [calendarConnected] AND
-/// has finished a sync ([calendarSynced]): right after connecting, the store is
-/// still empty, and an empty store is not an empty day.
-List<BriefFact> gatherFacts({
-  required DateTime now,
-  required List<ConnectorItem> todaysEvents,
-  required List<NotificationGroup> notificationGroups,
-  required bool calendarConnected,
-  bool calendarSynced = true,
-  Map<String, String> contactNames = const {},
-  int maxFacts = 10,
-}) {
-  final texts = <(FactKind, String, String)>[];
-  void add(FactKind k, String text, String ref) =>
-      texts.add((k, oneLine(text, 220), ref));
-
-  final timed = [
-    for (final e in todaysEvents)
-      if (!isAllDay(e) && e.startsAt != null) e,
-  ]..sort((a, b) => a.startsAt!.compareTo(b.startsAt!));
-  final remaining = [
-    for (final e in timed)
-      if ((eventEnd(e) ?? e.startsAt!).isAfter(now)) e,
-  ];
-
-  if (calendarConnected) {
-    if (timed.isEmpty) {
-      if (calendarSynced) {
-        add(FactKind.event, 'No meetings on the calendar today.', 'event:0');
-      }
-    } else if (remaining.isEmpty) {
-      add(
-        FactKind.event,
-        "All ${timed.length} of today's meetings are over.",
-        'event:${timed.last.id}',
-      );
-    }
-  }
-
-  for (final e in remaining.take(5)) {
-    final start = e.startsAt!;
-    final end = eventEnd(e);
-    final who = attendeeNames(e, contactNames);
-    final withText = who.isEmpty
-        ? ''
-        : ' with ${who.take(3).join(', ')}'
-              '${who.length > 3 ? ' and ${who.length - 3} more' : ''}';
-    // "Google Meet" or the room, never a raw meeting URL.
-    final place = placeLabel(e);
-    final where = place == null ? '' : ' (${oneLine(place, 40)})';
-    final title = oneLine(e.title, 80);
-    final ongoing = !start.isAfter(now);
-    add(
-      FactKind.event,
-      ongoing
-          ? '$title is on now${end == null ? '' : ' until ${clock(end)}'}'
-                '$withText$where.'
-          : '$title at ${clock(start)}$withText$where.',
-      'event:${e.id}',
+/// [groups] without anything the user already marked read ("Mark all read"
+/// on the digest): notifications at or before [readAt] are gone, apps left
+/// with nothing are dropped. A read notification is neither a fact nor a
+/// reply someone is waiting for.
+List<NotificationGroup> unreadGroups(
+  List<NotificationGroup> groups,
+  DateTime? readAt,
+) {
+  if (readAt == null) return groups;
+  final out = <NotificationGroup>[];
+  for (final g in groups) {
+    final fresh = [
+      for (final i in g.items)
+        if (_at(i).isAfter(readAt)) i,
+    ];
+    if (fresh.isEmpty) continue;
+    out.add(
+      NotificationGroup(package: g.package, appLabel: g.appLabel, items: fresh),
     );
   }
-
-  for (var i = 0; i + 1 < remaining.length; i++) {
-    final a = remaining[i];
-    final b = remaining[i + 1];
-    final aEnd = eventEnd(a);
-    if (aEnd != null && aEnd.isAfter(b.startsAt!)) {
-      final bEnd = eventEnd(b);
-      final until = bEnd != null && bEnd.isBefore(aEnd) ? bEnd : aEnd;
-      add(
-        FactKind.event,
-        '${oneLine(a.title, 60)} and ${oneLine(b.title, 60)} overlap from '
-            '${clock(b.startsAt!)} to ${clock(until)}.',
-        'event:${a.id}',
-      );
-    }
-  }
-
-  for (final e in todaysEvents.where(isAllDay).take(2)) {
-    add(FactKind.event, 'All day: ${oneLine(e.title, 80)}.', 'event:${e.id}');
-  }
-
-  final waiting = needsYou(notificationGroups, now);
-  for (final w in waiting) {
-    add(
-      FactKind.notification,
-      '${oneLine(w.item.title, 40)} messaged on ${w.group.appLabel}: '
-          '"${oneLine(w.item.body, 100)}"',
-      'notif:${w.group.package}',
-    );
-  }
-
-  final shown = {for (final w in waiting) w.group.package};
-  final others = <NotificationGroup>[];
-  var otherCount = 0;
-  for (final g in notificationGroups) {
-    if (shown.contains(g.package)) continue;
-    final recent = g.items
-        .where((i) => now.difference(_at(i)) <= needsYouWindow)
-        .length;
-    if (recent == 0) continue;
-    others.add(g);
-    otherCount += recent;
-  }
-  if (otherCount >= 3) {
-    add(
-      FactKind.notification,
-      '$otherCount other notifications, mostly from '
-          '${others.take(3).map((g) => g.appLabel).join(', ')}.',
-      'notif:${others.first.package}',
-    );
-  }
-
-  return [
-    for (var i = 0; i < texts.length && i < maxFacts; i++)
-      BriefFact(
-        n: i + 1,
-        kind: texts[i].$1,
-        text: texts[i].$2,
-        ref: texts[i].$3,
-      ),
-  ];
+  return out;
 }
 
 /// "3 meetings · 2 replies waiting" from real data; '' when there is nothing

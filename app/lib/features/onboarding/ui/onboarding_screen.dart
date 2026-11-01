@@ -39,6 +39,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   _Step _step = _Step.welcome;
   StarterModel? _selected;
+  bool _finishing = false;
 
   /// A new user has nothing that "moved": never show them the upgrade sheet.
   Future<void> _markWhatMovedSeen() async {
@@ -53,9 +54,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// BOTH paths is what makes it show exactly once — a user who skips with no
   /// model still never sees it again.
   Future<void> _finish() async {
-    final store = await ref.read(onboardingStoreProvider.future);
-    await store.markComplete();
-    await _markWhatMovedSeen();
+    // One finish only: a second tap on "Continue to Today" (or Skip) while the
+    // first is saving or sliding Today in must not run it again.
+    if (_finishing) return;
+    setState(() => _finishing = true);
+    try {
+      final store = await ref.read(onboardingStoreProvider.future);
+      await store.markComplete();
+      await _markWhatMovedSeen();
+    } on Object {
+      // Saving failed: the screen must take taps again, never stay frozen.
+      if (mounted) setState(() => _finishing = false);
+      rethrow;
+    }
     if (mounted) context.go('/today');
   }
 
@@ -116,39 +127,44 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             break; // the download carries on behind this step; stay put
         }
       },
-      child: Scaffold(
-        body: SafeArea(
-          child: switch (_step) {
-            _Step.welcome => _WelcomeStep(
-              onStart: () => setState(() => _step = _Step.pick),
-              onSkip: _finish,
-            ),
-            _Step.pick => _PickStep(
-              selected: _selected,
-              onSelect: (m) => setState(() => _selected = m),
-              onDownload: _startDownload,
-              onSkip: _finish,
-            ),
-            _Step.download => _DownloadStep(
-              model: _selected,
-              onRetry: () {
-                final m = _selected;
-                if (m != null) _startDownload(m);
-              },
-              onDownloadAnyway: _downloadAnyway,
-              onPickAnother: () => setState(() => _step = _Step.pick),
-              onCancel: _cancelDownload,
-              onContinue: () => setState(() => _step = _Step.connect),
-              onSkip: _finish,
-            ),
-            _Step.connect => ConnectStep(
-              onDone: _finish,
-              onRetryDownload: () {
-                final m = _selected;
-                if (m != null) _startDownload(m);
-              },
-            ),
-          },
+      // Once leaving, nothing on this screen takes a tap: the next route is
+      // already coming in under the same finger.
+      child: IgnorePointer(
+        ignoring: _finishing,
+        child: Scaffold(
+          body: SafeArea(
+            child: switch (_step) {
+              _Step.welcome => _WelcomeStep(
+                onStart: () => setState(() => _step = _Step.pick),
+                onSkip: _finish,
+              ),
+              _Step.pick => _PickStep(
+                selected: _selected,
+                onSelect: (m) => setState(() => _selected = m),
+                onDownload: _startDownload,
+                onSkip: _finish,
+              ),
+              _Step.download => _DownloadStep(
+                model: _selected,
+                onRetry: () {
+                  final m = _selected;
+                  if (m != null) _startDownload(m);
+                },
+                onDownloadAnyway: _downloadAnyway,
+                onPickAnother: () => setState(() => _step = _Step.pick),
+                onCancel: _cancelDownload,
+                onContinue: () => setState(() => _step = _Step.connect),
+                onSkip: _finish,
+              ),
+              _Step.connect => ConnectStep(
+                onDone: _finish,
+                onRetryDownload: () {
+                  final m = _selected;
+                  if (m != null) _startDownload(m);
+                },
+              ),
+            },
+          ),
         ),
       ),
     );
@@ -187,11 +203,13 @@ class _WelcomeStep extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     return _Page(
+      // Centered in the space the page has, so the mark and the actions sit
+      // balanced instead of hugging the top with a void under "Skip".
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(height: tokens.spacing.xl),
           DhruvaStar(size: 96, color: theme.colorScheme.primary),
           SizedBox(height: tokens.spacing.lg),
           Text(

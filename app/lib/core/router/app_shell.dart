@@ -117,6 +117,10 @@ class AppShell extends ConsumerWidget {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
+              // A snackbar with an action stays until dismissed by default;
+              // this notice is a courtesy, not a task.
+              persist: false,
+              duration: const Duration(seconds: 4),
               content: Text(
                 '${friendlyModelName(model.repoId)} is ready — start chatting.',
               ),

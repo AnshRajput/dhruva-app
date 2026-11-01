@@ -21,9 +21,17 @@ final class NowEntry extends TimelineEntry {
 }
 
 final class EventEntry extends TimelineEntry {
-  const EventEntry(super.at, this.event, {required this.isPast});
+  const EventEntry(
+    super.at,
+    this.event, {
+    required this.isPast,
+    this.overlapsWith,
+  });
   final ConnectorItem event;
   final bool isPast;
+
+  /// Title of another meeting that runs at the same time, or null.
+  final String? overlapsWith;
 }
 
 /// One app's notifications from today, slotted at its newest one.
@@ -45,6 +53,15 @@ final class NotificationEntry extends TimelineEntry {
 
 DateTime _at(ConnectorItem i) => i.sentAt ?? i.updatedAt;
 
+/// True when [a] and [b] are both on at some moment (touching ends do not
+/// count; an event with no end is a point and never overlaps).
+bool _overlap(ConnectorItem a, ConnectorItem b) {
+  final aEnd = eventEnd(a);
+  final bEnd = eventEnd(b);
+  if (aEnd == null || bEnd == null) return false;
+  return a.startsAt!.isBefore(bEnd) && b.startsAt!.isBefore(aEnd);
+}
+
 List<TimelineEntry> buildTimeline({
   required DateTime now,
   required List<ConnectorItem> events,
@@ -60,7 +77,15 @@ List<TimelineEntry> buildTimeline({
   ]..sort((a, b) => a.startsAt!.compareTo(b.startsAt!));
   for (final e in timed) {
     final end = eventEnd(e) ?? e.startsAt!;
-    out.add(EventEntry(e.startsAt!, e, isPast: !end.isAfter(now)));
+    final clash = timed.where((o) => o != e && _overlap(e, o)).firstOrNull;
+    out.add(
+      EventEntry(
+        e.startsAt!,
+        e,
+        isPast: !end.isAfter(now),
+        overlapsWith: clash == null ? null : oneLine(clash.title, 40),
+      ),
+    );
   }
   for (final g in groups) {
     final today = [

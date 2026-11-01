@@ -311,6 +311,24 @@ class _EventCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(ev.title, style: theme.textTheme.titleLarge),
+              if (entry.overlapsWith != null) ...[
+                SizedBox(height: tokens.spacing.xs),
+                Row(
+                  key: ValueKey('timeline-overlap-${ev.id}'),
+                  children: [
+                    Icon(Icons.warning_amber, size: 16, color: tokens.warning),
+                    SizedBox(width: tokens.spacing.xs),
+                    Expanded(
+                      child: Text(
+                        'Overlaps ${entry.overlapsWith}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (place != null) ...[
                 SizedBox(height: tokens.spacing.xs),
                 Text(

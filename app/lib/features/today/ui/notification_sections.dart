@@ -21,7 +21,7 @@ class NeedsYouSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = ref.watch(notificationGroupsProvider).value ?? const [];
+    final groups = ref.watch(unreadNotificationGroupsProvider);
     final now = ref.watch(nowProvider);
     final entries = needsYou(groups, now);
     if (entries.isEmpty) return const SizedBox.shrink();
@@ -249,5 +249,9 @@ class DigestCard extends ConsumerWidget {
   }
 }
 
-String _oneLineOf(ConnectorItem i) =>
-    oneLine(i.body.isNotEmpty ? i.body : i.title, 80);
+/// The preview text: whitespace flattened, NOT cut. The row's own
+/// `maxLines: 1` + ellipsis shortens it to the width it really has (a pre-cut
+/// string would end in two ellipses, or stop mid-word at wide widths).
+String _oneLineOf(ConnectorItem i) => (i.body.isNotEmpty ? i.body : i.title)
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();

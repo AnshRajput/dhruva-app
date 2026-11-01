@@ -10,6 +10,7 @@ ConnectorItem item(
   List<Person> people = const [],
   String? summary,
   DateTime? startsAt,
+  Map<String, Object?> flags = const {},
 }) => ConnectorItem(
   id: id,
   source: 'calendar',
@@ -20,7 +21,7 @@ ConnectorItem item(
   people: people,
   startsAt: startsAt,
   sentAt: null,
-  flags: const {},
+  flags: flags,
   summary: summary,
   summaryModel: null,
   updatedAt: DateTime.utc(2026, 11, 1),
@@ -37,7 +38,7 @@ void main() {
       item(
         1,
         body: 'Quarterly numbers',
-        startsAt: DateTime.utc(2026, 11, 1, 9),
+        startsAt: DateTime(2026, 11, 1, 9),
         people: const [Person(name: 'Ravi', email: 'ravi@example.com')],
       ),
       item(2, title: 'Dentist', kind: ItemKind.notification),
@@ -46,12 +47,35 @@ void main() {
     expect(
       block.text,
       contains(
-        '<sources>\n[1] event | Standup | 2026-11-01T09:00:00.000Z | with Ravi ravi@example.com\nQuarterly numbers\n[2] notification | Dentist\n</sources>',
+        '<sources>\n[1] event | Standup | Sun 1 Nov, 9:00 | with Ravi ravi@example.com\nQuarterly numbers\n[2] notification | Dentist\n</sources>',
       ),
     );
     expect(block.items, hasLength(2));
     expect('<sources>'.allMatches(afterPreamble(block)).length, 1);
     expect('</sources>'.allMatches(afterPreamble(block)).length, 1);
+  });
+
+  test('event times are LOCAL with the end, never UTC ISO', () {
+    final block = buildSourcesBlock([
+      item(
+        1,
+        startsAt: DateTime(2026, 11, 2, 11),
+        flags: {'end': DateTime(2026, 11, 2, 12).millisecondsSinceEpoch},
+      ),
+      item(
+        2,
+        title: 'Diwali',
+        startsAt: DateTime(2026, 11, 8),
+        flags: const {'allDay': true},
+      ),
+    ]);
+    expect(
+      block.text,
+      contains('[1] event | Standup | Mon 2 Nov, 11:00\u201312:00'),
+    );
+    expect(block.text, contains('[2] event | Diwali | Sun 8 Nov, all day'));
+    expect(block.text, isNot(contains('T0')));
+    expect(block.text, isNot(contains('Z')));
   });
 
   group('prompt injection', () {

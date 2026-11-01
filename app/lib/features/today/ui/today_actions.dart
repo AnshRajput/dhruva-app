@@ -158,6 +158,11 @@ Future<void> openFact(
     }
     return;
   }
+  if (kind == 'todos') {
+    // The Library is a tab of the shell: switch to it, never push it.
+    context.go('/library');
+    return;
+  }
   if (kind == 'notif') {
     final groups = ref.read(notificationGroupsProvider).value ?? const [];
     final match = groups.where((g) => g.package == key);

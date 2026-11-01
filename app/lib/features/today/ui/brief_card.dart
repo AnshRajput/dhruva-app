@@ -3,11 +3,11 @@
 ///  * loading: a skeleton, not a spinner
 ///  * calendar off: one tap "Connect your calendar (no sign-in)", and when the
 ///    OS said no, the fix in words with "Open settings"
-///  * a written brief: cited phrases are tappable and open their source;
-///    "How this was written" lists the numbered facts
-///  * no brief yet (no model, model loading, or not written yet): the facts as
-///    a plain list, which is still useful, plus "Write my brief" when a model
-///    can do it
+///  * the brief: 3 to 5 sentences written by rules from the day's data, shown
+///    instantly with no model; cited phrases are tappable and open the RIGHT
+///    source; "How this was written" lists the numbered facts
+///  * optional "Rewrite in my words" when a model is ready: shown only if it
+///    passed the strict grounding check, otherwise "Kept the checked version"
 library;
 
 import 'package:flutter/gestures.dart';
@@ -21,11 +21,11 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/model_download_line.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_cache.dart';
+import '../state/brief_compose.dart';
 import '../state/brief_controller.dart';
 import '../state/brief_facts.dart';
 import '../state/brief_parser.dart';
 import '../state/brief_writer.dart';
-import '../state/day_text.dart';
 import '../state/today_data.dart';
 import 'today_actions.dart';
 import 'today_widgets.dart';
@@ -58,7 +58,8 @@ class _BriefCardState extends ConsumerState<BriefCard> {
   Widget build(BuildContext context) {
     final loaded = ref.watch(connectorsLoadedProvider);
     final calendar = ref.watch(calendarEntryProvider);
-    final facts = ref.watch(briefFactsProvider);
+    final day = ref.watch(dayBriefProvider);
+    final facts = day.facts;
     final brief = ref.watch(briefControllerProvider);
 
     if (!loaded) return const _BriefSkeleton();
@@ -92,20 +93,7 @@ class _BriefCardState extends ConsumerState<BriefCard> {
     if (facts.isEmpty && calendar?.status.lastSyncAt == null) {
       return const _BriefSkeleton();
     }
-    final bs = brief.value;
-    if (bs == null) {
-      return brief.hasError
-          ? _FactsCard(facts: facts, state: null)
-          : const _BriefSkeleton();
-    }
-    final written = bs.brief;
-    if (written != null) {
-      final parsed = written.parsed();
-      if (!parsed.isEmpty) {
-        return _WrittenCard(state: bs, brief: written, parsed: parsed);
-      }
-    }
-    return _FactsCard(facts: facts, state: bs);
+    return _BriefBody(day: day, state: brief.value);
   }
 }
 
@@ -204,30 +192,21 @@ class _ConnectCard extends StatelessWidget {
   }
 }
 
-/// The written brief with tappable cited phrases.
-class _WrittenCard extends ConsumerStatefulWidget {
-  const _WrittenCard({
-    required this.state,
-    required this.brief,
-    required this.parsed,
-  });
+/// The brief: rule-written sentences with tappable cited phrases, or the
+/// model's checked rewording of them.
+class _BriefBody extends ConsumerStatefulWidget {
+  const _BriefBody({required this.day, required this.state});
 
-  final BriefState state;
-  final WrittenBrief brief;
-  final ParsedBrief parsed;
+  final DayBrief day;
+  final BriefState? state;
 
   @override
-  ConsumerState<_WrittenCard> createState() => _WrittenCardState();
+  ConsumerState<_BriefBody> createState() => _BriefBodyState();
 }
 
-class _WrittenCardState extends ConsumerState<_WrittenCard> {
-  /// Null = automatic: closed, but open under an error ('read the facts below').
+class _BriefBodyState extends ConsumerState<_BriefBody> {
+  /// Null = automatic: closed.
   bool? _open;
-
-  void _openCites(List<int> cites) {
-    final f = widget.brief.fact(cites.first);
-    if (f != null) openFact(context, ref, f);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -235,11 +214,33 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
     final tokens = theme.extension<DhruvaTokens>()!;
     final scheme = theme.colorScheme;
     final now = ref.watch(nowProvider);
-    final fresh = isBriefFresh(widget.brief, now);
-    final at = formatClock(context, widget.brief.writtenAt);
-    final open = _open ?? widget.state.error != null;
-    final busy = widget.state.writing;
+    final s = widget.state;
+    final rewrite = shownRewrite(s?.rewrite, widget.day.facts, now);
+    final sentences = rewrite == null
+        ? widget.day.sentences
+        : rewrite.parsed().sentences;
+    final facts = widget.day.facts;
+    final open = _open ?? false;
+    final busy = s?.writing ?? false;
     final reduce = MediaQuery.disableAnimationsOf(context);
+
+    void onCite(List<int> cites) {
+      for (final f in facts) {
+        if (f.n == cites.first) {
+          openFact(context, ref, f);
+          return;
+        }
+      }
+    }
+
+    final String footer = busy
+        ? ((s?.warming ?? false)
+              ? 'Warming up your model…'
+              : 'Rewriting in your words…')
+        : rewrite != null
+        ? 'Reworded on this phone at ${formatClock(context, rewrite.writtenAt)}'
+              ' · checked against your day'
+        : 'Made on this phone from your calendar and notifications';
     return TodayCard(
       cardKey: const ValueKey('today-brief'),
       child: Column(
@@ -251,8 +252,8 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
             opacity: busy ? 0.6 : 1,
             child: CitedText(
               key: const ValueKey('today-brief-text'),
-              sentences: widget.parsed.sentences,
-              onCite: _openCites,
+              sentences: sentences,
+              onCite: onCite,
             ),
           ),
           SizedBox(height: tokens.spacing.md),
@@ -262,32 +263,18 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
               SizedBox(width: tokens.spacing.xs),
               Expanded(
                 child: Text(
-                  busy
-                      ? (widget.state.warming
-                            ? 'Warming up your model…'
-                            : 'Writing a new one…')
-                      : fresh
-                      ? 'Written on this phone at $at'
-                      : 'Written on this phone at $at · ${ageLabel(widget.brief.writtenAt, now)}',
+                  footer,
                   key: const ValueKey('today-brief-footer'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
-              IconButton(
-                key: const ValueKey('today-brief-regenerate'),
-                tooltip: 'Write it again',
-                icon: const Icon(Icons.refresh_rounded, size: 20),
-                onPressed: busy
-                    ? null
-                    : () => ref
-                          .read(briefControllerProvider.notifier)
-                          .regenerate(),
-              ),
             ],
           ),
-          if (widget.state.error != null) _ErrorLine(widget.state.error!),
+          if (s?.keptChecked ?? false) const _KeptLine(),
+          if (s?.error != null) _ErrorLine(s!.error!),
+          _RewriteRow(state: s, rewritten: rewrite != null, busy: busy),
           InkWell(
             key: const ValueKey('today-brief-how'),
             borderRadius: BorderRadius.circular(tokens.radius.sm),
@@ -324,11 +311,15 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
             child: open
                 ? _FactList(
                     key: const ValueKey('today-brief-facts'),
-                    facts: widget.brief.facts,
-                    intro:
-                        'Rules picked these facts from your calendar and '
-                        'notifications. The model on your phone only put '
-                        'them into words.',
+                    facts: facts,
+                    intro: rewrite == null
+                        ? 'Rules read your calendar and notifications and '
+                              'wrote this from the facts below. No model is '
+                              'involved and nothing is guessed.'
+                        : 'Rules picked these facts from your calendar and '
+                              'notifications. The model on your phone only '
+                              'reworded them, and every sentence was checked '
+                              'against them before it was shown.',
                   )
                 : const SizedBox(width: double.infinity),
           ),
@@ -338,61 +329,88 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
   }
 }
 
-/// No written brief: the facts, plainly, and the way to get one written.
-class _FactsCard extends ConsumerWidget {
-  const _FactsCard({required this.facts, required this.state});
-  final List<BriefFact> facts;
+/// What the user can do about the wording: reword it (a model is ready), see
+/// the download, add a model, or go back to the original.
+class _RewriteRow extends ConsumerWidget {
+  const _RewriteRow({
+    required this.state,
+    required this.rewritten,
+    required this.busy,
+  });
+
   final BriefState? state;
+  final bool rewritten;
+  final bool busy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final model = state?.model ?? BriefModelStatus.none;
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    final ctl = ref.read(briefControllerProvider.notifier);
+    if (busy) {
+      return Padding(
+        padding: EdgeInsets.only(top: tokens.spacing.sm),
+        child: const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (model == BriefModelStatus.none) {
+      return _GetModel();
+    }
+    return Wrap(
+      spacing: tokens.spacing.sm,
+      children: [
+        if (rewritten) ...[
+          TextButton.icon(
+            key: const ValueKey('today-brief-regenerate'),
+            onPressed: ctl.rewrite,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Write it again'),
+          ),
+          TextButton(
+            key: const ValueKey('today-brief-original'),
+            onPressed: ctl.useOriginal,
+            child: const Text('Show original'),
+          ),
+        ] else
+          TextButton.icon(
+            key: const ValueKey('today-brief-rewrite'),
+            onPressed: ctl.rewrite,
+            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: const Text('Rewrite in my words'),
+          ),
+      ],
+    );
+  }
+}
+
+/// The rewrite was thrown away because it did not match the day: said plainly,
+/// not as an error.
+class _KeptLine extends StatelessWidget {
+  const _KeptLine();
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final s = state;
-    final model = s?.model ?? BriefModelStatus.none;
-    final busy = s?.writing ?? false;
-    final String? status = busy
-        ? (s!.warming ? 'Warming up your model…' : 'Writing your brief…')
-        : null;
-    return TodayCard(
-      cardKey: const ValueKey('today-brief'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: EdgeInsets.only(top: tokens.spacing.sm),
+      child: Row(
         children: [
-          const _CardTitle(),
-          SizedBox(height: tokens.spacing.md),
-          Text('Your day, at a glance', style: theme.textTheme.titleLarge),
-          SizedBox(height: tokens.spacing.sm),
-          _FactList(key: const ValueKey('today-brief-facts'), facts: facts),
-          SizedBox(height: tokens.spacing.base),
-          if (status != null)
-            Row(
-              children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: tokens.spacing.sm),
-                Text(
-                  status,
-                  key: const ValueKey('today-brief-status'),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            )
-          else if (model == BriefModelStatus.none)
-            _GetModel()
-          else
-            FilledButton(
-              key: const ValueKey('today-brief-write'),
-              onPressed: () =>
-                  ref.read(briefControllerProvider.notifier).regenerate(),
-              child: const Text('Write my brief'),
+          Icon(Icons.check_circle_outline, size: 16, color: tokens.success),
+          SizedBox(width: tokens.spacing.xs),
+          Expanded(
+            child: Text(
+              'Kept the checked version',
+              key: const ValueKey('today-brief-kept'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          if (s?.error != null) _ErrorLine(s!.error!),
+          ),
         ],
       ),
     );
@@ -407,37 +425,28 @@ class _GetModel extends ConsumerWidget {
     final download = ref.watch(modelDownloadProvider).value;
     if (download != null) {
       // A model is on its way: say so, instead of offering to get one.
-      return Column(
-        key: const ValueKey('today-brief-downloading'),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ModelDownloadLine(progress: download),
-          SizedBox(height: tokens.spacing.sm),
-          Text(
-            'Your brief is written as soon as it is ready.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+      return Padding(
+        padding: EdgeInsets.only(top: tokens.spacing.sm),
+        child: Column(
+          key: const ValueKey('today-brief-downloading'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ModelDownloadLine(progress: download),
+            SizedBox(height: tokens.spacing.xs),
+            Text(
+              'Then you can have this reworded in your own words.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Add a model and your phone writes this as a short brief for you.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        SizedBox(height: tokens.spacing.sm),
-        OutlinedButton(
-          key: const ValueKey('today-brief-get-model'),
-          onPressed: () => context.push('/settings/models'),
-          child: const Text('Get a model'),
-        ),
-      ],
+    return TextButton(
+      key: const ValueKey('today-brief-get-model'),
+      onPressed: () => context.push('/settings/models'),
+      child: const Text('Get a model to reword it'),
     );
   }
 }

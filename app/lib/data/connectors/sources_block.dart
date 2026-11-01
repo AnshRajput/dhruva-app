@@ -14,6 +14,7 @@
 library;
 
 import 'connector.dart';
+import 'local_time.dart';
 
 /// What the model is told about the block. Kept next to the builder so the two
 /// cannot drift apart.
@@ -71,8 +72,8 @@ String _render(int n, ConnectorItem item) {
   final b = StringBuffer('[$n] ${item.kind.name}');
   final title = escapeSourceText(item.title.trim());
   if (title.isNotEmpty) b.write(' | $title');
-  final when = item.startsAt ?? item.sentAt;
-  if (when != null) b.write(' | ${when.toUtc().toIso8601String()}');
+  final when = itemWhenText(item);
+  if (when != null) b.write(' | $when');
   final people = [
     for (final p in item.people)
       escapeSourceText([?p.name, ?p.email].join(' ')),
