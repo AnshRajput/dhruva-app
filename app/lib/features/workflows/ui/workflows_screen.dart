@@ -200,10 +200,12 @@ class _PrivacyNote extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
         SizedBox(width: tokens.spacing.xs),
-        Text(
-          'Runs on your phone. Nothing is uploaded.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        Expanded(
+          child: Text(
+            'Runs on your phone. Nothing is uploaded.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -346,14 +348,17 @@ class _WorkflowSheetState extends State<WorkflowSheet> {
               ),
             ],
             SizedBox(height: tokens.spacing.sm),
-            Row(
+            // Wrap: at a large font size the two buttons drop to two lines
+            // instead of overflowing the sheet.
+            Wrap(
+              spacing: tokens.spacing.sm,
+              runSpacing: tokens.spacing.sm,
               children: [
                 OutlinedButton.icon(
                   onPressed: _paste,
                   icon: const Icon(Icons.content_paste_rounded, size: 18),
                   label: const Text('Paste'),
                 ),
-                SizedBox(width: tokens.spacing.sm),
                 OutlinedButton.icon(
                   onPressed: _openFile,
                   icon: const Icon(Icons.folder_open_rounded, size: 18),
