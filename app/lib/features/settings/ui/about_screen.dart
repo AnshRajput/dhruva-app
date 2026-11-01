@@ -1,17 +1,20 @@
-/// About page (UX-amendment follow-up to Amendment 4): a keepsake screen,
-/// not a settings row — app identity, the brand narrative as pull quotes,
-/// the developer credit, and the canonical links row. Reached from
-/// Settings via `/settings/about`.
+/// About page (`/settings/about`). Order (audit D9): version and build first,
+/// then the privacy facts and links, then the developer credit, and the
+/// pole-star story and pull quotes last.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../app_info.dart';
+import '../privacy_facts.dart';
 import '../widgets/credit_row.dart';
+import '../widgets/settings_widgets.dart';
+import '../widgets/update_row.dart';
 import '../widgets/version_text.dart';
 
 /// Drawn from the ratified brand narrative (orchestra/research/
@@ -36,62 +39,64 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    return Scaffold(
-      appBar: AppBar(title: const Text('About')),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(tokens.spacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final muted = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return SettingsPage(
+      title: 'About',
+      subtitle: AppIdentity.tagline,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
+          child: Row(
+            children: [
+              DhruvaStar(size: 28, color: theme.colorScheme.primary),
+              SizedBox(width: tokens.spacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      AppIdentity.productName,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    VersionText(style: muted),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: tokens.spacing.base),
+        const SettingsGroup(children: [UpdateRow()]),
+        const SettingsSectionLabel('Privacy in short'),
+        SettingsGroup(
           children: [
-            Center(
-              child: DhruvaStar(size: 96, color: theme.colorScheme.primary),
+            const SettingsRow(
+              icon: Icons.lock_outline,
+              title: 'Zero telemetry',
+              subtitle:
+                  'Nothing about you or your chats is sent to us. '
+                  '$noServerFact',
             ),
-            SizedBox(height: tokens.spacing.md),
-            Center(
-              child: Text(
-                AppIdentity.productName,
-                style: theme.textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
+            SettingsRow(
+              key: const ValueKey('about-privacy-row'),
+              icon: Icons.info_outline,
+              title: 'See every network call',
+              subtitle:
+                  'Model downloads, AI news, update checks, your accounts',
+              onTap: () => context.push('/settings/privacy'),
             ),
-            // Designer BLOCKING #3: the name's own meaning, in its own
-            // script — design-tokens.json meta.story: "Dhruva (ध्रुव) is
-            // the pole star". `titleLarge` is still a Fraunces-driven role
-            // (app_theme.dart), so this is the bundled Noto Serif
-            // Devanagari fallback's first live consumer in the app.
-            Center(
-              child: Text(
-                'ध्रुव',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-              ),
+          ],
+        ),
+        const SettingsSectionLabel('Links'),
+        const SettingsGroup(
+          children: [
+            _LinkRow(
+              icon: Icons.description_outlined,
+              label: 'Privacy policy',
+              url: privacyPolicyUrl,
             ),
-            SizedBox(height: tokens.spacing.xs),
-            Center(
-              child: VersionText(
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            SizedBox(height: tokens.spacing.xl2),
-            for (final quote in _quotes) _PullQuote(quote),
-            SizedBox(height: tokens.spacing.md),
-            Text('The developer', style: theme.textTheme.titleSmall),
-            SizedBox(height: tokens.spacing.xs),
-            Text(
-              'Built by Ansh Singh Rajput under Appu Inside Engineering, '
-              'building in public — every loop of this app ships on GitHub '
-              'as it happens.',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const CreditRow(),
-            SizedBox(height: tokens.spacing.md),
-            const Divider(),
             _LinkRow(
               icon: Icons.code,
               label: 'Source on GitHub',
@@ -103,29 +108,63 @@ class AboutScreen extends StatelessWidget {
               label: 'Apache License 2.0',
               url: licenseUrl,
             ),
-            SizedBox(height: tokens.spacing.sm),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-              child: Text(
-                'Zero telemetry — model downloads and app-update checks are the '
-                'only network calls this app makes. Update checks send only '
-                'the app version and patch number, never your chats.',
-                style: theme.textTheme.bodySmall?.copyWith(
+          ],
+        ),
+        SizedBox(height: tokens.spacing.lg),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('The developer', style: theme.textTheme.titleSmall),
+              SizedBox(height: tokens.spacing.xs),
+              Text(
+                'Built by Ansh Singh Rajput under Appu Inside Engineering, '
+                'building in public — every loop of this app ships on GitHub '
+                'as it happens.',
+                style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const CreditRow(),
+        SizedBox(height: tokens.spacing.xl),
+        // The story comes last: the pole star, its name in its own script,
+        // and the three pull quotes.
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: DhruvaStar(size: 96, color: theme.colorScheme.primary),
+              ),
+              SizedBox(height: tokens.spacing.md),
+              // The name's own meaning, in its own script (design-tokens.json
+              // meta.story). `titleLarge` is a Fraunces role, so this is the
+              // bundled Noto Serif Devanagari fallback's live consumer.
+              Center(
+                child: Text(
+                  'ध्रुव',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              SizedBox(height: tokens.spacing.xl2),
+              for (final quote in _quotes) _PullQuote(quote),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// A pull quote: Fraunces (`headlineSmall`, italic — the "myth register",
-/// per brand-proposal.md §c) with the same left-border blockquote language
-/// chat-spec.md §2.2 already uses for markdown block quotes, at keepsake
-/// scale instead of in-bubble scale.
+/// A pull quote: Fraunces (`headlineSmall`, italic, the "myth register" per
+/// brand-proposal.md section c), set plainly with no side stripe or card.
 class _PullQuote extends StatelessWidget {
   final String text;
   const _PullQuote(this.text);
@@ -136,21 +175,10 @@ class _PullQuote extends StatelessWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
     return Padding(
       padding: EdgeInsets.only(bottom: tokens.spacing.lg),
-      child: Container(
-        padding: EdgeInsets.only(left: tokens.spacing.sm),
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(
-              color: theme.colorScheme.outline,
-              width: tokens.spacing.xs,
-            ),
-          ),
-        ),
-        child: Text(
-          text,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontStyle: FontStyle.italic,
-          ),
+      child: Text(
+        text,
+        style: theme.textTheme.headlineSmall?.copyWith(
+          fontStyle: FontStyle.italic,
         ),
       ),
     );
@@ -166,7 +194,7 @@ class _LinkRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon),
+      leading: SettingsIconTile(icon),
       title: Text(label),
       trailing: const Icon(Icons.open_in_new, size: 16),
       onTap: () =>

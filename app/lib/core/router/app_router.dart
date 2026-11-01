@@ -39,9 +39,13 @@ import '../../features/models_hub/ui/models_hub_screen.dart';
 import '../../features/models_hub/widgets/download_status_pill.dart';
 import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
+import '../../features/settings/ui/about_me_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
+import '../../features/settings/ui/appearance_screen.dart';
 import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
+import '../../features/settings/ui/notifications_screen.dart';
+import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/today/ui/day_timeline_screen.dart';
@@ -127,6 +131,22 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/connectors',
       builder: (context, state) => const ConnectorsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/about-me',
+      builder: (context, state) => const AboutMeScreen(),
+    ),
+    GoRoute(
+      path: '/settings/appearance',
+      builder: (context, state) => const AppearanceScreen(),
+    ),
+    GoRoute(
+      path: '/settings/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/privacy',
+      builder: (context, state) => const PrivacyScreen(),
     ),
     // Models hub now lives under Settings (full-screen). `/models` redirects
     // here; `/models/hub` stays as the alias out-of-shell callers push.

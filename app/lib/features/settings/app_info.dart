@@ -15,6 +15,8 @@ const appBuildNumber = '105';
 const githubUrl = 'https://github.com/AnshRajput/dhruva-app';
 const websiteUrl = 'https://dhruvaai.vercel.app';
 const licenseUrl = 'https://github.com/AnshRajput/dhruva-app/blob/main/LICENSE';
+const privacyPolicyUrl =
+    'https://github.com/AnshRajput/dhruva-app/blob/main/docs/privacy.md';
 const creatorUrl = 'https://anshgandharva.in';
 
 /// "Version 0.6.0 (build 100) \u00b7 patch 2" - patch 0 is the bare release.
