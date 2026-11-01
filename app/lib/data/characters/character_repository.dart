@@ -279,6 +279,13 @@ final class CharacterRepository {
 
   // ---- Built-in seeding -------------------------------------------------
 
+  /// Seeds once per repository instance; callers that list characters await
+  /// this so a first-run gallery never races the insert. Failures are
+  /// swallowed (seeding is best-effort) and don't poison the list query.
+  Future<void> ensureSeeded() =>
+      _seeded ??= seedBuiltInsIfPresent().then((_) {}, onError: (_) {});
+  Future<void>? _seeded;
+
   /// Idempotently upserts the starter pack from
   /// `assets/characters/starter_pack.json`, if present (see
   /// [_defaultStarterPackLoader] / the constructor's `starterPackLoader`

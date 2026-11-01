@@ -112,6 +112,83 @@ void main() {
     expect(find.text('No models installed yet.'), findsOneWidget);
   });
 
+  group('D2: "Use a smaller model"', () {
+    Future<void> open(WidgetTester tester, {required int smallerThan}) async {
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) => Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showModelPickerSheet(
+                    context,
+                    smallerModelsOnly: true,
+                    smallerThanBytes: smallerThan,
+                  ),
+                  child: const Text('open picker'),
+                ),
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/models/hub',
+            builder: (context, state) => const Text('discover stand-in'),
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+          ],
+          child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+        ),
+      );
+      await tester.tap(find.text('open picker'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('lists only installed models smaller than the failed one', (
+      tester,
+    ) async {
+      await insertModel(repoId: 'a/Tiny-GGUF', sizeBytes: 100 * 1024 * 1024);
+      await insertModel(repoId: 'a/Medium-GGUF', sizeBytes: 300 * 1024 * 1024);
+      await insertModel(repoId: 'a/Big-GGUF', sizeBytes: 900 * 1024 * 1024);
+      await open(tester, smallerThan: 300 * 1024 * 1024);
+
+      expect(find.text('Use a smaller model'), findsOneWidget);
+      expect(find.text('Tiny'), findsOneWidget);
+      expect(
+        find.text('Medium'),
+        findsNothing,
+        reason: 'same size, not smaller',
+      );
+      expect(find.text('Big'), findsNothing);
+    });
+
+    testWidgets('nothing smaller installed: says so and opens Discover', (
+      tester,
+    ) async {
+      await insertModel(repoId: 'a/Only-GGUF', sizeBytes: 500 * 1024 * 1024);
+      await open(tester, smallerThan: 500 * 1024 * 1024);
+
+      expect(find.text('You have no smaller model installed.'), findsOneWidget);
+      expect(find.text('Only'), findsNothing);
+      await tester.tap(find.text('Find a smaller model'));
+      await tester.pumpAndSettle();
+      expect(find.text('discover stand-in'), findsOneWidget);
+    });
+
+    testWidgets('rows use plain labels, not quant jargon', (tester) async {
+      await insertModel(repoId: 'a/Tiny-GGUF', sizeBytes: 100 * 1024 * 1024);
+      await open(tester, smallerThan: 200 * 1024 * 1024);
+      expect(find.textContaining('Custom file'), findsOneWidget);
+      expect(find.textContaining('unknown quant'), findsNothing);
+    });
+  });
+
   group('Loop 7: vision discoverability hint', () {
     const hintText = 'Want to chat about photos? Browse vision models →';
 

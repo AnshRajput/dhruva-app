@@ -28,32 +28,70 @@ final class ChatErrorContent {
   final ChatRecoveryAction? secondaryAction;
   final String? secondaryLabel;
 
+  /// Last-resort action, shown after the secondary one (e.g. "Re-download
+  /// (379 MB)").
+  final ChatRecoveryAction? tertiaryAction;
+  final String? tertiaryLabel;
+
   const ChatErrorContent({
     required this.message,
     required this.primaryAction,
     required this.primaryLabel,
     this.secondaryAction,
     this.secondaryLabel,
+    this.tertiaryAction,
+    this.tertiaryLabel,
   });
 }
 
-ChatErrorContent chatErrorContentFor(String? errorKind) {
+/// "379 MB" / "1.2 GB" for a re-download label.
+String _sizeLabel(int bytes) {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+  return '${(bytes / (1024 * 1024)).round()} MB';
+}
+
+/// [modelSizeBytes] (the installed file's real size) fills in the
+/// "Re-download (379 MB)" label; omitted, the label has no size.
+ChatErrorContent chatErrorContentFor(String? errorKind, {int? modelSizeBytes}) {
   switch (errorKind) {
+    // D2: three distinct load failures, one recovery order: Try again, then
+    // Use a smaller model, then (only when the file is the suspect) the
+    // expensive Re-download with its real size.
     case 'EngineOutOfMemoryFailure':
       return const ChatErrorContent(
         message:
-            'This model needs more memory than your device has free right now.',
-        primaryAction: ChatRecoveryAction.smallerModel,
-        primaryLabel: 'Try a smaller model',
-        secondaryAction: ChatRecoveryAction.retryAnyway,
-        secondaryLabel: 'Retry anyway',
+            'Not enough free memory for this model right now. Close other '
+            'apps and try again, or use a smaller model.',
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Try again',
+        secondaryAction: ChatRecoveryAction.smallerModel,
+        secondaryLabel: 'Use a smaller model',
       );
-    case 'EngineLoadFailure':
+    case 'EngineLoadTimeoutFailure':
       return const ChatErrorContent(
         message:
-            "Couldn't load this model — the file may be corrupted or an unsupported format.",
-        primaryAction: ChatRecoveryAction.redownload,
-        primaryLabel: 'Re-download',
+            'The model took too long to start. Your phone may be busy or '
+            'low on memory, so the file is probably fine.',
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Try again',
+        secondaryAction: ChatRecoveryAction.smallerModel,
+        secondaryLabel: 'Use a smaller model',
+      );
+    case 'EngineLoadFailure':
+      return ChatErrorContent(
+        message:
+            "This model's file couldn't be read. It may be damaged, missing "
+            'or an unsupported format.',
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Try again',
+        secondaryAction: ChatRecoveryAction.smallerModel,
+        secondaryLabel: 'Use a smaller model',
+        tertiaryAction: ChatRecoveryAction.redownload,
+        tertiaryLabel: modelSizeBytes == null
+            ? 'Re-download'
+            : 'Re-download (${_sizeLabel(modelSizeBytes)})',
       );
     case 'EngineDisposedFailure':
       return const ChatErrorContent(
@@ -140,6 +178,11 @@ class ChatErrorCard extends StatelessWidget {
                 TextButton(
                   onPressed: () => onAction(content.secondaryAction!),
                   child: Text(content.secondaryLabel!),
+                ),
+              if (content.tertiaryAction != null)
+                TextButton(
+                  onPressed: () => onAction(content.tertiaryAction!),
+                  child: Text(content.tertiaryLabel!),
                 ),
             ],
           ),

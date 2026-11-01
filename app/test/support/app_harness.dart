@@ -5,6 +5,7 @@ import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
+import 'package:dhruva/data/characters/character_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/main.dart';
 import 'package:drift/native.dart';
@@ -44,6 +45,11 @@ Future<AppDatabase> pumpDhruvaApp(
     ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        // The real asset loader never completes under fake async, and the
+        // personas list now awaits seeding.
+        characterRepositoryProvider.overrideWithValue(
+          CharacterRepository(db: db, starterPackLoader: () async => null),
+        ),
         deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
         prefsStoreProvider.overrideWith(
           (ref) async =>

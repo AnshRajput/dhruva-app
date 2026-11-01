@@ -3,6 +3,7 @@
 // parse-then-preview-then-save import path — see import_preview_dialog_test.
 // dart for the preview half).
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dhruva/core/di/providers.dart';
@@ -157,4 +158,35 @@ void main() {
     );
     expect(character, isNull);
   });
+
+  test(
+    'first list on a fresh DB includes seeded built-ins (no seed race)',
+    () async {
+      final fresh = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          characterRepositoryProvider.overrideWithValue(
+            CharacterRepository(
+              db: db,
+              // Slow loader: without awaiting the seed, the list query wins.
+              starterPackLoader: () async {
+                await Future<void>.delayed(const Duration(milliseconds: 50));
+                return jsonEncode([
+                  {
+                    'id': 'builtin/coach',
+                    'name': 'Writing coach',
+                    'personaSystemPrompt': 'Help me write.',
+                  },
+                ]);
+              },
+            ),
+          ),
+        ],
+      );
+      addTearDown(fresh.dispose);
+
+      final state = await fresh.read(charactersControllerProvider.future);
+      expect(state.characters.map((c) => c.name), contains('Writing coach'));
+    },
+  );
 }

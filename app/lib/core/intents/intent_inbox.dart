@@ -2,7 +2,10 @@
 /// app ("Ask Dhruva AI" in the selection menu), text shared from the share
 /// sheet, and launcher shortcuts. Native side is `MainActivity.kt` on the
 /// `dhruva/intents` channel: `getInitialIntent` at cold start, and
-/// `onIntent` pushed on later `onNewIntent`s. Payload: `{text?, route?}`.
+/// `onIntent` pushed on later `onNewIntent`s. Payload:
+/// `{text?, route?, replaceable?}`; `replaceable` is true when the text came
+/// from the selection menu of an editable field, so the result can be handed
+/// back (see `process_text.dart`).
 ///
 /// ponytail: iOS share extension is out of scope here; add a Share Extension
 /// target that writes to an app group and feed it through this same inbox.
@@ -16,10 +19,23 @@ class IntentInbox {
 
   /// Navigates to a router location (injected so tests need no router).
   final void Function(String location) navigate;
+
+  /// Told, for every payload, whether the launch can return a result to the
+  /// source app. Null in tests that don't care.
+  final void Function(bool replaceable)? onReplaceable;
   final MethodChannel _channel;
 
-  IntentInbox({required this.navigate, MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel(channelName);
+  IntentInbox({
+    required this.navigate,
+    this.onReplaceable,
+    MethodChannel? channel,
+  }) : _channel = channel ?? const MethodChannel(channelName);
+
+  /// Only a payload that carries text and an explicit `replaceable: true`.
+  static bool isReplaceable(Map<Object?, Object?>? payload) =>
+      payload != null &&
+      payload['replaceable'] == true &&
+      ((payload['text'] as String?)?.trim().isNotEmpty ?? false);
 
   /// Maps a native payload to a router location, or null if it carries
   /// nothing actionable. Shared text wins over a shortcut route.
@@ -48,7 +64,9 @@ class IntentInbox {
 
   void handle(Map<Object?, Object?>? payload) {
     final location = locationFor(payload);
-    if (location != null) navigate(location);
+    if (location == null) return;
+    onReplaceable?.call(isReplaceable(payload));
+    navigate(location);
   }
 
   /// Handles the launch intent, then listens for later ones. Safe on

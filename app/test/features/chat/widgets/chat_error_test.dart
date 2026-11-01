@@ -5,18 +5,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('errorKind mapping covers the full chat-spec.md §8 taxonomy', () {
-    expect(
-      chatErrorContentFor('EngineOutOfMemoryFailure').primaryAction,
-      ChatRecoveryAction.smallerModel,
-    );
-    expect(
-      chatErrorContentFor('EngineOutOfMemoryFailure').secondaryAction,
-      ChatRecoveryAction.retryAnyway,
-    );
-    expect(
-      chatErrorContentFor('EngineLoadFailure').primaryAction,
-      ChatRecoveryAction.redownload,
-    );
+    // D2: every load failure leads with Try again, then Use a smaller model.
+    for (final kind in [
+      'EngineOutOfMemoryFailure',
+      'EngineLoadTimeoutFailure',
+      'EngineLoadFailure',
+    ]) {
+      final c = chatErrorContentFor(kind);
+      expect(c.primaryAction, ChatRecoveryAction.retry, reason: kind);
+      expect(c.primaryLabel, 'Try again', reason: kind);
+      expect(c.secondaryAction, ChatRecoveryAction.smallerModel, reason: kind);
+      expect(c.secondaryLabel, 'Use a smaller model', reason: kind);
+    }
     expect(
       chatErrorContentFor('EngineDisposedFailure').primaryAction,
       ChatRecoveryAction.reloadModel,
@@ -44,35 +44,74 @@ void main() {
     );
   });
 
-  testWidgets('ChatErrorCard renders the message and fires the tapped action', (
-    tester,
-  ) async {
+  test('D2: corrupt file, memory and timeout read differently', () {
+    final corrupt = chatErrorContentFor('EngineLoadFailure').message;
+    final memory = chatErrorContentFor('EngineOutOfMemoryFailure').message;
+    final timeout = chatErrorContentFor('EngineLoadTimeoutFailure').message;
+    expect({corrupt, memory, timeout}, hasLength(3));
+    expect(corrupt, contains('damaged'));
+    expect(memory, contains('memory'));
+    expect(timeout, contains('too long'));
+    // Only the corrupt-file case offers Re-download, last, with the real size.
+    final c = chatErrorContentFor(
+      'EngineLoadFailure',
+      modelSizeBytes: 379 * 1024 * 1024,
+    );
+    expect(c.tertiaryAction, ChatRecoveryAction.redownload);
+    expect(c.tertiaryLabel, 'Re-download (379 MB)');
+    expect(
+      chatErrorContentFor('EngineOutOfMemoryFailure').tertiaryAction,
+      isNull,
+    );
+    expect(
+      chatErrorContentFor('EngineLoadTimeoutFailure').tertiaryAction,
+      isNull,
+    );
+    expect(
+      chatErrorContentFor(
+        'EngineLoadFailure',
+        modelSizeBytes: 2 * 1024 * 1024 * 1024,
+      ).tertiaryLabel,
+      'Re-download (2.0 GB)',
+    );
+  });
+
+  testWidgets('ChatErrorCard shows all three recoveries in order and fires '
+      'the tapped one', (tester) async {
     ChatRecoveryAction? tapped;
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
         home: Scaffold(
           body: ChatErrorCard(
-            content: chatErrorContentFor('EngineOutOfMemoryFailure'),
+            content: chatErrorContentFor(
+              'EngineLoadFailure',
+              modelSizeBytes: 379 * 1024 * 1024,
+            ),
             onAction: (action) => tapped = action,
           ),
         ),
       ),
     );
 
+    expect(find.textContaining("file couldn't be read"), findsOneWidget);
+    final tryAgain = tester.getTopLeft(find.text('Try again'));
+    final smaller = tester.getTopLeft(find.text('Use a smaller model'));
+    final redownload = tester.getTopLeft(find.text('Re-download (379 MB)'));
+    // Re-download is last (reading order: same row then wrapped).
     expect(
-      find.text(
-        'This model needs more memory than your device has free right now.',
-      ),
-      findsOneWidget,
+      tryAgain.dy < redownload.dy ||
+          (tryAgain.dy == redownload.dy &&
+              tryAgain.dx < smaller.dx &&
+              smaller.dx < redownload.dx),
+      isTrue,
     );
-    expect(find.text('Try a smaller model'), findsOneWidget);
-    expect(find.text('Retry anyway'), findsOneWidget);
 
-    await tester.tap(find.text('Retry anyway'));
-    expect(tapped, ChatRecoveryAction.retryAnyway);
-
-    await tester.tap(find.text('Try a smaller model'));
+    await tester.tap(find.text('Re-download (379 MB)'));
+    expect(tapped, ChatRecoveryAction.redownload);
+    await tester.tap(find.text('Use a smaller model'));
     expect(tapped, ChatRecoveryAction.smallerModel);
+    await tester.tap(find.text('Try again'));
+    expect(tapped, ChatRecoveryAction.retry);
   });
 }

@@ -51,7 +51,7 @@ void main() {
         .where(
           (f) =>
               f.path.endsWith('.dart') &&
-              f.readAsStringSync().contains('.configureNotifications()'),
+              f.readAsStringSync().contains('.configureNotifications('),
         );
     expect(
       hits.length,
@@ -61,6 +61,16 @@ void main() {
           'place (downloadManagerProvider) — more than one call site risks '
           'a duplicate permission-request prompt.',
     );
+  });
+
+  test('finishAlerts off drops complete/error/paused, keeps running', () {
+    final quiet = downloadNotificationConfig(finishAlerts: false);
+    expect(quiet.complete, isNull);
+    expect(quiet.error, isNull);
+    expect(quiet.paused, isNull);
+    // Android's foreground service for downloads needs this one.
+    expect(quiet.running, isNotNull);
+    expect(quiet.progressBar, isTrue);
   });
 
   test('AndroidManifest declares POST_NOTIFICATIONS (Android 13+ gate)', () {

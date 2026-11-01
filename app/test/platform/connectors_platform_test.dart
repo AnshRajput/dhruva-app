@@ -63,7 +63,7 @@ void main() {
         names,
         unorderedEquals([
           '.MainActivity',
-          '.ProcessTextAlias',
+          '.ProcessTextActivity',
           '.DhruvaTileService',
           '.DhruvaWidgetProvider',
           'tech.appuinside.dhruva.connectors.NotificationCaptureService',

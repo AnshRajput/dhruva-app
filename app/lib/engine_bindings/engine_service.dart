@@ -226,6 +226,13 @@ final class EngineLoadFailure extends EngineFailure {
   const EngineLoadFailure(super.message, {super.cause});
 }
 
+/// The model did not finish loading in time (the worker never signalled
+/// ready). Usually a slow or busy phone, not a broken file, so the UI offers
+/// "Try again" first.
+final class EngineLoadTimeoutFailure extends EngineFailure {
+  const EngineLoadTimeoutFailure(super.message, {super.cause});
+}
+
 /// Out of memory while loading or decoding.
 final class EngineOutOfMemoryFailure extends EngineFailure {
   const EngineOutOfMemoryFailure(super.message, {super.cause});

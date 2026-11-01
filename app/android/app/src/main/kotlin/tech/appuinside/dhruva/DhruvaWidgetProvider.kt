@@ -11,6 +11,13 @@ import android.widget.RemoteViews
  * Home-screen widget: pole-star mark, "Ask Dhruva..." pill (new chat), and
  * Workflows / Talk buttons. Resizable 4x1 down to 2x1: narrower widths drop
  * the Workflows button first, then Talk, and shorten the pill label.
+ *
+ * Privacy: the widget shows static text only. It never shows mail,
+ * notification or calendar content. Settings > Privacy > "Show next event title
+ * on the home widget" (Dart pref `widget_show_next_event`, default on) is
+ * plumbing for when a next-event line is added: that line may show the
+ * calendar event TITLE only when the pref is on, and nothing from mail or
+ * notifications, ever.
  */
 class DhruvaWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {

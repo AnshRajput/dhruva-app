@@ -71,8 +71,10 @@ class Folders extends Table {
 /// so reordering these values is a breaking schema change.
 enum MessageRole { user, assistant, system }
 
-/// Terminal state of a `Messages` row once generation stops.
-enum MessageStatus { complete, cancelled, error }
+/// Terminal state of a `Messages` row once generation stops. Index-based like
+/// [MessageRole]: only ever append. `truncated` = the reply hit its answer
+/// length limit (`maxTokens`); no schema change, the column is a plain int.
+enum MessageStatus { complete, cancelled, error, truncated }
 
 /// A chat thread.
 ///

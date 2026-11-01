@@ -49,7 +49,16 @@ final searchIndexProvider = FutureProvider<SearchIndex>((ref) {
 final connectorListProvider = StreamProvider<List<ConnectorEntry>>((
   ref,
 ) async* {
-  final hub = await ref.watch(connectorHubProvider.future);
+  final ConnectorHub hub;
+  try {
+    hub = await ref.watch(connectorHubProvider.future);
+  } catch (_) {
+    // The hub failed to start, or was disposed while still loading (app
+    // shutdown, a torn-down widget tree). No connectors is the honest
+    // answer; callers already treat an empty list as "nothing connected".
+    yield const [];
+    return;
+  }
   List<ConnectorEntry> snapshot() => [
     for (final c in hub.all)
       if (c.currentStatus.state != ConnectorState.unsupported)

@@ -75,20 +75,29 @@
                 android:resource="@xml/shortcuts"/>
         </activity>
         <!-- Text-selection menu: "Ask Dhruva AI" shows up next to Copy/Paste in
-             every app. An alias (not a second filter on MainActivity) gives the
-             menu its own label; it forwards to MainActivity, which reads
-             EXTRA_PROCESS_TEXT. -->
-        <activity-alias
-            android:name=".ProcessTextAlias"
-            android:targetActivity=".MainActivity"
+             every app. A dedicated standard-launch-mode activity (not the
+             singleTask MainActivity, which can never return a result to its
+             caller) so an editable field can get "Replace selected text" back
+             via setResult(EXTRA_PROCESS_TEXT). Shares MainActivity's code. -->
+        <activity
+            android:name=".ProcessTextActivity"
             android:label="Ask Dhruva AI"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="standard"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
-        </activity-alias>
+        </activity>
         <!-- Quick Settings tile "Ask Dhruva": opens a new chat via the same
              `route` intent the launcher shortcuts use. BIND_QUICK_SETTINGS_TILE
              restricts binding to the system. -->

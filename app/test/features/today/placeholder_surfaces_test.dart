@@ -92,7 +92,9 @@ void main() {
       await pumpDhruvaApp(tester);
       await tester.tap(find.byKey(const ValueKey('today-settings')));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Settings'), findsOneWidget);
+      // The big serif page title (the app bar itself carries only Back).
+      expect(find.text('Settings'), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-about-me')), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
     });
 

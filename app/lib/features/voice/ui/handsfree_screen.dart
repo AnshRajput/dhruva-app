@@ -17,6 +17,7 @@
 /// discipline (`DhruvaTokens.motion`) as the rest of the app.
 library;
 
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -38,11 +40,46 @@ class HandsFreeScreen extends ConsumerStatefulWidget {
   ConsumerState<HandsFreeScreen> createState() => _HandsFreeScreenState();
 }
 
-class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
+class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from system Settings after granting the microphone: start without
+  /// making the user find a retry button.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if (lifecycle == AppLifecycleState.resumed &&
+        ref.read(handsFreeControllerProvider).phase ==
+            HandsFreePhase.permissionDenied) {
+      unawaited(_retry());
+    }
+  }
+
+  /// D15: the permission fix lives in system Settings. If it will not open,
+  /// say where to go instead of failing silently.
+  Future<void> _openSettings() async {
+    final opened = await ref.read(openAppSettingsProvider)();
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't open Settings. Open your phone's Settings, then Apps, "
+            'then allow the microphone.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _start() => ref
@@ -97,6 +134,7 @@ class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
             ),
             HandsFreePhase.permissionDenied => _PermissionDeniedView(
               onExit: _exit,
+              onOpenSettings: _openSettings,
             ),
             _ => _ConversationView(state: state, onExit: _exit),
           },
@@ -577,7 +615,13 @@ class _NoModelView extends StatelessWidget {
 
 class _PermissionDeniedView extends StatelessWidget {
   final VoidCallback onExit;
-  const _PermissionDeniedView({required this.onExit});
+
+  /// D15: the fix lives in system Settings; one tap gets the user there.
+  final VoidCallback onOpenSettings;
+  const _PermissionDeniedView({
+    required this.onExit,
+    required this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -600,15 +644,20 @@ class _PermissionDeniedView extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            '${AppIdentity.shortName} needs the microphone to hear you. Enable it in your '
-            'device\'s app settings, then try again.',
+            '${AppIdentity.shortName} needs the microphone to hear you. Turn it '
+            'on in ${AppIdentity.shortName}\'s settings, then come back.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           SizedBox(height: tokens.spacing.lg),
-          FilledButton(onPressed: onExit, child: const Text('Close')),
+          FilledButton(
+            onPressed: onOpenSettings,
+            child: const Text('Open settings'),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          TextButton(onPressed: onExit, child: const Text('Close')),
         ],
       ),
     );
