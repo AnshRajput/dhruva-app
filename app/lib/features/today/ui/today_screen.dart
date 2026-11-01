@@ -13,11 +13,15 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/crash/crash_banner.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/update/shorebird_update_banner.dart';
+import '../../../core/update/shorebird_update_service.dart';
 import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../core/widgets/pressable_scale.dart';
@@ -66,63 +70,86 @@ class TodayScreen extends StatelessWidget {
         ],
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          tokens.spacing.base,
-          tokens.spacing.xs,
-          tokens.spacing.base,
-          tokens.spacing.xl2,
+        padding: EdgeInsets.only(
+          top: tokens.spacing.xs,
+          bottom: tokens.spacing.xl2,
         ),
         children: [
-          Text(greetingFor(today), style: theme.textTheme.headlineMedium),
-          SizedBox(height: tokens.spacing.xs),
-          Text(
-            formatDayLine(today),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
+          // Update / crash nudges used to sit on the Chats home; Today is home now.
+          const _SystemBanners(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(greetingFor(today), style: theme.textTheme.headlineMedium),
+                SizedBox(height: tokens.spacing.xs),
+                Text(
+                  formatDayLine(today),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                if (statusPill != null) ...[
+                  SizedBox(height: tokens.spacing.sm),
+                  Align(alignment: Alignment.centerLeft, child: statusPill),
+                ],
+                SizedBox(height: tokens.spacing.base),
+                const _BriefCard(),
+                SizedBox(height: tokens.spacing.base),
+                const _QuickActionsRow(),
+                SizedBox(height: tokens.spacing.lg),
+                _SectionHeader(
+                  title: 'Up next',
+                  actionLabel: 'See day',
+                  actionKey: const ValueKey('today-see-day'),
+                  onAction: () => context.push('/day'),
+                ),
+                SizedBox(height: tokens.spacing.sm),
+                NextStepCard(
+                  icon: Icons.event_outlined,
+                  title: 'Nothing scheduled yet',
+                  body:
+                      'Connect your calendar to see your next meetings here. It '
+                      'needs no sign-in and never leaves this phone.',
+                  actionLabel: 'Connect calendar',
+                  actionKey: const ValueKey('today-connect-calendar'),
+                  onAction: () => context.push('/settings/connectors'),
+                ),
+                SizedBox(height: tokens.spacing.lg),
+                const _SectionHeader(title: 'Needs you'),
+                SizedBox(height: tokens.spacing.sm),
+                NextStepCard(
+                  icon: Icons.inbox_outlined,
+                  title: 'Set up your inbox',
+                  body:
+                      'Mail and notifications that need a reply, in one calm list '
+                      'with a drafted answer you edit and send yourself.',
+                  actionLabel: 'Set up inbox',
+                  actionKey: const ValueKey('today-setup-inbox'),
+                  // Full-screen route, NOT the shell's /inbox branch.
+                  onAction: () => context.push('/inbox/connect'),
+                ),
+              ],
             ),
-          ),
-          if (statusPill != null) ...[
-            SizedBox(height: tokens.spacing.sm),
-            Align(alignment: Alignment.centerLeft, child: statusPill),
-          ],
-          SizedBox(height: tokens.spacing.base),
-          const _BriefCard(),
-          SizedBox(height: tokens.spacing.base),
-          const _QuickActionsRow(),
-          SizedBox(height: tokens.spacing.lg),
-          _SectionHeader(
-            title: 'Up next',
-            actionLabel: 'See day',
-            actionKey: const ValueKey('today-see-day'),
-            onAction: () => context.push('/day'),
-          ),
-          SizedBox(height: tokens.spacing.sm),
-          NextStepCard(
-            icon: Icons.event_outlined,
-            title: 'Nothing scheduled yet',
-            body:
-                'Connect your calendar to see your next meetings here. It '
-                'needs no sign-in and never leaves this phone.',
-            actionLabel: 'Connect calendar',
-            actionKey: const ValueKey('today-connect-calendar'),
-            onAction: () => context.push('/settings/connectors'),
-          ),
-          SizedBox(height: tokens.spacing.lg),
-          const _SectionHeader(title: 'Needs you'),
-          SizedBox(height: tokens.spacing.sm),
-          NextStepCard(
-            icon: Icons.inbox_outlined,
-            title: 'Set up your inbox',
-            body:
-                'Mail and notifications that need a reply, in one calm list '
-                'with a drafted answer you edit and send yourself.',
-            actionLabel: 'Set up inbox',
-            actionKey: const ValueKey('today-setup-inbox'),
-            // Full-screen route, NOT the shell's /inbox branch.
-            onAction: () => context.push('/inbox/connect'),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The code-push update nudge and the crash-report nudge, formerly shown on the
+/// Chats home. Watching the update provider here also starts the manual
+/// code-push check at launch (Ask, a lazily-built tab, used to do that).
+class _SystemBanners extends ConsumerWidget {
+  const _SystemBanners();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(shorebirdUpdateProvider);
+    return const Column(
+      children: [ShorebirdUpdateBanner(), CrashReportBanner()],
     );
   }
 }

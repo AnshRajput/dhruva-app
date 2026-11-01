@@ -2,6 +2,7 @@
 // they match the comps' structure and every empty state ends in a working
 // next action (no dead ends).
 
+import 'package:dhruva/core/crash/crash_log.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
@@ -60,6 +61,32 @@ void main() {
       expect(find.text('Good morning'), findsOneWidget);
       expect(find.text('Monday 2 November'), findsOneWidget);
     });
+
+    testWidgets(
+      'crash-report nudge (formerly on the Chats home) shows on Today',
+      (tester) async {
+        await pumpDhruvaApp(
+          tester,
+          overrides: [
+            unseenCrashReportsProvider.overrideWith(
+              (ref) async => [
+                CrashRecord(
+                  timestamp: DateTime.utc(2026, 11, 1),
+                  appVersion: '0.6.1',
+                  appBuild: '105',
+                  platform: 'android',
+                  osVersion: '15',
+                  errorType: 'StateError',
+                  message: 'boom',
+                  stack: '',
+                ),
+              ],
+            ),
+          ],
+        );
+        expect(find.byKey(const ValueKey('crash-banner')), findsOneWidget);
+      },
+    );
 
     testWidgets('gear opens Settings full-screen', (tester) async {
       await pumpDhruvaApp(tester);
