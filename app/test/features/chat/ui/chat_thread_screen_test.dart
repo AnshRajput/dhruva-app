@@ -1,3 +1,4 @@
+import '../../../support/device_health_fakes.dart';
 import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
@@ -76,6 +77,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        ...deviceHealthTestOverrides(),
         if (imageAttacher != null)
           imageAttacherProvider.overrideWithValue(imageAttacher),
       ],

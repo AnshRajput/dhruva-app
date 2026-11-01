@@ -1,3 +1,4 @@
+import '../../../support/device_health_fakes.dart';
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/safety/safety_guard.dart';
@@ -41,6 +42,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        ...deviceHealthTestOverrides(),
       ],
     );
     addTearDown(container.dispose);

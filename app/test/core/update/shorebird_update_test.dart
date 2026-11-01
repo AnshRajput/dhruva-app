@@ -180,6 +180,10 @@ void main() {
     FakeUpdater? u,
     bool disableAnimations = false,
   }) async {
+    // Tall enough that the whole (lazy) settings list is built.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final t = make(u: u);
     await tester.pumpWidget(
       UncontrolledProviderScope(

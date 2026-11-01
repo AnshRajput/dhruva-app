@@ -1,3 +1,4 @@
+import '../../../support/device_health_fakes.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -81,6 +82,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        ...deviceHealthTestOverrides(),
       ],
     );
     addTearDown(container.dispose);

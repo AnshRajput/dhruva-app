@@ -12,6 +12,7 @@
 // verify` / `flutter test` — actually runs it as a regression guard. It uses
 // the standard test binding, so it's deterministic and needs no device.
 
+import 'support/device_health_fakes.dart';
 import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
@@ -76,6 +77,7 @@ void main() {
       ProviderScope(
         overrides: [
           engineServiceProvider.overrideWithValue(FakeEngineService()),
+          ...deviceHealthTestOverrides(),
           downloadManagerProvider.overrideWith((ref) async => manager),
           appDatabaseProvider.overrideWithValue(db),
           modelsDirectoryProvider.overrideWith((ref) async => modelsDir),

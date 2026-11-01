@@ -1,6 +1,11 @@
 package tech.appuinside.dhruva
 
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,6 +22,13 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         initial = extract(intent)
+        // Battery & heat guard (Dart: core/device_health). Always answers; any
+        // unavailable value is -1 / "unknown".
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.dhruva/device_health")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "read") result.success(readDeviceHealth())
+                else result.notImplemented()
+            }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dhruva/intents")
             .also { ch ->
                 ch.setMethodCallHandler { call, result ->
@@ -35,6 +47,40 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         extract(intent)?.let { channel?.invokeMethod("onIntent", it) }
+    }
+
+    private fun readDeviceHealth(): Map<String, Any> {
+        var battery = -1
+        var charging = false
+        try {
+            // Sticky broadcast: no receiver needed, returns the last value.
+            val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = i?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level >= 0 && scale > 0) battery = level * 100 / scale
+            val status = i?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+        } catch (_: Exception) {
+        }
+        var thermal = "unknown"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                thermal = when (pm.currentThermalStatus) {
+                    PowerManager.THERMAL_STATUS_NONE,
+                    PowerManager.THERMAL_STATUS_LIGHT -> "nominal"
+                    PowerManager.THERMAL_STATUS_MODERATE -> "fair"
+                    PowerManager.THERMAL_STATUS_SEVERE -> "serious"
+                    PowerManager.THERMAL_STATUS_CRITICAL,
+                    PowerManager.THERMAL_STATUS_EMERGENCY,
+                    PowerManager.THERMAL_STATUS_SHUTDOWN -> "critical"
+                    else -> "unknown"
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return mapOf("battery" to battery, "charging" to charging, "thermal" to thermal)
     }
 
     private fun extract(intent: Intent?): Map<String, String>? {
