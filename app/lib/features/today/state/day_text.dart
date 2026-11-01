@@ -30,8 +30,10 @@ const _months = [
 String formatDayLine(DateTime d) =>
     '${_weekdays[d.weekday - 1]} ${d.day} ${_months[d.month - 1]}';
 
-/// "Good morning" / "Good afternoon" / "Good evening".
+/// "Good morning" / "Good afternoon" / "Good evening"; "Hello" in the small
+/// hours, when nobody is greeted with "morning" yet.
 String greetingFor(DateTime d) {
+  if (d.hour < 5) return 'Hello';
   if (d.hour < 12) return 'Good morning';
   if (d.hour < 18) return 'Good afternoon';
   return 'Good evening';

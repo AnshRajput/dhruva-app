@@ -218,6 +218,20 @@ void main() {
       expect(h.visited, contains('/settings/models'));
     });
 
+    todayTest('the footer names only the sources that are connected', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) => h.seedCalendar(),
+      );
+      expect(
+        find.text('Made on this phone from your calendar'),
+        findsOneWidget,
+      );
+    });
+
     todayTest('with a model ready it still writes nothing on its own', (
       tester,
     ) async {

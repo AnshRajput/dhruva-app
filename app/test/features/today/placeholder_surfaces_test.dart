@@ -25,6 +25,7 @@ void main() {
   group('day text', () {
     test('formats the date and greeting', () {
       expect(formatDayLine(DateTime(2026, 11, 2)), 'Monday 2 November');
+      expect(greetingFor(DateTime(2026, 11, 2, 1)), 'Hello');
       expect(greetingFor(DateTime(2026, 11, 2, 7)), 'Good morning');
       expect(greetingFor(DateTime(2026, 11, 2, 14)), 'Good afternoon');
       expect(greetingFor(DateTime(2026, 11, 2, 21)), 'Good evening');

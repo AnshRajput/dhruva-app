@@ -172,4 +172,18 @@ void main() {
       expect(await runConnectorSync(kit.hub), isTrue);
     });
   });
+
+  test('app-open sync drains the local notification queue after a minute, '
+      'not ten', () async {
+    kit.notifications.granted = true;
+    await kit.hub.notifications.connect();
+    await kit.hub.calendar.connect();
+    await kit.hub.sync.refresh();
+
+    now = now.add(const Duration(seconds: 30));
+    expect((await kit.hub.sync.syncOnOpen()).outcomes, isEmpty);
+
+    now = now.add(notificationsOnOpenMinInterval);
+    expect((await kit.hub.sync.syncOnOpen()).outcomes.keys, ['notifications']);
+  });
 }

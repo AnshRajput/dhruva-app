@@ -73,7 +73,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     if (state != AppLifecycleState.resumed) return;
     // Back from system settings, say: re-read what the OS now allows first, so
     // a Calendar grant turns the card into the real day.
-    unawaited(resumeConnectors(ref).whenComplete(_onOpen));
+    unawaited(
+      resumeConnectors(ref).then((_) => _syncOnResume()).whenComplete(_onOpen),
+    );
+  }
+
+  /// Notifications that arrived while the app was away join the brief now.
+  Future<void> _syncOnResume() async {
+    try {
+      final hub = await ref.read(connectorHubProvider.future);
+      await hub.sync.syncOnOpen();
+    } on Object {
+      // Each connector shows its own failure on its card.
+    }
   }
 
   /// Drops a cached rewrite that no longer matches the day (BriefController).

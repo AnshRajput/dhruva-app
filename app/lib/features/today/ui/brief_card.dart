@@ -233,6 +233,11 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
       }
     }
 
+    final sources = _sourcesRead(
+      calendar: ref.watch(calendarEntryProvider)?.status.isConnected ?? false,
+      notifications:
+          ref.watch(notificationsEntryProvider)?.status.isConnected ?? false,
+    );
     final String footer = busy
         ? ((s?.warming ?? false)
               ? 'Warming up your model…'
@@ -240,7 +245,7 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
         : rewrite != null
         ? 'Reworded on this phone at ${formatClock(context, rewrite.writtenAt)}'
               ' · checked against your day'
-        : 'Made on this phone from your calendar and notifications';
+        : 'Made on this phone from $sources';
     return TodayCard(
       cardKey: const ValueKey('today-brief'),
       child: Column(
@@ -313,11 +318,11 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
                     key: const ValueKey('today-brief-facts'),
                     facts: facts,
                     intro: rewrite == null
-                        ? 'Rules read your calendar and notifications and '
+                        ? 'Rules read $sources and '
                               'wrote this from the facts below. No model is '
                               'involved and nothing is guessed.'
-                        : 'Rules picked these facts from your calendar and '
-                              'notifications. The model on your phone only '
+                        : 'Rules picked these facts from $sources. '
+                              'The model on your phone only '
                               'reworded them, and every sentence was checked '
                               'against them before it was shown.',
                   )
@@ -327,6 +332,15 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
       ),
     );
   }
+}
+
+/// What the brief was actually made from, so the footer never claims a source
+/// the user has not connected.
+String _sourcesRead({required bool calendar, required bool notifications}) {
+  if (calendar && notifications) return 'your calendar and notifications';
+  if (calendar) return 'your calendar';
+  if (notifications) return 'your notifications';
+  return 'what is on your phone';
 }
 
 /// What the user can do about the wording: reword it (a model is ready), see
