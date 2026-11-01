@@ -28,7 +28,12 @@ import '../../../core/di/providers.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
+import '../../../data/docs/bm25.dart';
+import '../../../data/docs/document_extractor.dart';
+import '../../../data/docs/document_repository.dart';
+import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
@@ -132,6 +137,18 @@ final class ChatThreadState {
   /// carry the image into the engine's [ChatTurn].
   final Map<int, Uint8List> attachedImages;
 
+  /// Documents attached to this conversation (chat with a document), oldest
+  /// first. A negative [DocumentInfo.id] is a draft chat's extracted-but-not-
+  /// yet-stored document; it is saved when the first message is sent.
+  final List<DocumentInfo> documents;
+
+  /// File name while a picked document is being read (chip shows "Reading…").
+  final String? extractingDocName;
+
+  /// Plain-language reason the last attach failed, shown inline above the
+  /// composer until dismissed.
+  final String? documentError;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -152,6 +169,9 @@ final class ChatThreadState {
     this.modelLoadError,
     this.isMultimodal = false,
     this.attachedImages = const {},
+    this.documents = const [],
+    this.extractingDocName,
+    this.documentError,
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -190,6 +210,11 @@ final class ChatThreadState {
     bool clearModelLoadError = false,
     bool? isMultimodal,
     Map<int, Uint8List>? attachedImages,
+    List<DocumentInfo>? documents,
+    String? extractingDocName,
+    bool clearExtractingDocName = false,
+    String? documentError,
+    bool clearDocumentError = false,
   }) {
     return ChatThreadState(
       conversationId: conversationId ?? this.conversationId,
@@ -215,6 +240,13 @@ final class ChatThreadState {
           : (modelLoadError ?? this.modelLoadError),
       isMultimodal: isMultimodal ?? this.isMultimodal,
       attachedImages: attachedImages ?? this.attachedImages,
+      documents: documents ?? this.documents,
+      extractingDocName: clearExtractingDocName
+          ? null
+          : (extractingDocName ?? this.extractingDocName),
+      documentError: clearDocumentError
+          ? null
+          : (documentError ?? this.documentError),
     );
   }
 }
@@ -301,10 +333,28 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   final Map<int, String> _errorDetails = {};
 
   ChatRepository get _repo => ref.read(chatRepositoryProvider);
+  DocumentRepository get _docs => ref.read(documentRepositoryProvider);
+
+  bool _disposed = false;
+
+  /// Extracted documents of a draft chat, waiting for the conversation row
+  /// (created lazily on the first send) to exist. Keyed by the negative
+  /// temp id shown in [ChatThreadState.documents].
+  final Map<int, ExtractedDocument> _pendingDocs = {};
+  var _nextTempDocId = -1;
+
+  /// Retrieval corpus + BM25 index for this conversation's documents, built
+  /// on first question and dropped whenever the document set changes.
+  List<StoredChunk>? _corpus;
+  Bm25Index? _corpusIndex;
+
+  /// Citations offered to the reply being generated (empty when ungrounded).
+  List<DocSource> _activeSources = const [];
 
   @override
   Future<ChatThreadState> build() async {
     ref.onDispose(() {
+      _disposed = true;
       unawaited(_genSub?.cancel());
       _flushTimer?.cancel();
     });
@@ -345,6 +395,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       systemPrompt: convo.systemPrompt,
       samplingParams: convo.samplingParams,
       messages: messages,
+      documents: await _docs.listDocuments(convo.id),
     );
   }
 
@@ -623,6 +674,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       state = AsyncData(state.value!.copyWith(conversationId: conversationId));
       _signalConversationListChanged();
     }
+    await _persistPendingDocuments(conversationId);
 
     final userMsgId = await _repo.appendMessage(
       conversationId: conversationId,
@@ -731,6 +783,182 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     await ref.read(engineServiceProvider).cancel();
   }
 
+  // ---- Documents (chat with a document) -----------------------------------
+
+  /// At most this many documents per conversation; keeps the retrieval
+  /// corpus (and the memory it needs) bounded.
+  static const maxDocuments = 3;
+
+  /// Opens the file picker, reads the chosen PDF/TXT/MD off the root
+  /// isolate, and attaches it: stored straight away in an existing
+  /// conversation, held in memory for a draft until its first message. A
+  /// failure is surfaced as [ChatThreadState.documentError], never thrown.
+  Future<void> attachDocument() async {
+    final current = state.value;
+    if (current == null || current.extractingDocName != null) return;
+    if (current.documents.length >= maxDocuments) {
+      state = AsyncData(
+        current.copyWith(
+          documentError:
+              'You can attach up to $maxDocuments documents to one chat. '
+              'Remove one first.',
+        ),
+      );
+      return;
+    }
+    PickedDocument? picked;
+    try {
+      picked = await ref.read(documentPickerProvider).pickDocument();
+    } catch (_) {
+      if (_disposed) return;
+      state = AsyncData(
+        state.value!.copyWith(documentError: "Couldn't open the file picker."),
+      );
+      return;
+    }
+    if (picked == null || _disposed) return;
+    state = AsyncData(
+      state.value!.copyWith(
+        extractingDocName: picked.name,
+        clearDocumentError: true,
+      ),
+    );
+    try {
+      final doc = await ref.read(documentExtractorProvider)(
+        picked.path,
+        picked.name,
+      );
+      if (_disposed) return;
+      final cur = state.value!;
+      final DocumentInfo info;
+      if (cur.conversationId != null) {
+        info = await _docs.addDocument(cur.conversationId!, doc);
+      } else {
+        final tempId = _nextTempDocId--;
+        _pendingDocs[tempId] = doc;
+        info = _infoFor(tempId, 0, doc);
+      }
+      _corpus = null;
+      _corpusIndex = null;
+      if (_disposed) return;
+      state = AsyncData(
+        state.value!.copyWith(
+          documents: [...state.value!.documents, info],
+          clearExtractingDocName: true,
+        ),
+      );
+    } on DocumentException catch (e) {
+      if (_disposed) return;
+      state = AsyncData(
+        state.value!.copyWith(
+          documentError: e.message,
+          clearExtractingDocName: true,
+        ),
+      );
+    } catch (_) {
+      if (_disposed) return;
+      state = AsyncData(
+        state.value!.copyWith(
+          documentError: "Couldn't read that file.",
+          clearExtractingDocName: true,
+        ),
+      );
+    }
+  }
+
+  /// Detaches a document from this conversation (and deletes its stored
+  /// text). Past replies keep their citations.
+  Future<void> removeDocument(int documentId) async {
+    final current = state.value;
+    if (current == null) return;
+    if (documentId < 0) {
+      _pendingDocs.remove(documentId);
+    } else {
+      await _docs.removeDocument(documentId);
+    }
+    _corpus = null;
+    _corpusIndex = null;
+    if (_disposed) return;
+    state = AsyncData(
+      state.value!.copyWith(
+        documents: [
+          for (final d in state.value!.documents)
+            if (d.id != documentId) d,
+        ],
+      ),
+    );
+  }
+
+  void dismissDocumentError() {
+    final current = state.value;
+    if (current == null || current.documentError == null) return;
+    state = AsyncData(current.copyWith(clearDocumentError: true));
+  }
+
+  DocumentInfo _infoFor(int id, int conversationId, ExtractedDocument doc) {
+    return DocumentInfo(
+      id: id,
+      conversationId: conversationId,
+      name: doc.name,
+      mime: doc.mime,
+      pageCount: doc.pageCount,
+      charCount: doc.charCount,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  /// Saves a draft chat's held documents once its conversation row exists.
+  Future<void> _persistPendingDocuments(int conversationId) async {
+    if (_pendingDocs.isEmpty) return;
+    final saved = <int, DocumentInfo>{};
+    for (final entry in _pendingDocs.entries.toList()) {
+      saved[entry.key] = await _docs.addDocument(conversationId, entry.value);
+    }
+    _pendingDocs.clear();
+    _corpus = null;
+    _corpusIndex = null;
+    final current = state.value;
+    if (current == null || _disposed) return;
+    state = AsyncData(
+      current.copyWith(
+        documents: [for (final d in current.documents) saved[d.id] ?? d],
+      ),
+    );
+  }
+
+  /// Retrieves the excerpts for the turn's question and returns the grounded
+  /// prompt that replaces it, or null when no document is attached.
+  Future<GroundedPrompt?> _groundQuestion({
+    required int conversationId,
+    required List<MessageInfo> historyMessages,
+    required String systemPrompt,
+    required SamplingParams samplingParams,
+  }) async {
+    if (state.value!.documents.isEmpty) return null;
+    final question = historyMessages
+        .where((m) => m.role == MessageRole.user)
+        .lastOrNull
+        ?.content;
+    if (question == null) return null;
+    final corpus = _corpus ??= await _docs.chunksFor(conversationId);
+    final index = _corpusIndex ??= Bm25Index([for (final c in corpus) c.text]);
+    final promptChars =
+        SafetyGuard.systemInstruction.length +
+        systemPrompt.length +
+        historyMessages.fold<int>(0, (n, m) => n + m.content.length);
+    final excerpts = selectExcerpts(
+      chunks: corpus,
+      index: index,
+      question: question,
+      budgetChars: excerptBudgetChars(
+        contextTokens: samplingParams.contextLength,
+        maxAnswerTokens: samplingParams.maxTokens,
+        promptChars: promptChars,
+      ),
+    );
+    return buildGroundedPrompt(question: question, excerpts: excerpts);
+  }
+
   // ---- Streaming machinery -------------------------------------------------
 
   Future<void> _runAssistantTurn({
@@ -831,6 +1059,32 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       current.isMultimodal ? current.attachedImages : const {},
     );
     final samplingParams = current.samplingParams;
+    _activeSources = const [];
+    try {
+      final grounded = await _groundQuestion(
+        conversationId: conversationId,
+        historyMessages: historyMessages,
+        systemPrompt: current.systemPrompt,
+        samplingParams: samplingParams,
+      );
+      if (grounded != null) {
+        // Swap the plain question for the grounded prompt, on this request
+        // only: the stored message (and so the history shown/exported) keeps
+        // the user's own words.
+        final last = turns.lastIndexWhere((t) => t.role == EngineRole.user);
+        if (last >= 0) {
+          turns[last] = ChatTurn.user(
+            grounded.prompt,
+            images: turns[last].images,
+          );
+          _activeSources = grounded.sources;
+        }
+      }
+    } catch (e) {
+      // Never answer a document question ungrounded: fail the turn instead.
+      _onError(e);
+      return;
+    }
     final engineParams = EngineGenerateParams(
       maxTokens: samplingParams.maxTokens,
       temperature: samplingParams.temperature,
@@ -1047,6 +1301,11 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
     final current = state.value;
     if (current == null) return;
+    final answer = _pushedContent;
+    final sources = _activeSources.isEmpty || answer.trim().isEmpty
+        ? const <DocSource>[]
+        : citedSources(answer, _activeSources);
+    if (sources.isNotEmpty) unawaited(_repo.setSources(id, sources));
     final updatedMessages = [
       for (final m in current.messages)
         if (m.id == id)
@@ -1054,6 +1313,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             status: status,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
+            sources: sources.isEmpty ? null : sources,
           )
         else
           m,
@@ -1127,6 +1387,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   void _resetStreamState() {
     _activeAssistantId = null;
+    _activeSources = const [];
     _outputBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
@@ -1165,6 +1426,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final system = systemPrompt.trim().isEmpty
         ? SafetyGuard.systemInstruction
         : '${SafetyGuard.systemInstruction}\n\n$systemPrompt';
+    // Growable: `_runAssistantTurn` swaps the last user turn for its
+    // document-grounded version.
     return [
       ChatTurn.system(system),
       for (final m in messages)

@@ -25,6 +25,7 @@ class _V3Database extends AppDatabase {
       await m.createTable(conversations);
       await m.createTable(messages);
       await customStatement('ALTER TABLE messages DROP COLUMN reported');
+      await customStatement('ALTER TABLE messages DROP COLUMN sources_json');
       await m.createTable(characters);
       await customStatement(
         'ALTER TABLE installed_models DROP COLUMN mmproj_path',
@@ -72,9 +73,9 @@ void main() {
     await v3.close();
 
     // Reopen with the real (v4) AppDatabase over the same file — this
-    // must trigger the real onUpgrade(3, 5).
+    // must trigger the real onUpgrade(3, 6).
     final v4 = AppDatabase(NativeDatabase(dbFile));
-    expect(v4.schemaVersion, 5);
+    expect(v4.schemaVersion, 6);
 
     final rows = await v4.select(v4.installedModels).get();
     expect(rows, hasLength(1));
