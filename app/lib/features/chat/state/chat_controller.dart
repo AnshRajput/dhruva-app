@@ -21,18 +21,22 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/connector_providers.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/profile/user_profile.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
+import '../../../data/connectors/connector.dart' show ConnectorItem;
+import '../../../data/connectors/sources_block.dart' show buildSourcesBlock;
 import '../../../data/docs/bm25.dart';
 import '../../../data/docs/document_extractor.dart';
 import '../../../data/docs/document_repository.dart';
@@ -63,11 +67,18 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
+  /// Connector items (a Library file's sections, an Inbox notification) this
+  /// new chat is about. Their text reaches the model only inside the
+  /// delimited sources block (`data/connectors/sources_block.dart`), never as
+  /// instructions. Only meaningful when [conversationId] is null.
+  final List<int> sourceItemIds;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
+    this.sourceItemIds = const [],
   });
 
   @override
@@ -76,11 +87,17 @@ final class ChatRouteArgs {
       other.conversationId == conversationId &&
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
-      other.initialPrompt == initialPrompt;
+      other.initialPrompt == initialPrompt &&
+      listEquals(other.sourceItemIds, sourceItemIds);
 
   @override
-  int get hashCode =>
-      Object.hash(conversationId, initialModelId, characterId, initialPrompt);
+  int get hashCode => Object.hash(
+    conversationId,
+    initialModelId,
+    characterId,
+    initialPrompt,
+    Object.hashAll(sourceItemIds),
+  );
 }
 
 final class ChatThreadState {
@@ -168,6 +185,10 @@ final class ChatThreadState {
   /// token: the thread offers Stop / Try again in plain words.
   final bool firstTokenTimedOut;
 
+  /// Titles of the connector items this chat was opened about (see
+  /// [ChatRouteArgs.sourceItemIds]); session-only like a draft's documents.
+  final List<String> sourceTitles;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -194,6 +215,7 @@ final class ChatThreadState {
     this.heatStoppedMessageIds = const {},
     this.warmingSince,
     this.firstTokenTimedOut = false,
+    this.sourceTitles = const [],
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -279,6 +301,7 @@ final class ChatThreadState {
           ? null
           : (warmingSince ?? this.warmingSince),
       firstTokenTimedOut: firstTokenTimedOut ?? this.firstTokenTimedOut,
+      sourceTitles: sourceTitles,
     );
   }
 }
@@ -420,6 +443,57 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   List<StoredChunk>? _corpus;
   Bm25Index? _corpusIndex;
 
+  /// Connector items this chat was opened about, loaded once for a new chat
+  /// (a Library file, an Inbox notification).
+  List<ConnectorItem> _pinned = const [];
+
+  Future<void> _loadPinned() async {
+    if (args.sourceItemIds.isEmpty) return;
+    try {
+      _pinned = await ref
+          .read(connectorStoreProvider)
+          .itemsByIds(args.sourceItemIds);
+    } catch (_) {
+      // The chat still works, just without the pinned source.
+    }
+  }
+
+  List<String> _pinnedTitles() {
+    final seen = <String>[];
+    for (final i in _pinned) {
+      final t = i.title.trim().isEmpty ? i.kind.name : i.title.trim();
+      if (!seen.contains(t)) seen.add(t);
+    }
+    return seen;
+  }
+
+  /// The user's question wrapped with the pinned items' text in a delimited,
+  /// numbered sources block (see `buildSourcesBlock`): the only way connector
+  /// text reaches a prompt. Null when nothing is pinned.
+  String? _groundInPinned(List<MessageInfo> historyMessages) {
+    if (_pinned.isEmpty) return null;
+    final question = historyMessages
+        .where((m) => m.role == MessageRole.user)
+        .lastOrNull
+        ?.content;
+    if (question == null) return null;
+    // The sections most relevant to the question first, so a long file keeps
+    // the part that answers it inside the size budget.
+    final index = Bm25Index([for (final i in _pinned) '${i.title} ${i.body}']);
+    final order = <int>{
+      for (final h in index.search(question)) h.index,
+      for (var i = 0; i < _pinned.length; i++) i,
+    };
+    final block = buildSourcesBlock(
+      [for (final i in order) _pinned[i]],
+      maxChars: 7000,
+      maxItemChars: 2500,
+    );
+    return 'Answer the question using only the sources below. If the answer '
+        'is not in them, say so; do not guess or use outside knowledge. Cite '
+        'sources like [1].\n\n${block.text}\n\nQuestion: $question';
+  }
+
   /// Citations offered to the reply being generated (empty when ungrounded).
   List<DocSource> _activeSources = const [];
 
@@ -452,7 +526,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       final model = args.initialModelId == null
           ? (await storage.listInstalledModels()).firstOrNull
           : await storage.getInstalledModel(args.initialModelId!);
-      return ChatThreadState(modelId: model?.id, model: model);
+      await _loadPinned();
+      return ChatThreadState(
+        modelId: model?.id,
+        model: model,
+        sourceTitles: _pinnedTitles(),
+      );
     }
 
     final convo = await _repo.getConversation(conversationId);
@@ -1261,6 +1340,15 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
               systemPrompt: current.systemPrompt,
               samplingParams: samplingParams,
             );
+      final pinnedPrompt = continued != null || grounded != null
+          ? null
+          : _groundInPinned(historyMessages);
+      if (pinnedPrompt != null) {
+        final last = turns.lastIndexWhere((t) => t.role == EngineRole.user);
+        if (last >= 0) {
+          turns[last] = ChatTurn.user(pinnedPrompt, images: turns[last].images);
+        }
+      }
       if (grounded != null) {
         // Swap the plain question for the grounded prompt, on this request
         // only: the stored message (and so the history shown/exported) keeps

@@ -221,6 +221,15 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
+              // Library "Ask about this file" / Inbox "Ask about this":
+              // `?source=<item id>` (repeatable) pins connector items as the
+              // chat's sources. Query params keep features decoupled.
+              sourceItemIds: [
+                for (final s
+                    in state.uri.queryParametersAll['source'] ??
+                        const <String>[])
+                  ?int.tryParse(s),
+              ],
             ),
           );
         }

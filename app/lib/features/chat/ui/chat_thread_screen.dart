@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/library_providers.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
@@ -18,6 +19,7 @@ import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/library/todo_parser.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/installed_models_provider.dart';
@@ -382,6 +384,7 @@ class _ThreadScaffold extends ConsumerWidget {
               documents: state.documents,
               extractingDocName: state.extractingDocName,
               documentError: state.documentError,
+              sourceTitles: state.sourceTitles,
               onAttachDocument: controller.attachDocument,
               onRemoveDocument: controller.removeDocument,
               onDismissDocumentError: controller.dismissDocumentError,
@@ -447,8 +450,52 @@ class _ThreadScaffold extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final canAct = !state.isGenerating;
+    final finishedReply =
+        message.role == MessageRole.assistant &&
+        !isStreamingMessage &&
+        message.status != MessageStatus.error &&
+        message.content.trim().isNotEmpty;
+    // "Extract to-dos" replies: offer to add the tasks to the Library. A tap,
+    // never automatic.
+    final todos = finishedReply
+        ? parseTodos(message.content)
+        : const <String>[];
     final bubble = MessageBubble(
       message: message,
+      onSave: finishedReply
+          ? () async {
+              await ref
+                  .read(libraryStoreProvider)
+                  .saveAnswer(
+                    message.content,
+                    conversationId: state.conversationId,
+                  );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Saved to Library.')),
+                );
+              }
+            }
+          : null,
+      todoCount: todos.length,
+      onAddTodos: todos.isEmpty
+          ? null
+          : () async {
+              final added = await ref
+                  .read(libraryStoreProvider)
+                  .addTodos(todos);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      added == 0
+                          ? 'Those are already in your to-dos.'
+                          : 'Added $added to your to-dos in Library.',
+                    ),
+                  ),
+                );
+              }
+            },
       isStreaming: isStreamingMessage,
       reasoningDurationMs: state.reasoningDurationMs[message.id],
       reasoningOpen:
