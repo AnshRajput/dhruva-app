@@ -43,6 +43,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  device_calendar_plus: ^0.8.1
   device_info_plus: ^13.2.0 # RAM (physicalRamSize/availableRamSize) + disk
   # (freeDiskSize/totalDiskSize) on Android + iOS — verified in package source,
   # no custom MethodChannel needed.
@@ -67,6 +68,7 @@ dependencies:
   # its `builders` map (`MarkdownElementBuilder`) lets the `code` element be
   # swapped for the spec's own block (language label + copy button, §2.3)
   # instead of fighting a bespoke AI-chat-flavored renderer's opinions.
+  flutter_contacts: ^2.1.0
   flutter_markdown_plus: ^1.0.12
   flutter_riverpod: ^3.3.2
   freezed_annotation: ^3.1.0
@@ -123,6 +125,7 @@ dependencies:
   # path_provider/device_info_plus already in this file.
   shorebird_code_push: ^2.0.7
   url_launcher: ^6.3.2
+  workmanager: ^0.10.10
 
 # Vendored pdf_cos 14.0.0 (Apache-2.0) with a hard output cap on every stream
 # decoding filter (see third_party/pdf_cos/NOTICE.md). The upstream parser

@@ -4526,6 +4526,1605 @@ class DocumentChunksCompanion extends UpdateCompanion<DocumentChunk> {
   }
 }
 
+class $ConnectorAccountsTable extends ConnectorAccounts
+    with TableInfo<$ConnectorAccountsTable, ConnectorAccountRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ConnectorAccountsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _connectorMeta = const VerificationMeta(
+    'connector',
+  );
+  @override
+  late final GeneratedColumn<String> connector = GeneratedColumn<String>(
+    'connector',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _configJsonMeta = const VerificationMeta(
+    'configJson',
+  );
+  @override
+  late final GeneratedColumn<String> configJson = GeneratedColumn<String>(
+    'config_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _connectedAtMeta = const VerificationMeta(
+    'connectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> connectedAt = GeneratedColumn<DateTime>(
+    'connected_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
+    'lastSyncAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncAt = GeneratedColumn<DateTime>(
+    'last_sync_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    connector,
+    status,
+    label,
+    configJson,
+    lastError,
+    connectedAt,
+    lastSyncAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'connector_accounts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ConnectorAccountRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('connector')) {
+      context.handle(
+        _connectorMeta,
+        connector.isAcceptableOrUnknown(data['connector']!, _connectorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_connectorMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('config_json')) {
+      context.handle(
+        _configJsonMeta,
+        configJson.isAcceptableOrUnknown(data['config_json']!, _configJsonMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('connected_at')) {
+      context.handle(
+        _connectedAtMeta,
+        connectedAt.isAcceptableOrUnknown(
+          data['connected_at']!,
+          _connectedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_connectedAtMeta);
+    }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+        _lastSyncAtMeta,
+        lastSyncAt.isAcceptableOrUnknown(
+          data['last_sync_at']!,
+          _lastSyncAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConnectorAccountRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConnectorAccountRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      connector: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}connector'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      configJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}config_json'],
+      ),
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      connectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}connected_at'],
+      )!,
+      lastSyncAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_sync_at'],
+      ),
+    );
+  }
+
+  @override
+  $ConnectorAccountsTable createAlias(String alias) {
+    return $ConnectorAccountsTable(attachedDatabase, alias);
+  }
+}
+
+class ConnectorAccountRow extends DataClass
+    implements Insertable<ConnectorAccountRow> {
+  final int id;
+  final String connector;
+  final String status;
+  final String? label;
+  final String? configJson;
+  final String? lastError;
+  final DateTime connectedAt;
+  final DateTime? lastSyncAt;
+  const ConnectorAccountRow({
+    required this.id,
+    required this.connector,
+    required this.status,
+    this.label,
+    this.configJson,
+    this.lastError,
+    required this.connectedAt,
+    this.lastSyncAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['connector'] = Variable<String>(connector);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    if (!nullToAbsent || configJson != null) {
+      map['config_json'] = Variable<String>(configJson);
+    }
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    map['connected_at'] = Variable<DateTime>(connectedAt);
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
+    }
+    return map;
+  }
+
+  ConnectorAccountsCompanion toCompanion(bool nullToAbsent) {
+    return ConnectorAccountsCompanion(
+      id: Value(id),
+      connector: Value(connector),
+      status: Value(status),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      configJson: configJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(configJson),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      connectedAt: Value(connectedAt),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
+    );
+  }
+
+  factory ConnectorAccountRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConnectorAccountRow(
+      id: serializer.fromJson<int>(json['id']),
+      connector: serializer.fromJson<String>(json['connector']),
+      status: serializer.fromJson<String>(json['status']),
+      label: serializer.fromJson<String?>(json['label']),
+      configJson: serializer.fromJson<String?>(json['configJson']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      connectedAt: serializer.fromJson<DateTime>(json['connectedAt']),
+      lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'connector': serializer.toJson<String>(connector),
+      'status': serializer.toJson<String>(status),
+      'label': serializer.toJson<String?>(label),
+      'configJson': serializer.toJson<String?>(configJson),
+      'lastError': serializer.toJson<String?>(lastError),
+      'connectedAt': serializer.toJson<DateTime>(connectedAt),
+      'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
+    };
+  }
+
+  ConnectorAccountRow copyWith({
+    int? id,
+    String? connector,
+    String? status,
+    Value<String?> label = const Value.absent(),
+    Value<String?> configJson = const Value.absent(),
+    Value<String?> lastError = const Value.absent(),
+    DateTime? connectedAt,
+    Value<DateTime?> lastSyncAt = const Value.absent(),
+  }) => ConnectorAccountRow(
+    id: id ?? this.id,
+    connector: connector ?? this.connector,
+    status: status ?? this.status,
+    label: label.present ? label.value : this.label,
+    configJson: configJson.present ? configJson.value : this.configJson,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    connectedAt: connectedAt ?? this.connectedAt,
+    lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+  );
+  ConnectorAccountRow copyWithCompanion(ConnectorAccountsCompanion data) {
+    return ConnectorAccountRow(
+      id: data.id.present ? data.id.value : this.id,
+      connector: data.connector.present ? data.connector.value : this.connector,
+      status: data.status.present ? data.status.value : this.status,
+      label: data.label.present ? data.label.value : this.label,
+      configJson: data.configJson.present
+          ? data.configJson.value
+          : this.configJson,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      connectedAt: data.connectedAt.present
+          ? data.connectedAt.value
+          : this.connectedAt,
+      lastSyncAt: data.lastSyncAt.present
+          ? data.lastSyncAt.value
+          : this.lastSyncAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ConnectorAccountRow(')
+          ..write('id: $id, ')
+          ..write('connector: $connector, ')
+          ..write('status: $status, ')
+          ..write('label: $label, ')
+          ..write('configJson: $configJson, ')
+          ..write('lastError: $lastError, ')
+          ..write('connectedAt: $connectedAt, ')
+          ..write('lastSyncAt: $lastSyncAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    connector,
+    status,
+    label,
+    configJson,
+    lastError,
+    connectedAt,
+    lastSyncAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConnectorAccountRow &&
+          other.id == this.id &&
+          other.connector == this.connector &&
+          other.status == this.status &&
+          other.label == this.label &&
+          other.configJson == this.configJson &&
+          other.lastError == this.lastError &&
+          other.connectedAt == this.connectedAt &&
+          other.lastSyncAt == this.lastSyncAt);
+}
+
+class ConnectorAccountsCompanion extends UpdateCompanion<ConnectorAccountRow> {
+  final Value<int> id;
+  final Value<String> connector;
+  final Value<String> status;
+  final Value<String?> label;
+  final Value<String?> configJson;
+  final Value<String?> lastError;
+  final Value<DateTime> connectedAt;
+  final Value<DateTime?> lastSyncAt;
+  const ConnectorAccountsCompanion({
+    this.id = const Value.absent(),
+    this.connector = const Value.absent(),
+    this.status = const Value.absent(),
+    this.label = const Value.absent(),
+    this.configJson = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.connectedAt = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
+  });
+  ConnectorAccountsCompanion.insert({
+    this.id = const Value.absent(),
+    required String connector,
+    required String status,
+    this.label = const Value.absent(),
+    this.configJson = const Value.absent(),
+    this.lastError = const Value.absent(),
+    required DateTime connectedAt,
+    this.lastSyncAt = const Value.absent(),
+  }) : connector = Value(connector),
+       status = Value(status),
+       connectedAt = Value(connectedAt);
+  static Insertable<ConnectorAccountRow> custom({
+    Expression<int>? id,
+    Expression<String>? connector,
+    Expression<String>? status,
+    Expression<String>? label,
+    Expression<String>? configJson,
+    Expression<String>? lastError,
+    Expression<DateTime>? connectedAt,
+    Expression<DateTime>? lastSyncAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (connector != null) 'connector': connector,
+      if (status != null) 'status': status,
+      if (label != null) 'label': label,
+      if (configJson != null) 'config_json': configJson,
+      if (lastError != null) 'last_error': lastError,
+      if (connectedAt != null) 'connected_at': connectedAt,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+    });
+  }
+
+  ConnectorAccountsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? connector,
+    Value<String>? status,
+    Value<String?>? label,
+    Value<String?>? configJson,
+    Value<String?>? lastError,
+    Value<DateTime>? connectedAt,
+    Value<DateTime?>? lastSyncAt,
+  }) {
+    return ConnectorAccountsCompanion(
+      id: id ?? this.id,
+      connector: connector ?? this.connector,
+      status: status ?? this.status,
+      label: label ?? this.label,
+      configJson: configJson ?? this.configJson,
+      lastError: lastError ?? this.lastError,
+      connectedAt: connectedAt ?? this.connectedAt,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (connector.present) {
+      map['connector'] = Variable<String>(connector.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (configJson.present) {
+      map['config_json'] = Variable<String>(configJson.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (connectedAt.present) {
+      map['connected_at'] = Variable<DateTime>(connectedAt.value);
+    }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ConnectorAccountsCompanion(')
+          ..write('id: $id, ')
+          ..write('connector: $connector, ')
+          ..write('status: $status, ')
+          ..write('label: $label, ')
+          ..write('configJson: $configJson, ')
+          ..write('lastError: $lastError, ')
+          ..write('connectedAt: $connectedAt, ')
+          ..write('lastSyncAt: $lastSyncAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ItemsTable extends Items with TableInfo<$ItemsTable, ItemRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _externalIdMeta = const VerificationMeta(
+    'externalId',
+  );
+  @override
+  late final GeneratedColumn<String> externalId = GeneratedColumn<String>(
+    'external_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<ItemKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<ItemKind>($ItemsTable.$converterkind);
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _peopleJsonMeta = const VerificationMeta(
+    'peopleJson',
+  );
+  @override
+  late final GeneratedColumn<String> peopleJson = GeneratedColumn<String>(
+    'people_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _startsAtMeta = const VerificationMeta(
+    'startsAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startsAt = GeneratedColumn<DateTime>(
+    'starts_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sentAtMeta = const VerificationMeta('sentAt');
+  @override
+  late final GeneratedColumn<DateTime> sentAt = GeneratedColumn<DateTime>(
+    'sent_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _flagsJsonMeta = const VerificationMeta(
+    'flagsJson',
+  );
+  @override
+  late final GeneratedColumn<String> flagsJson = GeneratedColumn<String>(
+    'flags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _summaryModelMeta = const VerificationMeta(
+    'summaryModel',
+  );
+  @override
+  late final GeneratedColumn<String> summaryModel = GeneratedColumn<String>(
+    'summary_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    source,
+    externalId,
+    kind,
+    title,
+    body,
+    peopleJson,
+    startsAt,
+    sentAt,
+    flagsJson,
+    summary,
+    summaryModel,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ItemRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceMeta);
+    }
+    if (data.containsKey('external_id')) {
+      context.handle(
+        _externalIdMeta,
+        externalId.isAcceptableOrUnknown(data['external_id']!, _externalIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_externalIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    }
+    if (data.containsKey('people_json')) {
+      context.handle(
+        _peopleJsonMeta,
+        peopleJson.isAcceptableOrUnknown(data['people_json']!, _peopleJsonMeta),
+      );
+    }
+    if (data.containsKey('starts_at')) {
+      context.handle(
+        _startsAtMeta,
+        startsAt.isAcceptableOrUnknown(data['starts_at']!, _startsAtMeta),
+      );
+    }
+    if (data.containsKey('sent_at')) {
+      context.handle(
+        _sentAtMeta,
+        sentAt.isAcceptableOrUnknown(data['sent_at']!, _sentAtMeta),
+      );
+    }
+    if (data.containsKey('flags_json')) {
+      context.handle(
+        _flagsJsonMeta,
+        flagsJson.isAcceptableOrUnknown(data['flags_json']!, _flagsJsonMeta),
+      );
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    }
+    if (data.containsKey('summary_model')) {
+      context.handle(
+        _summaryModelMeta,
+        summaryModel.isAcceptableOrUnknown(
+          data['summary_model']!,
+          _summaryModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {source, externalId},
+  ];
+  @override
+  ItemRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ItemRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      externalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_id'],
+      )!,
+      kind: $ItemsTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      peopleJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}people_json'],
+      )!,
+      startsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}starts_at'],
+      ),
+      sentAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}sent_at'],
+      ),
+      flagsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}flags_json'],
+      )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      ),
+      summaryModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary_model'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ItemsTable createAlias(String alias) {
+    return $ItemsTable(attachedDatabase, alias);
+  }
+
+  static JsonTypeConverter2<ItemKind, String, String> $converterkind =
+      const EnumNameConverter<ItemKind>(ItemKind.values);
+}
+
+class ItemRow extends DataClass implements Insertable<ItemRow> {
+  final int id;
+  final String source;
+  final String externalId;
+  final ItemKind kind;
+  final String title;
+  final String body;
+
+  /// JSON list of `{name, email}` objects (attendees, sender).
+  final String peopleJson;
+  final DateTime? startsAt;
+  final DateTime? sentAt;
+
+  /// JSON object of small per-kind facts (all-day, package, mime, ...).
+  final String flagsJson;
+  final String? summary;
+  final String? summaryModel;
+  final DateTime updatedAt;
+  const ItemRow({
+    required this.id,
+    required this.source,
+    required this.externalId,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.peopleJson,
+    this.startsAt,
+    this.sentAt,
+    required this.flagsJson,
+    this.summary,
+    this.summaryModel,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['source'] = Variable<String>(source);
+    map['external_id'] = Variable<String>(externalId);
+    {
+      map['kind'] = Variable<String>($ItemsTable.$converterkind.toSql(kind));
+    }
+    map['title'] = Variable<String>(title);
+    map['body'] = Variable<String>(body);
+    map['people_json'] = Variable<String>(peopleJson);
+    if (!nullToAbsent || startsAt != null) {
+      map['starts_at'] = Variable<DateTime>(startsAt);
+    }
+    if (!nullToAbsent || sentAt != null) {
+      map['sent_at'] = Variable<DateTime>(sentAt);
+    }
+    map['flags_json'] = Variable<String>(flagsJson);
+    if (!nullToAbsent || summary != null) {
+      map['summary'] = Variable<String>(summary);
+    }
+    if (!nullToAbsent || summaryModel != null) {
+      map['summary_model'] = Variable<String>(summaryModel);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ItemsCompanion toCompanion(bool nullToAbsent) {
+    return ItemsCompanion(
+      id: Value(id),
+      source: Value(source),
+      externalId: Value(externalId),
+      kind: Value(kind),
+      title: Value(title),
+      body: Value(body),
+      peopleJson: Value(peopleJson),
+      startsAt: startsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startsAt),
+      sentAt: sentAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sentAt),
+      flagsJson: Value(flagsJson),
+      summary: summary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summary),
+      summaryModel: summaryModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summaryModel),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ItemRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ItemRow(
+      id: serializer.fromJson<int>(json['id']),
+      source: serializer.fromJson<String>(json['source']),
+      externalId: serializer.fromJson<String>(json['externalId']),
+      kind: $ItemsTable.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String>(json['body']),
+      peopleJson: serializer.fromJson<String>(json['peopleJson']),
+      startsAt: serializer.fromJson<DateTime?>(json['startsAt']),
+      sentAt: serializer.fromJson<DateTime?>(json['sentAt']),
+      flagsJson: serializer.fromJson<String>(json['flagsJson']),
+      summary: serializer.fromJson<String?>(json['summary']),
+      summaryModel: serializer.fromJson<String?>(json['summaryModel']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'source': serializer.toJson<String>(source),
+      'externalId': serializer.toJson<String>(externalId),
+      'kind': serializer.toJson<String>(
+        $ItemsTable.$converterkind.toJson(kind),
+      ),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String>(body),
+      'peopleJson': serializer.toJson<String>(peopleJson),
+      'startsAt': serializer.toJson<DateTime?>(startsAt),
+      'sentAt': serializer.toJson<DateTime?>(sentAt),
+      'flagsJson': serializer.toJson<String>(flagsJson),
+      'summary': serializer.toJson<String?>(summary),
+      'summaryModel': serializer.toJson<String?>(summaryModel),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ItemRow copyWith({
+    int? id,
+    String? source,
+    String? externalId,
+    ItemKind? kind,
+    String? title,
+    String? body,
+    String? peopleJson,
+    Value<DateTime?> startsAt = const Value.absent(),
+    Value<DateTime?> sentAt = const Value.absent(),
+    String? flagsJson,
+    Value<String?> summary = const Value.absent(),
+    Value<String?> summaryModel = const Value.absent(),
+    DateTime? updatedAt,
+  }) => ItemRow(
+    id: id ?? this.id,
+    source: source ?? this.source,
+    externalId: externalId ?? this.externalId,
+    kind: kind ?? this.kind,
+    title: title ?? this.title,
+    body: body ?? this.body,
+    peopleJson: peopleJson ?? this.peopleJson,
+    startsAt: startsAt.present ? startsAt.value : this.startsAt,
+    sentAt: sentAt.present ? sentAt.value : this.sentAt,
+    flagsJson: flagsJson ?? this.flagsJson,
+    summary: summary.present ? summary.value : this.summary,
+    summaryModel: summaryModel.present ? summaryModel.value : this.summaryModel,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ItemRow copyWithCompanion(ItemsCompanion data) {
+    return ItemRow(
+      id: data.id.present ? data.id.value : this.id,
+      source: data.source.present ? data.source.value : this.source,
+      externalId: data.externalId.present
+          ? data.externalId.value
+          : this.externalId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      peopleJson: data.peopleJson.present
+          ? data.peopleJson.value
+          : this.peopleJson,
+      startsAt: data.startsAt.present ? data.startsAt.value : this.startsAt,
+      sentAt: data.sentAt.present ? data.sentAt.value : this.sentAt,
+      flagsJson: data.flagsJson.present ? data.flagsJson.value : this.flagsJson,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      summaryModel: data.summaryModel.present
+          ? data.summaryModel.value
+          : this.summaryModel,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ItemRow(')
+          ..write('id: $id, ')
+          ..write('source: $source, ')
+          ..write('externalId: $externalId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('peopleJson: $peopleJson, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('sentAt: $sentAt, ')
+          ..write('flagsJson: $flagsJson, ')
+          ..write('summary: $summary, ')
+          ..write('summaryModel: $summaryModel, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    source,
+    externalId,
+    kind,
+    title,
+    body,
+    peopleJson,
+    startsAt,
+    sentAt,
+    flagsJson,
+    summary,
+    summaryModel,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ItemRow &&
+          other.id == this.id &&
+          other.source == this.source &&
+          other.externalId == this.externalId &&
+          other.kind == this.kind &&
+          other.title == this.title &&
+          other.body == this.body &&
+          other.peopleJson == this.peopleJson &&
+          other.startsAt == this.startsAt &&
+          other.sentAt == this.sentAt &&
+          other.flagsJson == this.flagsJson &&
+          other.summary == this.summary &&
+          other.summaryModel == this.summaryModel &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ItemsCompanion extends UpdateCompanion<ItemRow> {
+  final Value<int> id;
+  final Value<String> source;
+  final Value<String> externalId;
+  final Value<ItemKind> kind;
+  final Value<String> title;
+  final Value<String> body;
+  final Value<String> peopleJson;
+  final Value<DateTime?> startsAt;
+  final Value<DateTime?> sentAt;
+  final Value<String> flagsJson;
+  final Value<String?> summary;
+  final Value<String?> summaryModel;
+  final Value<DateTime> updatedAt;
+  const ItemsCompanion({
+    this.id = const Value.absent(),
+    this.source = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.peopleJson = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.sentAt = const Value.absent(),
+    this.flagsJson = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.summaryModel = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  ItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required String source,
+    required String externalId,
+    required ItemKind kind,
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.peopleJson = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.sentAt = const Value.absent(),
+    this.flagsJson = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.summaryModel = const Value.absent(),
+    required DateTime updatedAt,
+  }) : source = Value(source),
+       externalId = Value(externalId),
+       kind = Value(kind),
+       updatedAt = Value(updatedAt);
+  static Insertable<ItemRow> custom({
+    Expression<int>? id,
+    Expression<String>? source,
+    Expression<String>? externalId,
+    Expression<String>? kind,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<String>? peopleJson,
+    Expression<DateTime>? startsAt,
+    Expression<DateTime>? sentAt,
+    Expression<String>? flagsJson,
+    Expression<String>? summary,
+    Expression<String>? summaryModel,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (source != null) 'source': source,
+      if (externalId != null) 'external_id': externalId,
+      if (kind != null) 'kind': kind,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (peopleJson != null) 'people_json': peopleJson,
+      if (startsAt != null) 'starts_at': startsAt,
+      if (sentAt != null) 'sent_at': sentAt,
+      if (flagsJson != null) 'flags_json': flagsJson,
+      if (summary != null) 'summary': summary,
+      if (summaryModel != null) 'summary_model': summaryModel,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  ItemsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? source,
+    Value<String>? externalId,
+    Value<ItemKind>? kind,
+    Value<String>? title,
+    Value<String>? body,
+    Value<String>? peopleJson,
+    Value<DateTime?>? startsAt,
+    Value<DateTime?>? sentAt,
+    Value<String>? flagsJson,
+    Value<String?>? summary,
+    Value<String?>? summaryModel,
+    Value<DateTime>? updatedAt,
+  }) {
+    return ItemsCompanion(
+      id: id ?? this.id,
+      source: source ?? this.source,
+      externalId: externalId ?? this.externalId,
+      kind: kind ?? this.kind,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      peopleJson: peopleJson ?? this.peopleJson,
+      startsAt: startsAt ?? this.startsAt,
+      sentAt: sentAt ?? this.sentAt,
+      flagsJson: flagsJson ?? this.flagsJson,
+      summary: summary ?? this.summary,
+      summaryModel: summaryModel ?? this.summaryModel,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (externalId.present) {
+      map['external_id'] = Variable<String>(externalId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $ItemsTable.$converterkind.toSql(kind.value),
+      );
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (peopleJson.present) {
+      map['people_json'] = Variable<String>(peopleJson.value);
+    }
+    if (startsAt.present) {
+      map['starts_at'] = Variable<DateTime>(startsAt.value);
+    }
+    if (sentAt.present) {
+      map['sent_at'] = Variable<DateTime>(sentAt.value);
+    }
+    if (flagsJson.present) {
+      map['flags_json'] = Variable<String>(flagsJson.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (summaryModel.present) {
+      map['summary_model'] = Variable<String>(summaryModel.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('source: $source, ')
+          ..write('externalId: $externalId, ')
+          ..write('kind: $kind, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('peopleJson: $peopleJson, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('sentAt: $sentAt, ')
+          ..write('flagsJson: $flagsJson, ')
+          ..write('summary: $summary, ')
+          ..write('summaryModel: $summaryModel, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LedgerTable extends Ledger with TableInfo<$LedgerTable, LedgerRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LedgerTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _connectorMeta = const VerificationMeta(
+    'connector',
+  );
+  @override
+  late final GeneratedColumn<String> connector = GeneratedColumn<String>(
+    'connector',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _actionMeta = const VerificationMeta('action');
+  @override
+  late final GeneratedColumn<String> action = GeneratedColumn<String>(
+    'action',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _countMeta = const VerificationMeta('count');
+  @override
+  late final GeneratedColumn<int> count = GeneratedColumn<int>(
+    'count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<DateTime> at = GeneratedColumn<DateTime>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, connector, action, count, at];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ledger';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LedgerRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('connector')) {
+      context.handle(
+        _connectorMeta,
+        connector.isAcceptableOrUnknown(data['connector']!, _connectorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_connectorMeta);
+    }
+    if (data.containsKey('action')) {
+      context.handle(
+        _actionMeta,
+        action.isAcceptableOrUnknown(data['action']!, _actionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_actionMeta);
+    }
+    if (data.containsKey('count')) {
+      context.handle(
+        _countMeta,
+        count.isAcceptableOrUnknown(data['count']!, _countMeta),
+      );
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    } else if (isInserting) {
+      context.missing(_atMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LedgerRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LedgerRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      connector: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}connector'],
+      )!,
+      action: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action'],
+      )!,
+      count: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}count'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}at'],
+      )!,
+    );
+  }
+
+  @override
+  $LedgerTable createAlias(String alias) {
+    return $LedgerTable(attachedDatabase, alias);
+  }
+}
+
+class LedgerRow extends DataClass implements Insertable<LedgerRow> {
+  final int id;
+  final String connector;
+  final String action;
+  final int count;
+  final DateTime at;
+  const LedgerRow({
+    required this.id,
+    required this.connector,
+    required this.action,
+    required this.count,
+    required this.at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['connector'] = Variable<String>(connector);
+    map['action'] = Variable<String>(action);
+    map['count'] = Variable<int>(count);
+    map['at'] = Variable<DateTime>(at);
+    return map;
+  }
+
+  LedgerCompanion toCompanion(bool nullToAbsent) {
+    return LedgerCompanion(
+      id: Value(id),
+      connector: Value(connector),
+      action: Value(action),
+      count: Value(count),
+      at: Value(at),
+    );
+  }
+
+  factory LedgerRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LedgerRow(
+      id: serializer.fromJson<int>(json['id']),
+      connector: serializer.fromJson<String>(json['connector']),
+      action: serializer.fromJson<String>(json['action']),
+      count: serializer.fromJson<int>(json['count']),
+      at: serializer.fromJson<DateTime>(json['at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'connector': serializer.toJson<String>(connector),
+      'action': serializer.toJson<String>(action),
+      'count': serializer.toJson<int>(count),
+      'at': serializer.toJson<DateTime>(at),
+    };
+  }
+
+  LedgerRow copyWith({
+    int? id,
+    String? connector,
+    String? action,
+    int? count,
+    DateTime? at,
+  }) => LedgerRow(
+    id: id ?? this.id,
+    connector: connector ?? this.connector,
+    action: action ?? this.action,
+    count: count ?? this.count,
+    at: at ?? this.at,
+  );
+  LedgerRow copyWithCompanion(LedgerCompanion data) {
+    return LedgerRow(
+      id: data.id.present ? data.id.value : this.id,
+      connector: data.connector.present ? data.connector.value : this.connector,
+      action: data.action.present ? data.action.value : this.action,
+      count: data.count.present ? data.count.value : this.count,
+      at: data.at.present ? data.at.value : this.at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LedgerRow(')
+          ..write('id: $id, ')
+          ..write('connector: $connector, ')
+          ..write('action: $action, ')
+          ..write('count: $count, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, connector, action, count, at);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LedgerRow &&
+          other.id == this.id &&
+          other.connector == this.connector &&
+          other.action == this.action &&
+          other.count == this.count &&
+          other.at == this.at);
+}
+
+class LedgerCompanion extends UpdateCompanion<LedgerRow> {
+  final Value<int> id;
+  final Value<String> connector;
+  final Value<String> action;
+  final Value<int> count;
+  final Value<DateTime> at;
+  const LedgerCompanion({
+    this.id = const Value.absent(),
+    this.connector = const Value.absent(),
+    this.action = const Value.absent(),
+    this.count = const Value.absent(),
+    this.at = const Value.absent(),
+  });
+  LedgerCompanion.insert({
+    this.id = const Value.absent(),
+    required String connector,
+    required String action,
+    this.count = const Value.absent(),
+    required DateTime at,
+  }) : connector = Value(connector),
+       action = Value(action),
+       at = Value(at);
+  static Insertable<LedgerRow> custom({
+    Expression<int>? id,
+    Expression<String>? connector,
+    Expression<String>? action,
+    Expression<int>? count,
+    Expression<DateTime>? at,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (connector != null) 'connector': connector,
+      if (action != null) 'action': action,
+      if (count != null) 'count': count,
+      if (at != null) 'at': at,
+    });
+  }
+
+  LedgerCompanion copyWith({
+    Value<int>? id,
+    Value<String>? connector,
+    Value<String>? action,
+    Value<int>? count,
+    Value<DateTime>? at,
+  }) {
+    return LedgerCompanion(
+      id: id ?? this.id,
+      connector: connector ?? this.connector,
+      action: action ?? this.action,
+      count: count ?? this.count,
+      at: at ?? this.at,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (connector.present) {
+      map['connector'] = Variable<String>(connector.value);
+    }
+    if (action.present) {
+      map['action'] = Variable<String>(action.value);
+    }
+    if (count.present) {
+      map['count'] = Variable<int>(count.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<DateTime>(at.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LedgerCompanion(')
+          ..write('id: $id, ')
+          ..write('connector: $connector, ')
+          ..write('action: $action, ')
+          ..write('count: $count, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   late final $InstalledModelsTable installedModels = $InstalledModelsTable(
@@ -4539,6 +6138,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AttachedDocumentsTable attachedDocuments =
       $AttachedDocumentsTable(this);
   late final $DocumentChunksTable documentChunks = $DocumentChunksTable(this);
+  late final $ConnectorAccountsTable connectorAccounts =
+      $ConnectorAccountsTable(this);
+  late final $ItemsTable items = $ItemsTable(this);
+  late final $LedgerTable ledger = $LedgerTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4552,6 +6155,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     contentReports,
     attachedDocuments,
     documentChunks,
+    connectorAccounts,
+    items,
+    ledger,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
