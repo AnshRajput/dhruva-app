@@ -50,11 +50,18 @@ class CharactersGalleryScreen extends ConsumerWidget {
         ),
         _ => const Center(child: DhruvaLoader()),
       },
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/characters/new'),
-        icon: const Icon(Icons.add),
-        label: const Text('Create'),
-      ),
+      // D8: ONE Create CTA. The empty gallery already carries its own
+      // "Create a persona" button, so the FAB only appears once there is
+      // something in the grid.
+      floatingActionButton: switch (state) {
+        AsyncData(:final value) when value.characters.isNotEmpty =>
+          FloatingActionButton.extended(
+            onPressed: () => context.push('/characters/new'),
+            icon: const Icon(Icons.add),
+            label: const Text('Create'),
+          ),
+        _ => null,
+      },
     );
   }
 
