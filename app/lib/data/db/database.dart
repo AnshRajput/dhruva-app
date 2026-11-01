@@ -319,6 +319,25 @@ class Ledger extends Table {
   DateTimeColumn get at => dateTime()();
 }
 
+/// A reply the user chose to keep (v8): the Library's "Saved" list. Plain text
+/// copy; `conversationId` is only a hint for "open the chat" and deliberately
+/// has no foreign key, so deleting the chat never deletes what the user saved.
+class SavedAnswers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get content => text()();
+  IntColumn get conversationId => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// A to-do the user added from an "Extract to-dos" reply (v8): the Library's
+/// "To-dos" list.
+class Todos extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get task => text()();
+  BoolColumn get done => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     InstalledModels,
@@ -332,6 +351,8 @@ class Ledger extends Table {
     ConnectorAccounts,
     Items,
     Ledger,
+    SavedAnswers,
+    Todos,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -339,7 +360,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -405,6 +426,11 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(items);
         await m.createTable(ledger);
         await _createConnectorIndexes();
+      }
+      // v7 -> v8: Library (saved answers, to-dos). Additive only.
+      if (from < 8) {
+        await m.createTable(savedAnswers);
+        await m.createTable(todos);
       }
     },
     beforeOpen: (details) async {

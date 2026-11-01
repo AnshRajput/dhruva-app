@@ -119,6 +119,9 @@ class DhruvaApp extends ConsumerWidget {
         unawaited(ref.read(screenPrivacyProvider).setHidden(hidden));
       }
     });
+    // Refresh connector statuses whenever the app comes back to the
+    // foreground (access granted in system settings shows up at once).
+    ref.watch(connectorResumeProvider);
     // Real theming from design-tokens.json (ADR-003). Follows the system
     // light/dark by default (the owner-approved daily-assistant direction);
     // Settings > Appearance can pin Light or Dark. Every screen reads

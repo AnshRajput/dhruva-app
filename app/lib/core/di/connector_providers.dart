@@ -7,12 +7,16 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/connectors/connector.dart';
 import '../../data/connectors/connector_hub.dart';
+import '../../data/connectors/connector_sources.dart';
 import '../../data/connectors/connector_store.dart';
+import '../../data/connectors/notification_connector.dart';
 import '../../data/connectors/search_index.dart';
+import '../../data/connectors/system_sources.dart';
 import 'providers.dart';
 
 /// One row of the connector list: the connector and its latest status.
@@ -105,6 +109,57 @@ final notificationGroupsProvider = StreamProvider<List<NotificationGroup>>((
 final ledgerProvider = StreamProvider<List<LedgerEntry>>((ref) {
   return ref.watch(connectorStoreProvider).watchLedger();
 });
+
+/// Opt-in rows with their small per-connector settings (the folder's file
+/// total, the notification apps the user excluded).
+final connectorAccountsProvider = StreamProvider<List<ConnectorAccount>>((ref) {
+  return ref.watch(connectorStoreProvider).watchAccounts();
+});
+
+/// Every indexed file of the connected folder (Library folder block).
+final folderFilesProvider = StreamProvider<List<FolderFile>>((ref) {
+  return ref.watch(connectorStoreProvider).watchFolderFiles();
+});
+
+/// Captured notifications of the last week, newest first (Inbox rows).
+final inboxNotificationsProvider = StreamProvider<List<ConnectorItem>>((ref) {
+  final store = ref.watch(connectorStoreProvider);
+  return store.watchNotifications(
+    since: store.now.subtract(notificationRetention),
+  );
+});
+
+/// Opens a folder file in the OS viewer / launches a source app. Tests
+/// override it.
+final externalOpenerProvider = Provider<ExternalOpener>(
+  (ref) => SystemExternalOpener(ConnectorsChannel()),
+);
+
+/// While watched (the app root does), refreshes every connector when the app
+/// returns to the foreground: access granted or revoked in system settings
+/// shows on the cards immediately, and the background job follows.
+final connectorResumeProvider = Provider<void>((ref) {
+  final observer = _ResumeObserver(() async {
+    try {
+      final hub = await ref.read(connectorHubProvider.future);
+      await hub.onResume();
+    } catch (_) {
+      // No hub, no refresh; the next launch retries.
+    }
+  });
+  WidgetsBinding.instance.addObserver(observer);
+  ref.onDispose(() => WidgetsBinding.instance.removeObserver(observer));
+});
+
+class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+  final Future<void> Function() _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_onResume());
+  }
+}
 
 /// A search request. Value-equal so Riverpod caches identical queries.
 final class ConnectorSearchQuery {

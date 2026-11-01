@@ -114,7 +114,11 @@ internal object FolderAccess {
         return out
     }
 
-    fun fetch(ctx: Context, tree: Uri, entryId: String, dest: String, maxBytes: Long) {
+    /**
+     * The document URI for [entryId], only if it is the granted root or a
+     * child of it (same confinement as [fetch]); otherwise a [FolderError].
+     */
+    fun confinedDocumentUri(ctx: Context, tree: Uri, entryId: String): Uri {
         val rootId = DocumentsContract.getTreeDocumentId(tree)
         if (entryId.isEmpty() || entryId.split('/', '\\').any { it == ".." }) {
             throw FolderError("outside_grant", "That file is not inside the chosen folder.")
@@ -127,6 +131,26 @@ internal object FolderAccess {
             false
         }
         if (!inside) throw FolderError("outside_grant", "That file is not inside the chosen folder.")
+        return docUri
+    }
+
+    /** Opens a file of the granted folder in the phone's own viewer (read-only). */
+    fun open(ctx: Context, activity: android.app.Activity?, tree: Uri, entryId: String) {
+        val docUri = confinedDocumentUri(ctx, tree, entryId)
+        val mime = ctx.contentResolver.getType(docUri) ?: "*/*"
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(docUri, mime)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            if (activity != null) activity.startActivity(intent)
+            else ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: android.content.ActivityNotFoundException) {
+            throw FolderError("no_viewer", "No app on this phone can open that file.")
+        }
+    }
+
+    fun fetch(ctx: Context, tree: Uri, entryId: String, dest: String, maxBytes: Long) {
+        val docUri = confinedDocumentUri(ctx, tree, entryId)
 
         val target = File(dest).canonicalFile
         val cache = ctx.cacheDir.canonicalFile

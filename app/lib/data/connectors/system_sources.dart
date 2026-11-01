@@ -143,6 +143,13 @@ class ConnectorsChannel {
     }
   }
 
+  Future<void> openFolderFile(String grantId, String entryId) => _ch
+      .invokeMethod<void>('folder.open', {'id': grantId, 'entryId': entryId});
+
+  Future<bool> launchApp(String package) async =>
+      (await _ch.invokeMethod<bool>('apps.launch', {'package': package})) ??
+      false;
+
   Future<void> releaseFolder(String grantId) =>
       _ch.invokeMethod<void>('folder.release', {'id': grantId});
 
@@ -327,6 +334,42 @@ class SystemNotificationAccess implements NotificationAccess {
 
   @override
   Future<String?> queueDirectory() => _channel.notificationQueueDirectory();
+}
+
+class SystemExternalOpener implements ExternalOpener {
+  SystemExternalOpener(this._channel);
+  final ConnectorsChannel _channel;
+
+  @override
+  Future<void> openFile(String grantId, String entryId) async {
+    try {
+      await _channel.openFolderFile(grantId, entryId);
+    } on MissingPluginException {
+      throw const OpenFailure(
+        'Opening files from here is not available on this phone yet. You can '
+        'still ask about the file.',
+      );
+    } on PlatformException catch (e) {
+      throw OpenFailure(switch (e.code) {
+        'no_viewer' => 'No app on this phone can open that file.',
+        'denied' || 'outside_grant' =>
+          'Access to the folder was switched off. Choose the folder again in '
+              'Connectors.',
+        _ => 'Could not open the file. Check that it still exists.',
+      });
+    }
+  }
+
+  @override
+  Future<bool> launchApp(String package) async {
+    try {
+      return await _channel.launchApp(package);
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
 }
 
 /// Charging state through the same channel (the device-health channel is not

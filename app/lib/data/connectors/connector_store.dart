@@ -60,6 +60,29 @@ final class NotificationGroup {
   DateTime get latest => items.first.sentAt ?? items.first.updatedAt;
 }
 
+/// One indexed file of the connected folder, as the Library shows it.
+final class FolderFile {
+  final int itemId;
+  final String fileId;
+  final String name;
+  final DateTime? modified;
+  final int? pages;
+
+  /// Why the file could not be read for search (`tooLarge`, `scanned`,
+  /// `unreadable`, ...), or null when it is searchable.
+  final String? problem;
+  const FolderFile({
+    required this.itemId,
+    required this.fileId,
+    required this.name,
+    required this.modified,
+    required this.pages,
+    required this.problem,
+  });
+
+  bool get ready => problem == null;
+}
+
 /// Cuts [s] to at most [max] UTF-16 units without splitting a surrogate pair.
 String capText(String s, int max) {
   if (s.length <= max) return s;
@@ -116,8 +139,13 @@ class ConnectorStore {
       for (final d in byId.values) {
         final body = capText(d.body, maxItemBodyChars);
         final people = jsonEncode(d.people.map((p) => p.toJson()).toList());
-        final flags = jsonEncode(d.flags);
         final old = existing[d.externalId];
+        // "Marked read" is the user's own state: a re-ingest of the same
+        // item (an updated notification) must not bring it back as unread.
+        final keepRead = old != null && _map(old.flagsJson)['read'] == true;
+        final flags = jsonEncode(
+          keepRead ? {...d.flags, 'read': true} : d.flags,
+        );
         if (old == null) {
           await _db
               .into(_db.items)
@@ -300,6 +328,88 @@ class ConnectorStore {
     return null;
   }
 
+  /// Sets (or, with a null [value], removes) one key in an item's flags, such
+  /// as the user's "read" mark, leaving the rest alone. No-op if the item is
+  /// gone.
+  Future<void> setItemFlag(int itemId, String key, Object? value) =>
+      _db.transaction(() async {
+        final row = await (_db.select(
+          _db.items,
+        )..where((t) => t.id.equals(itemId))).getSingleOrNull();
+        if (row == null) return;
+        final flags = Map<String, Object?>.from(_map(row.flagsJson));
+        if (value == null) {
+          flags.remove(key);
+        } else {
+          flags[key] = value;
+        }
+        await (_db.update(_db.items)..where((t) => t.id.equals(itemId))).write(
+          ItemsCompanion(flagsJson: Value(jsonEncode(flags))),
+        );
+      });
+
+  /// All sections of one folder file (they share the file id), in order.
+  Future<List<ConnectorItem>> fileSections(String fileId) async {
+    // Section rows are `<fileId>` then `<fileId>#2`...: fetch by prefix, then
+    // keep only exact matches (a prefix can also match a longer file id).
+    final rows =
+        await (_db.select(_db.items)
+              ..where((t) => t.source.equals(ConnectorIds.folder))
+              ..where((t) => t.kind.equalsValue(ItemKind.file))
+              ..where((t) => t.externalId.like('$fileId%'))
+              ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+            .get();
+    return [
+      for (final r in rows)
+        if (r.externalId == fileId || r.externalId.startsWith('$fileId#'))
+          _toItem(r),
+    ];
+  }
+
+  /// One entry per indexed folder file (its first section), newest change
+  /// first, without reading any body. Live: drives the Library folder block.
+  Stream<List<FolderFile>> watchFolderFiles() {
+    final t = _db.items;
+    final q = _db.selectOnly(t)
+      ..addColumns([t.id, t.externalId, t.title, t.sentAt, t.flagsJson])
+      ..where(
+        t.source.equals(ConnectorIds.folder) &
+            t.kind.equalsValue(ItemKind.file),
+      );
+    return q.watch().map((rows) {
+      final byFile = <String, FolderFile>{};
+      for (final r in rows) {
+        final flags = _map(r.read(t.flagsJson) ?? '{}');
+        final externalId = r.read(t.externalId)!;
+        final fileId = (flags['fileId'] as String?) ?? externalId;
+        if (externalId != fileId) continue; // a later section of the same file
+        byFile[fileId] = FolderFile(
+          itemId: r.read(t.id)!,
+          fileId: fileId,
+          name: r.read(t.title) ?? '',
+          modified: r.read(t.sentAt),
+          pages: flags['pages'] as int?,
+          problem: flags['unreadable'] as String?,
+        );
+      }
+      final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+      return byFile.values.toList()
+        ..sort((a, b) => (b.modified ?? epoch).compareTo(a.modified ?? epoch));
+    });
+  }
+
+  /// Notifications newer than [since], newest first, one row each (the Inbox).
+  Stream<List<ConnectorItem>> watchNotifications({DateTime? since}) {
+    final q = _db.select(_db.items)
+      ..where((t) => t.kind.equalsValue(ItemKind.notification))
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.sentAt),
+        (t) => OrderingTerm.desc(t.id),
+      ]);
+    if (since != null) q.where((t) => t.sentAt.isBiggerOrEqualValue(since));
+    return q.watch().map((rows) => [for (final r in rows) _toItem(r)]);
+  }
+
   /// Writes a generated one-line summary (`summaryModel` records which model
   /// wrote it so a model switch can re-summarise).
   Future<void> setSummary(int itemId, String summary, String model) =>
@@ -386,6 +496,9 @@ class ConnectorStore {
               at: now,
             ),
           );
+
+  /// "Clear ledger": forgets the reading history (counts only, never content).
+  Future<void> clearLedger() => _db.delete(_db.ledger).go();
 
   // ---- accounts ----------------------------------------------------------
 
