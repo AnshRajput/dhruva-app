@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/crash/crash_banner.dart';
+import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/router/inbox_availability.dart';
@@ -69,7 +70,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _onOpen();
+    if (state != AppLifecycleState.resumed) return;
+    // Back from system settings, say: re-read what the OS now allows first, so
+    // a Calendar grant turns the card into the real day.
+    unawaited(resumeConnectors(ref).whenComplete(_onOpen));
   }
 
   /// Write a new brief only if the cached one is stale (see BriefController).
@@ -123,8 +127,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     });
     // First facts arrive (calendar just connected) or a model just landed:
     // write the brief if it is due.
+    // Also when the sources change under a shown brief (a meeting appears
+    // after the first sync): the controller drops it and writes a new one.
     ref.listen(briefFactsProvider, (prev, next) {
-      if ((prev?.isEmpty ?? true) && next.isNotEmpty) _onOpen();
+      if (next.isNotEmpty && !sameFactSources(prev ?? const [], next)) {
+        _onOpen();
+      }
     });
     ref.listen(briefControllerProvider.select((s) => s.value?.model), (
       prev,

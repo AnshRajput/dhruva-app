@@ -33,10 +33,10 @@ void main() {
       expect(facts.map((f) => f.n), [1, 2]);
       expect(
         facts[0].text,
-        'Design sync at 9:30 with Ravi, Sana Rao, dev (Google Meet).',
+        'Design sync at 9:30 AM with Ravi, Sana Rao, dev (Google Meet).',
       );
       expect(facts[0].ref, 'event:1');
-      expect(facts[1].text, 'Budget review at 11:00 (Room 4B).');
+      expect(facts[1].text, 'Budget review at 11:00 AM (Room 4B).');
     });
 
     test('skips events that are over, says when all are over', () {
@@ -56,7 +56,10 @@ void main() {
         notificationGroups: const [],
         calendarConnected: true,
       );
-      expect(facts.first.text, startsWith('Design sync is on now until 10:15'));
+      expect(
+        facts.first.text,
+        startsWith('Design sync is on now until 10:15 AM'),
+      );
     });
 
     test('an empty calendar is a fact only when the calendar is connected', () {
@@ -70,6 +73,35 @@ void main() {
       expect(run(false), isEmpty);
     });
 
+    test('an empty store before the first sync is not an empty day', () {
+      final facts = gatherFacts(
+        now: fixtureNow,
+        todaysEvents: const [],
+        notificationGroups: const [],
+        calendarConnected: true,
+        calendarSynced: false,
+      );
+      expect(facts, isEmpty);
+    });
+
+    test('sameFactSources compares what is cited, not the wording', () {
+      List<BriefFact> f(List<String> refs) => [
+        for (final (i, r) in refs.indexed)
+          BriefFact(n: i + 1, kind: FactKind.event, text: 't$i', ref: r),
+      ];
+      expect(sameFactSources(f(['event:0']), f(['event:1', 'event:2'])), false);
+      expect(
+        sameFactSources(f(['event:1', 'event:2']), f(['event:2', 'event:1'])),
+        true,
+      );
+    });
+
+    test('clock follows the 12/24 h setting', () {
+      expect(clock(at(21, 45), use24: true), '21:45');
+      expect(clock(at(21, 45), use24: false), '9:45 PM');
+      expect(clock(at(0, 5), use24: false), '12:05 AM');
+    });
+
     test('flags overlapping meetings', () {
       final clash = event(3, 'Standup', at(10), at(10, 30));
       final facts = gatherFacts(
@@ -80,7 +112,7 @@ void main() {
       );
       expect(
         facts.map((f) => f.text),
-        contains('Design sync and Standup overlap from 10:00 to 10:15.'),
+        contains('Design sync and Standup overlap from 10:00 AM to 10:15 AM.'),
       );
     });
 
@@ -417,7 +449,7 @@ void main() {
         'Design sync',
         'Budget review',
       ]);
-      expect((t[3] as NowEntry).caption, 'Free until 9:30');
+      expect((t[3] as NowEntry).caption, 'Free until 9:30 AM');
       expect((t[2] as NotificationEntry).actionable, isTrue);
       expect((t[1] as NotificationEntry).actionable, isFalse);
     });
@@ -430,7 +462,7 @@ void main() {
       );
       final i = t.indexWhere((e) => e is NowEntry);
       expect(t[i - 1], isA<EventEntry>());
-      expect((t[i] as NowEntry).caption, 'In Design sync until 10:15');
+      expect((t[i] as NowEntry).caption, 'In Design sync until 10:15 AM');
       expect((t.first as EventEntry).isPast, isFalse);
     });
 

@@ -163,11 +163,19 @@ List<NotificationGroup> digestGroups(
 final briefFactsProvider = Provider<List<BriefFact>>((ref) {
   final now = ref.watch(nowProvider);
   final calendar = ref.watch(calendarEntryProvider);
+  final events = ref.watch(todayEventsProvider);
+  final groups = ref.watch(notificationGroupsProvider);
+  // Nothing is a fact until every input has answered: a half-loaded day would
+  // read as a different day and invalidate a good cached brief.
+  bool pending(AsyncValue<Object?> v) => !v.hasValue && !v.hasError;
+  if (!ref.watch(connectorsLoadedProvider) || pending(events)) return const [];
+  if (pending(groups)) return const [];
   return gatherFacts(
     now: now,
-    todaysEvents: ref.watch(todayEventsProvider).value ?? const [],
-    notificationGroups: ref.watch(notificationGroupsProvider).value ?? const [],
+    todaysEvents: events.value ?? const [],
+    notificationGroups: groups.value ?? const [],
     calendarConnected: calendar?.status.isConnected ?? false,
+    calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
   );
 });

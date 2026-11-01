@@ -96,7 +96,7 @@ class SettingsScreen extends StatelessWidget {
               'settings-notifications',
               Icons.notifications_none,
               'Notifications',
-              'Download alerts, and the morning brief when it arrives',
+              'Download alerts and your morning brief',
               '/settings/notifications',
             ),
             _nav(

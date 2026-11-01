@@ -85,6 +85,11 @@ class _BriefCardState extends ConsumerState<BriefCard> {
         onAction: _connecting ? null : _connect,
       );
     }
+    // Connected but the first read of the calendar is still running: an empty
+    // store is not an empty day, so wait rather than say anything.
+    if (facts.isEmpty && calendar?.status.lastSyncAt == null) {
+      return const _BriefSkeleton();
+    }
     final bs = brief.value;
     if (bs == null) {
       return brief.hasError

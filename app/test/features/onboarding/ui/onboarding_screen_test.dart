@@ -247,6 +247,38 @@ void main() {
       expect(find.text('chat-home'), findsOneWidget);
     });
 
+    testWidgets('denied, then allowed in system settings: coming back moves '
+        'on by itself, no second tap', (tester) async {
+      final p = await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
+      );
+      p.kit.calendar.afterRequest = DevicePermission.denied;
+      await _toConnect(tester);
+      await tester.tap(find.byKey(const ValueKey('connect-allow')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('connect-calendar-denied')),
+        findsOneWidget,
+      );
+
+      // Back from settings, still off: the fix stays on screen.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('connect-calendar-denied')),
+        findsOneWidget,
+      );
+      expect(p.store.complete, isFalse);
+
+      // Allowed in settings, back to the app.
+      p.kit.calendar.perm = DevicePermission.granted;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(p.store.complete, isTrue);
+      expect(find.text('chat-home'), findsOneWidget);
+    });
+
     testWidgets('Skip is always there', (tester) async {
       final p = await _pumpFlow(
         tester,

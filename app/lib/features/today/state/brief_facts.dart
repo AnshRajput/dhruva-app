@@ -9,6 +9,8 @@
 /// an action, only open its source when the user taps.
 library;
 
+import 'dart:ui' show PlatformDispatcher;
+
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
 import 'event_info.dart';
@@ -133,8 +135,16 @@ DateTime? eventEnd(ConnectorItem e) {
 
 bool isAllDay(ConnectorItem e) => e.flags['allDay'] == true;
 
-/// "9:30", 24 h. Used inside fact text; screens format with the locale.
-String clock(DateTime d) => '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+/// "9:45 PM" or "21:45", following the phone's 12/24 h setting, so fact text
+/// reads like the cards beside it. [use24] overrides the setting (tests).
+String clock(DateTime d, {bool? use24}) {
+  final m = d.minute.toString().padLeft(2, '0');
+  if (use24 ?? PlatformDispatcher.instance.alwaysUse24HourFormat) {
+    return '${d.hour}:$m';
+  }
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '$h:$m ${d.hour < 12 ? 'AM' : 'PM'}';
+}
 
 String oneLine(String s, int max) {
   final t = s.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -158,12 +168,15 @@ List<String> attendeeNames(ConnectorItem e, Map<String, String> contactNames) {
 
 /// Gathers the facts for the brief, in the order worth saying them. Pure.
 ///
-/// [calendarConnected] decides whether "no meetings" is a fact or silence.
+/// "No meetings" is a fact only once the calendar is [calendarConnected] AND
+/// has finished a sync ([calendarSynced]): right after connecting, the store is
+/// still empty, and an empty store is not an empty day.
 List<BriefFact> gatherFacts({
   required DateTime now,
   required List<ConnectorItem> todaysEvents,
   required List<NotificationGroup> notificationGroups,
   required bool calendarConnected,
+  bool calendarSynced = true,
   Map<String, String> contactNames = const {},
   int maxFacts = 10,
 }) {
@@ -182,7 +195,9 @@ List<BriefFact> gatherFacts({
 
   if (calendarConnected) {
     if (timed.isEmpty) {
-      add(FactKind.event, 'No meetings on the calendar today.', 'event:0');
+      if (calendarSynced) {
+        add(FactKind.event, 'No meetings on the calendar today.', 'event:0');
+      }
     } else if (remaining.isEmpty) {
       add(
         FactKind.event,
@@ -285,4 +300,12 @@ String daySummary({required int meetings, required int replies}) {
     if (replies > 0) '$replies ${replies == 1 ? 'reply' : 'replies'} waiting',
   ];
   return parts.join(' · ');
+}
+
+/// True when [a] and [b] cite the same sources (events and apps). A brief
+/// written from other sources describes a different day and must not be shown.
+bool sameFactSources(List<BriefFact> a, List<BriefFact> b) {
+  final x = {for (final f in a) f.ref};
+  final y = {for (final f in b) f.ref};
+  return x.length == y.length && x.containsAll(y);
 }

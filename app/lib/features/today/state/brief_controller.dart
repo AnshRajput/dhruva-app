@@ -18,6 +18,7 @@ import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/settings/prefs_store.dart';
 import 'brief_cache.dart';
+import 'brief_facts.dart';
 import 'brief_prompt.dart';
 import 'brief_writer.dart';
 import 'today_data.dart';
@@ -117,9 +118,12 @@ class BriefController extends AsyncNotifier<BriefState> {
     final cur = _s;
     if (cur.writing) return;
     final now = ref.read(todayClockProvider)();
-    final cached = cur.brief;
+    final facts = ref.read(briefFactsProvider);
+    if (facts.isEmpty) return;
+    // A cached brief about different sources is wrong, however recent.
+    await _dropIfStale(facts);
+    final cached = _s.brief;
     if (cached != null && isBriefFresh(cached, now)) return;
-    if (ref.read(briefFactsProvider).isEmpty) return;
     if (cur.model == BriefModelStatus.none) return;
     if (!await _mayWriteUnasked()) return;
     await _regenerate();
@@ -141,8 +145,23 @@ class BriefController extends AsyncNotifier<BriefState> {
         BatteryAdvice.none;
   }
 
+  /// Drops the shown/cached brief when it was written from other sources than
+  /// today's [facts]: it would contradict the screen, and a failed rewrite must
+  /// not leave it standing.
+  Future<void> _dropIfStale(List<BriefFact> facts) async {
+    final b = _s.brief;
+    if (b == null || sameFactSources(b.facts, facts)) return;
+    state = AsyncData(_s.copyWith(clearBrief: true));
+    try {
+      await (await ref.read(briefCacheStoreProvider.future)).clear();
+    } on Object {
+      // Best effort: the in-memory brief is already gone.
+    }
+  }
+
   /// Writes a new brief now (regenerate tap, pull-to-refresh, "Write my
-  /// brief"). Keeps the old brief on screen if this one fails.
+  /// brief"). If this fails, the old brief stays only while it still matches
+  /// the facts; otherwise it is dropped and the facts show instead.
   Future<void> regenerate() => _guard(_regenerate);
 
   Future<void> _regenerate() async {
@@ -155,6 +174,7 @@ class BriefController extends AsyncNotifier<BriefState> {
       );
       return;
     }
+    await _dropIfStale(facts);
     final writer = ref.read(briefWriterProvider);
     state = AsyncData(_s.copyWith(writing: true, clearError: true));
     try {

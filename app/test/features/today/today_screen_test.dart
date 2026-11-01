@@ -110,6 +110,30 @@ void main() {
       expect(h.kit.calendar.settingsOpened, 1);
     });
 
+    todayTest('denied, then allowed in system settings: coming back recovers '
+        'on its own', (tester) async {
+      final h = await pumpToday(tester);
+      h.kit.calendar.items = [
+        calEvent('e1', title: 'Design sync', start: at(9, 30)),
+      ];
+      h.kit.calendar.afterRequest = DevicePermission.denied;
+      await tester.tap(find.byKey(const ValueKey('today-brief-connect')));
+      await settle(tester);
+      expect(find.text('Calendar access is off'), findsOneWidget);
+
+      // Back from settings, still off: the fix stays.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle(tester);
+      expect(find.text('Calendar access is off'), findsOneWidget);
+
+      h.kit.calendar.perm = DevicePermission.granted;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle(tester);
+      expect(find.text('Calendar access is off'), findsNothing);
+      expect(find.text('Up next'), findsOneWidget);
+      expect(find.text('Design sync'), findsWidgets);
+    });
+
     todayTest('a permission switched off later shows the same fix', (
       tester,
     ) async {
@@ -218,16 +242,72 @@ void main() {
     todayTest('a fresh cached brief is shown without writing a new one', (
       tester,
     ) async {
+      final first = await pumpToday(tester, seed: _seedDay);
+      final cache = first.prefs.values['today_brief_v1']!;
       final h = await pumpToday(
         tester,
-        prefs: MemoryPrefsStore({'today_brief_v1': _freshCache()}),
+        prefs: MemoryPrefsStore({'today_brief_v1': cache}),
         seed: _seedDay,
       );
       expect(h.writer.prompts, isEmpty);
       expect(
-        find.textContaining('Written on this phone at 7:02 AM'),
+        find.textContaining('Written on this phone at 7:42 AM'),
         findsOneWidget,
       );
+    });
+
+    todayTest('a fresh cached brief about other sources (a false "no '
+        'meetings") is dropped and rewritten, never shown', (tester) async {
+      final falseBrief = jsonEncode(
+        WrittenBrief(
+          writtenAt: at(7, 40),
+          raw: 'No meetings today [1].',
+          facts: const [
+            BriefFact(
+              n: 1,
+              kind: FactKind.event,
+              text: 'No meetings on the calendar today.',
+              ref: 'event:0',
+            ),
+          ],
+        ).toJson(),
+      );
+      final h = await pumpToday(
+        tester,
+        prefs: MemoryPrefsStore({'today_brief_v1': falseBrief}),
+        seed: _seedDay,
+      );
+      expect(h.writer.prompts, hasLength(1));
+      expect(find.textContaining('No meetings'), findsNothing);
+    });
+
+    todayTest('a failed rewrite does not leave a brief about other sources '
+        'on screen', (tester) async {
+      final falseBrief = jsonEncode(
+        WrittenBrief(
+          writtenAt: at(7, 40),
+          raw: 'No meetings today [1].',
+          facts: const [
+            BriefFact(
+              n: 1,
+              kind: FactKind.event,
+              text: 'No meetings on the calendar today.',
+              ref: 'event:0',
+            ),
+          ],
+        ).toJson(),
+      );
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter()..failWith = StateError('model crashed'),
+        prefs: MemoryPrefsStore({'today_brief_v1': falseBrief}),
+        seed: _seedDay,
+      );
+      expect(h.writer.prompts, hasLength(1));
+      expect(find.textContaining('No meetings'), findsNothing);
+      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
+      expect(find.text('Your day, at a glance'), findsOneWidget);
+      expect(h.prefs.values['today_brief_v1'], '');
     });
 
     todayTest('a stale cached brief (older than 3 h) is rewritten on open', (
@@ -643,10 +723,10 @@ void main() {
         find.byKey(const ValueKey('timeline-now-caption')),
         findsOneWidget,
       );
-      expect(find.text('Free until 9:30'), findsOneWidget);
+      expect(find.text('Free until 9:30 AM'), findsOneWidget);
       final design = tester.getTopLeft(find.text('Design sync')).dy;
       final budget = tester.getTopLeft(find.text('Budget review')).dy;
-      final now = tester.getTopLeft(find.text('Free until 9:30')).dy;
+      final now = tester.getTopLeft(find.text('Free until 9:30 AM')).dy;
       final ravi = tester.getTopLeft(find.textContaining('Wants your OK')).dy;
       expect(ravi, lessThan(now)); // 7:12 is before now (7:42)
       expect(now, lessThan(design));

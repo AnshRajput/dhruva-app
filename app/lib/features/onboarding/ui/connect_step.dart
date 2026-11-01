@@ -7,6 +7,8 @@
 /// keeps the background model download visible, with its recovery.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -34,9 +36,34 @@ class ConnectStep extends ConsumerStatefulWidget {
   ConsumerState<ConnectStep> createState() => _ConnectStepState();
 }
 
-class _ConnectStepState extends ConsumerState<ConnectStep> {
+class _ConnectStepState extends ConsumerState<ConnectStep>
+    with WidgetsBindingObserver {
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from system settings: re-read what the OS allows, and move on if
+  /// Calendar was just switched on (there is no pull-to-refresh here).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(
+      resumeConnectors(ref).then((granted) {
+        if (granted && mounted) unawaited(widget.onDone());
+      }),
+    );
+  }
 
   ConnectorStatus? _status(String id) {
     final list = ref.watch(connectorListProvider).value ?? const [];
