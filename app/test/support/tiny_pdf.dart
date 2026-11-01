@@ -54,8 +54,15 @@ Uint8List buildTinyPdf(List<String> pages) {
 /// Builds a one-page PDF whose content stream is [content] compressed with
 /// FlateDecode. With a highly repetitive [content] this is a decompression
 /// bomb: a few KB on disk, hundreds of MB inflated.
-Uint8List buildFlatePdf(List<int> content) {
-  final data = ZLibEncoder(level: 9).convert(content);
+Uint8List buildFlatePdf(List<int> content) => buildStreamPdf(
+  '/Filter /FlateDecode',
+  ZLibEncoder(level: 9).convert(content),
+);
+
+/// Builds a one-page PDF whose object 5 is a stream with the given extra
+/// dictionary entries ([dictEntries], e.g. `/Filter /FlateDecode`) and raw
+/// [payload]. Lets tests hand-craft any filter chain.
+Uint8List buildStreamPdf(String dictEntries, List<int> payload) {
   final b = BytesBuilder();
   final offs = <int>[];
   void w(String s) => b.add(latin1.encode(s));
@@ -71,8 +78,8 @@ Uint8List buildFlatePdf(List<int> content) {
     w('${offs.length} 0 obj\n$o\nendobj\n');
   }
   offs.add(b.length);
-  w('5 0 obj\n<< /Length ${data.length} /Filter /FlateDecode >>\nstream\n');
-  b.add(data);
+  w('5 0 obj\n<< /Length ${payload.length} $dictEntries >>\nstream\n');
+  b.add(payload);
   w('\nendstream\nendobj\n');
   final x = b.length;
   w('xref\n0 6\n0000000000 65535 f \n');

@@ -42,6 +42,7 @@ enum DocumentFailureKind {
   empty,
   noText,
   unreadable,
+  unsafe,
 }
 
 /// A user-facing extraction failure. [message] is plain language, ready to
@@ -203,13 +204,14 @@ ExtractedDocument _extractText(
 }
 
 ExtractedDocument _extractPdf(Uint8List bytes, String name) {
-  // Refuse decompression bombs before the parser (which has no output cap)
-  // ever sees the stream.
-  if (!pdfInflateWithinLimits(bytes)) {
+  // Refuse decompression bombs and stream encodings the guard cannot bound
+  // before the parser (which has no output cap) ever sees the stream.
+  if (!pdfSafeToParse(bytes)) {
     throw const DocumentException(
-      DocumentFailureKind.tooLarge,
-      'That PDF expands to far more data than a normal document, so Dhruva '
-      "won't open it. It may be damaged or unsafe.",
+      DocumentFailureKind.unsafe,
+      "Dhruva can't read this PDF safely. It uses an unusual encoding or "
+      'expands to far more data than a normal document, so it may be damaged '
+      'or unsafe.',
     );
   }
   final PdfDocument doc;
