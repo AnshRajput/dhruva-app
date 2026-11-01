@@ -26,8 +26,11 @@ class InboxScreen extends StatelessWidget {
         title: const Text('Inbox'),
         automaticallyImplyLeading: standalone,
       ),
-      body: ListView(
-        padding: EdgeInsets.all(tokens.spacing.base),
+      bodyBuilder: (context, inset) => ListView(
+        padding: EdgeInsets.all(tokens.spacing.base).copyWith(
+          top: inset.top + tokens.spacing.base,
+          bottom: inset.bottom + tokens.spacing.base,
+        ),
         children: [
           NextStepCard(
             icon: Icons.inbox_outlined,

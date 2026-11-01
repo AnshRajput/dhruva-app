@@ -32,12 +32,12 @@ class LibraryScreen extends StatelessWidget {
         title: Text('Library'),
         automaticallyImplyLeading: false,
       ),
-      body: ListView(
+      bodyBuilder: (context, inset) => ListView(
         padding: EdgeInsets.fromLTRB(
           tokens.spacing.base,
-          tokens.spacing.xs,
+          inset.top + tokens.spacing.xs,
           tokens.spacing.base,
-          tokens.spacing.xl2,
+          inset.bottom + tokens.spacing.xl2,
         ),
         children: [
           const _FolderRow(),

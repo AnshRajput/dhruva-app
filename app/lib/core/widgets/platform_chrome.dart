@@ -195,17 +195,24 @@ class AdaptiveAppBar extends ConsumerWidget implements PreferredSizeWidget {
 }
 
 /// Scaffold for the new tab surfaces: on iOS glass the body runs behind the
-/// app bar so content scrolls under the translucent chrome.
+/// app bar (and the shell's tab bar) so content scrolls under the translucent
+/// chrome.
+///
+/// The body is a builder because a scrollable that sets its own `padding`
+/// drops the Scaffold's MediaQuery inset, which would park the first row under
+/// the glass bar. [bodyBuilder] hands over that inset (top = app bar, bottom =
+/// tab bar; zero when the chrome is solid and already outside the body) to add
+/// to the list's own padding.
 class ChromeScaffold extends ConsumerWidget {
   const ChromeScaffold({
     super.key,
     required this.appBar,
-    required this.body,
+    required this.bodyBuilder,
     this.floatingActionButton,
   });
 
   final AdaptiveAppBar appBar;
-  final Widget body;
+  final Widget Function(BuildContext context, EdgeInsets inset) bodyBuilder;
   final Widget? floatingActionButton;
 
   @override
@@ -214,7 +221,15 @@ class ChromeScaffold extends ConsumerWidget {
     return Scaffold(
       extendBodyBehindAppBar: glass,
       appBar: appBar,
-      body: body,
+      body: Builder(
+        builder: (context) {
+          final p = MediaQuery.paddingOf(context);
+          return bodyBuilder(
+            context,
+            EdgeInsets.only(top: p.top, bottom: p.bottom),
+          );
+        },
+      ),
       floatingActionButton: floatingActionButton,
     );
   }

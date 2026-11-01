@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../theme/dhruva_theme_extension.dart';
 import 'prefs_store.dart';
 
 const whatMovedDismissedKey = 'what_moved_dismissed';
@@ -21,6 +22,9 @@ class WhatMovedNotifier extends AsyncNotifier<bool> {
   }
 
   Future<void> dismiss() async {
+    // Let build() resolve first, or it lands after us and overwrites the
+    // dismissal with "pending" (the flag is not on disk yet).
+    await future;
     final store = await ref.read(prefsStoreProvider.future);
     state = const AsyncData(false);
     await store.write(whatMovedDismissedKey, 'true');
@@ -99,37 +103,43 @@ class WhatMovedSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        padding: EdgeInsets.fromLTRB(
+          tokens.spacing.lg,
+          0,
+          tokens.spacing.lg,
+          tokens.spacing.lg,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('What moved', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 4),
+            SizedBox(height: tokens.spacing.xs),
             Text(
               'Everything is still here, in new places.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: tokens.spacing.base),
             for (final card in whatMovedCards)
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.only(bottom: tokens.spacing.md),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(tokens.radius.xl),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(tokens.spacing.base),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(card.icon, color: theme.colorScheme.primary),
-                        const SizedBox(width: 12),
+                        SizedBox(width: tokens.spacing.md),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,7 +148,7 @@ class WhatMovedSheet extends StatelessWidget {
                                 card.title,
                                 style: theme.textTheme.titleSmall,
                               ),
-                              const SizedBox(height: 2),
+                              SizedBox(height: tokens.spacing.xs / 2),
                               Text(
                                 card.body,
                                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -153,7 +163,7 @@ class WhatMovedSheet extends StatelessWidget {
                   ),
                 ),
               ),
-            const SizedBox(height: 4),
+            SizedBox(height: tokens.spacing.xs),
             SizedBox(
               width: double.infinity,
               child: FilledButton(

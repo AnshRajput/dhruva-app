@@ -69,10 +69,10 @@ class TodayScreen extends StatelessWidget {
           SizedBox(width: tokens.spacing.xs),
         ],
       ),
-      body: ListView(
+      bodyBuilder: (context, inset) => ListView(
         padding: EdgeInsets.only(
-          top: tokens.spacing.xs,
-          bottom: tokens.spacing.xl2,
+          top: inset.top + tokens.spacing.xs,
+          bottom: inset.bottom + tokens.spacing.xl2,
         ),
         children: [
           // Update / crash nudges used to sit on the Chats home; Today is home now.
@@ -112,7 +112,7 @@ class TodayScreen extends StatelessWidget {
                   body:
                       'Connect your calendar to see your next meetings here. It '
                       'needs no sign-in and never leaves this phone.',
-                  actionLabel: 'Connect calendar',
+                  actionLabel: 'See connectors',
                   actionKey: const ValueKey('today-connect-calendar'),
                   onAction: () => context.push('/settings/connectors'),
                 ),
@@ -241,7 +241,7 @@ class _BriefCard extends StatelessWidget {
             FilledButton(
               key: const ValueKey('today-brief-connect'),
               onPressed: () => context.push('/settings/connectors'),
-              child: const Text('Connect calendar'),
+              child: const Text('See connectors'),
             ),
           ],
         ),

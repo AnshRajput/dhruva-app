@@ -75,4 +75,23 @@ void main() {
       expect(store.values[whatMovedDismissedKey], 'true');
     },
   );
+
+  test('dismiss while build() is still loading is not overwritten', () async {
+    // Slow prefs provider (the real one awaits a platform channel): build()
+    // reads the absent flag and lands "pending" after dismiss() set state.
+    final store = MemoryPrefsStore();
+    final c = ProviderContainer(
+      overrides: [
+        prefsStoreProvider.overrideWith((ref) async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return store;
+        }),
+      ],
+    );
+    addTearDown(c.dispose);
+    await c.read(whatMovedPendingProvider.notifier).dismiss();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(c.read(whatMovedPendingProvider).value, isFalse);
+    expect(store.values[whatMovedDismissedKey], 'true');
+  });
 }

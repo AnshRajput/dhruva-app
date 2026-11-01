@@ -28,7 +28,7 @@ class DayTimelineScreen extends StatelessWidget {
             body:
                 'Meetings from your calendar show up here as a timeline, with '
                 'your free time in between.',
-            actionLabel: 'Connect calendar',
+            actionLabel: 'See connectors',
             actionKey: const ValueKey('day-connect-calendar'),
             onAction: () => context.push('/settings/connectors'),
           ),
