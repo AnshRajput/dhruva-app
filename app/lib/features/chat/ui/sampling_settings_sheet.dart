@@ -1,6 +1,9 @@
-/// Sampling settings sheet (chat-spec.md §5): system prompt + one slider
-/// per `SamplingParams` field, each with a tap-to-type escape hatch,
-/// commit-time `validate()` (never per-keystroke), reset-to-defaults.
+/// Chat settings sheet (chat-spec.md §5, plain-language pass): "Instructions
+/// for this chat" (the system prompt), "Creativity" (temperature), "Answer
+/// length" (max tokens), "Memory for this chat" (context length), and Top-P /
+/// Top-K behind an "Advanced" expander. Same persistence as before: each
+/// slider has a tap-to-type escape hatch, commit-time `validate()` (never
+/// per-keystroke), reset-to-defaults.
 library;
 
 import 'package:flutter/material.dart';
@@ -98,11 +101,13 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'System prompt & sampling',
-                style: theme.textTheme.titleMedium,
-              ),
+              Text('Chat settings', style: theme.textTheme.titleMedium),
               SizedBox(height: tokens.spacing.sm),
+              Text(
+                'Instructions for this chat',
+                style: theme.textTheme.titleSmall,
+              ),
+              SizedBox(height: tokens.spacing.xs),
               TextField(
                 controller: _systemPromptCtrl,
                 minLines: 2,
@@ -110,11 +115,13 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
                 style: theme.textTheme.bodyLarge,
                 decoration: const InputDecoration(
                   hintText: 'You are a helpful assistant…',
+                  helperText: 'Tell the assistant how to behave in this chat.',
                 ),
               ),
               SizedBox(height: tokens.spacing.md),
               _SliderRow(
-                label: 'Temperature',
+                label: 'Creativity',
+                hint: 'Low is focused and predictable, high is more varied.',
                 value: _draft.temperature,
                 min: 0,
                 max: 2,
@@ -123,26 +130,10 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
                     setState(() => _draft = _draft.copyWith(temperature: v)),
               ),
               _SliderRow(
-                label: 'Top-P',
-                value: _draft.topP,
-                min: 0,
-                max: 1,
-                divisions: 100,
-                onChanged: (v) =>
-                    setState(() => _draft = _draft.copyWith(topP: v)),
-              ),
-              _SliderRow(
-                label: 'Top-K',
-                value: _draft.topK.toDouble(),
-                min: 0,
-                max: 200,
-                divisions: 200,
-                isInt: true,
-                onChanged: (v) =>
-                    setState(() => _draft = _draft.copyWith(topK: v.round())),
-              ),
-              _SliderRow(
-                label: 'Max tokens',
+                label: 'Answer length',
+                hint:
+                    'The longest a reply can get, in tokens (about ¾ of a '
+                    'word each).',
                 value: _draft.maxTokens.toDouble(),
                 min: 1,
                 max: 4096,
@@ -153,7 +144,10 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
                 ),
               ),
               _SliderRow(
-                label: 'Context length',
+                label: 'Memory for this chat',
+                hint:
+                    'How much of the conversation the assistant can keep in '
+                    'mind. More memory uses more RAM.',
                 value: _draft.contextLength.toDouble(),
                 min: 512,
                 max: 8192,
@@ -162,6 +156,41 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
                 onChanged: (v) => setState(
                   () => _draft = _draft.copyWith(contextLength: v.round()),
                 ),
+              ),
+              ExpansionTile(
+                key: const ValueKey('advanced-sampling'),
+                // No border lines: the tile sits inline in the sheet.
+                shape: const Border(),
+                collapsedShape: const Border(),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: Text('Advanced', style: theme.textTheme.titleSmall),
+                children: [
+                  _SliderRow(
+                    label: 'Top-P',
+                    hint:
+                        'Only consider the most likely words that add up '
+                        'to this share.',
+                    value: _draft.topP,
+                    min: 0,
+                    max: 1,
+                    divisions: 100,
+                    onChanged: (v) =>
+                        setState(() => _draft = _draft.copyWith(topP: v)),
+                  ),
+                  _SliderRow(
+                    label: 'Top-K',
+                    hint: 'Only consider this many of the most likely words.',
+                    value: _draft.topK.toDouble(),
+                    min: 0,
+                    max: 200,
+                    divisions: 200,
+                    isInt: true,
+                    onChanged: (v) => setState(
+                      () => _draft = _draft.copyWith(topK: v.round()),
+                    ),
+                  ),
+                ],
               ),
               if (_error != null)
                 Padding(
@@ -191,6 +220,9 @@ class _SamplingSettingsSheetState extends ConsumerState<SamplingSettingsSheet> {
 
 class _SliderRow extends StatefulWidget {
   final String label;
+
+  /// One plain sentence under the label.
+  final String? hint;
   final double value;
   final double min;
   final double max;
@@ -200,6 +232,7 @@ class _SliderRow extends StatefulWidget {
 
   const _SliderRow({
     required this.label,
+    this.hint,
     required this.value,
     required this.min,
     required this.max,
@@ -277,6 +310,13 @@ class _SliderRowState extends State<_SliderRow> {
               ),
             ],
           ),
+          if (widget.hint != null)
+            Text(
+              widget.hint!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           Slider(
             value: widget.value.clamp(widget.min, widget.max),
             min: widget.min,

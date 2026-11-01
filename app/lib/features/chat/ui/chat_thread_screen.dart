@@ -267,6 +267,8 @@ class _ThreadScaffold extends ConsumerWidget {
                             onGetVisionModel: () => context.push('/models/hub'),
                             onSwitchModel: () => _pickModel(context),
                             onOpenWorkflows: () => context.push('/actions'),
+                            onOpenConnect: () =>
+                                context.push('/settings/connectors'),
                           ),
                   )
                 : Stack(
