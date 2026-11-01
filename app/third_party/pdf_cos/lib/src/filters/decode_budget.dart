@@ -17,11 +17,12 @@ class DecodeBudget {
     this.maxTotalBytes = defaultMaxTotalBytes,
   });
 
+  // dhruva: lowered from 16 MB / 128 MB (round 6), see NOTICE.md.
   /// Largest output of one filter stage.
-  static const defaultMaxStreamBytes = 16 * 1024 * 1024;
+  static const defaultMaxStreamBytes = 4 * 1024 * 1024;
 
   /// Largest output of all filter stages of one document together.
-  static const defaultMaxTotalBytes = 128 * 1024 * 1024;
+  static const defaultMaxTotalBytes = 64 * 1024 * 1024;
 
   final int maxStreamBytes;
   final int maxTotalBytes;

@@ -2,7 +2,7 @@
 
 This directory is `pdf_cos` 14.0.0 from pub.dev (Apache-2.0, see `LICENSE`),
 copied unmodified except for the changes below. Every changed line is marked
-`// dhruva: bounded decode`.
+`// dhruva: bounded decode` or `// dhruva: parse limits`.
 
 ## What changed and why
 
@@ -12,8 +12,8 @@ huge predictor row) expands to hundreds of MB and kills the app. A guard
 outside the parser kept being bypassed because it had to guess where the
 parser thinks a stream ends. The cap now lives inside the decoders.
 
-- `lib/src/filters/decode_budget.dart` (new): `DecodeBudget` (16 MB per
-  filter stage, 128 MB per document by default) and `DecodeStage`.
+- `lib/src/filters/decode_budget.dart` (new): `DecodeBudget` (4 MB per
+  filter stage, 64 MB per document by default; see round 6) and `DecodeStage`.
 - `lib/src/exceptions.dart`: new `PdfDecodeLimitExceeded`.
 - `filters/*.dart`: `CosFilter.decode` takes a `DecodeBudget`; FlateDecode
   (VM: archive `maxOutputSize`, a chunked native inflate that throws as soon
@@ -64,6 +64,32 @@ parser thinks a stream ends. The cap now lives inside the decoders.
   the empty password. No change to `crypto/`.
 - `pubspec.yaml`: workspace resolution and dev dependencies removed, `archive`
   raised to ^4.6.0 (needed for `maxOutputSize`).
+
+## Round 6: parse limits and lower caps
+
+A decoded content stream within the byte cap can still become millions of
+objects, each far bigger than the byte behind it (a 24 KB Flate file whose
+stream decodes to `BT /F1 12 Tf [(a)-1 (a)-1 ...] TJ ET` drove a read to
+2.3 GB; `()`, `<>` and `0 1 Td (a) Tj` repeated cost 580-610 MB).
+`pdf_graphics`/`pdf_document` are NOT vendored: the content-stream parser they
+call is `ContentStreamParser` in this package, so the limits live here.
+
+- `content_parser.dart` (marked `// dhruva: parse limits`):
+  `ContentStreamParser.maxOperations` (500,000 operators per stream, i.e. per
+  page or form XObject), `maxOperands` (100,000 operands per operator, array
+  or dictionary), `maxNesting` (64). A breach throws `PdfDecodeLimitExceeded`
+  and bumps `ContentStreamParser.limitTrips`, which the app compares before
+  and after a read because library code swallows per-page exceptions.
+- `decode_budget.dart`: defaults lowered to 4 MB per filter stage and 64 MB
+  per document (were 16 MB / 128 MB). The stage cap applies to every stream,
+  including page content, fonts and ToUnicode CMaps. Real-world need for more:
+  none found. Ordinary page content streams are tens to hundreds of KB, a
+  ToUnicode CMap well under 1 MB, and a subsetted embedded font under 1 MB
+  decoded. A PDF that embeds a full CJK font (10 MB+ decoded) is now refused as
+  unsafe; raise `maxStreamBytes` only if that proves common, and only together
+  with a check that the app-level memory watchdog still holds.
+- The hard guarantee is not in this package: `extractDocumentFile` kills the
+  extraction isolate when process RSS grows 350 MB past its starting size.
 
 Not covered: JBIG2/JPX image decoders (run only when rendering images, which
 text extraction never does) and the `tool/`, `test/`, `example/` folders

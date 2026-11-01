@@ -15,6 +15,7 @@ import 'dart:typed_data';
 
 import 'package:pdf_cos/pdf_cos.dart'
     show
+        ContentStreamParser,
         CosPasswordException,
         PdfDecodeLimitExceeded,
         UnsupportedEncryptionException;
@@ -34,6 +35,14 @@ const maxDocumentChars = 400000;
 /// A read that runs longer than this is killed (the isolate is cancellable,
 /// unlike `Isolate.run`) as a backstop for inputs the guards do not model.
 const _extractTimeout = Duration(seconds: 60);
+
+/// The most the process may grow (resident memory) while one document is
+/// being extracted, measured against the size before the extraction isolate
+/// starts. Past it the isolate is killed and the file is refused as unsafe.
+/// The one place this number lives.
+const maxExtractionRssGrowth = 350 * 1024 * 1024;
+
+const _watchdogInterval = Duration(milliseconds: 25);
 
 /// Pages processed per PDF; later pages are ignored.
 const maxPdfPages = 2000;
@@ -92,8 +101,13 @@ typedef DocumentExtractor =
     Future<ExtractedDocument> Function(String path, String name);
 
 /// Production extractor: validates size, then reads + parses + chunks in a
-/// background isolate. Throws [DocumentException].
-Future<ExtractedDocument> extractDocumentFile(String path, String name) async {
+/// background isolate under a memory watchdog and a timeout. Throws
+/// [DocumentException]. [rssGrowthLimit] exists for tests only.
+Future<ExtractedDocument> extractDocumentFile(
+  String path,
+  String name, {
+  int rssGrowthLimit = maxExtractionRssGrowth,
+}) async {
   final size = await File(path).length();
   if (size > maxDocumentBytes) {
     throw const DocumentException(
@@ -101,27 +115,65 @@ Future<ExtractedDocument> extractDocumentFile(String path, String name) async {
       'That file is over 20 MB. Choose a smaller document.',
     );
   }
-  final port = ReceivePort();
-  final isolate = await Isolate.spawn(
+  return _runGuarded(
     (SendPort out) => out.send(_extractInIsolate(path, name)),
-    port.sendPort,
-    onExit: port.sendPort, // a crash without a result arrives as null.
+    rssGrowthLimit,
   );
-  final Object? message = await port.first.timeout(
-    _extractTimeout,
-    onTimeout: () => null,
-  );
-  isolate.kill(priority: Isolate.immediate);
-  port.close();
-  if (message is! _Result) {
-    throw const DocumentException(
-      DocumentFailureKind.unreadable,
-      "Couldn't read that file in a reasonable time. It may be too complex.",
-    );
+}
+
+/// Runs [entry] in a fresh isolate and returns its [_Result].
+///
+/// THE GUARANTEE: a watchdog on the calling isolate samples
+/// `ProcessInfo.currentRss` from before the isolate starts, and kills the
+/// isolate the moment the process has grown by more than [rssGrowthLimit].
+/// Per-stage caps and parser limits make that rare; this makes it
+/// impossible for any input they do not model (the content-stream parser and
+/// text extractor build objects far larger than the bytes that made them).
+/// The result of a killed isolate is never read, so nothing it built is kept.
+Future<ExtractedDocument> _runGuarded(
+  void Function(SendPort) entry,
+  int rssGrowthLimit,
+) async {
+  final baseline = ProcessInfo.currentRss;
+  final port = ReceivePort();
+  final done = Completer<Object?>();
+  Isolate? isolate;
+  Timer? watchdog;
+  Timer? timeout;
+  var overLimit = false;
+  void finish(Object? message) {
+    if (!done.isCompleted) done.complete(message);
   }
-  final doc = message.doc;
-  if (doc == null) throw message.failure!;
-  return doc;
+
+  try {
+    // Started before the spawn so the baseline-to-first-sample gap is nil.
+    watchdog = Timer.periodic(_watchdogInterval, (_) {
+      if (ProcessInfo.currentRss - baseline <= rssGrowthLimit) return;
+      overLimit = true;
+      isolate?.kill(priority: Isolate.immediate);
+      finish(null);
+    });
+    timeout = Timer(_extractTimeout, () => finish(null));
+    port.listen(finish); // a result, or null from onExit after a crash.
+    isolate = await Isolate.spawn(entry, port.sendPort, onExit: port.sendPort);
+    if (overLimit) finish(null); // the watchdog fired during the spawn.
+    final Object? message = await done.future;
+    if (overLimit) throw _tooComplex;
+    if (message is! _Result) {
+      throw const DocumentException(
+        DocumentFailureKind.unreadable,
+        "Couldn't read that file in a reasonable time. It may be too complex.",
+      );
+    }
+    final doc = message.doc;
+    if (doc == null) throw message.failure!;
+    return doc;
+  } finally {
+    watchdog?.cancel();
+    timeout?.cancel();
+    isolate?.kill(priority: Isolate.immediate);
+    port.close();
+  }
 }
 
 /// Same as [extractDocumentFile] but on bytes already in memory and on the
@@ -219,6 +271,11 @@ const _unsafe = DocumentException(
   'or unsafe.',
 );
 
+const _tooComplex = DocumentException(
+  DocumentFailureKind.unsafe,
+  'This PDF is too complex to read safely on this phone.',
+);
+
 const _encrypted = DocumentException(
   DocumentFailureKind.encrypted,
   "This PDF is password-protected or encrypted. Dhruva can't read it.",
@@ -265,7 +322,10 @@ ExtractedDocument _readPdf(Uint8List bytes, String name) {
   if (doc.cos.isEncrypted) throw _encrypted;
   final pageCount = doc.pageCount < maxPdfPages ? doc.pageCount : maxPdfPages;
   // Library code swallows per-stream errors in places; the budget latches.
+  // The parser's operator/operand limits latch the same way.
   final budget = doc.cos.decodeBudget;
+  final trips = ContentStreamParser.limitTrips;
+  bool tripped() => budget.tripped || ContentStreamParser.limitTrips != trips;
   final pages = <PageText>[];
   var chars = 0;
   for (var i = 0; i < pageCount; i++) {
@@ -275,16 +335,16 @@ ExtractedDocument _readPdf(Uint8List bytes, String name) {
     } on PdfDecodeLimitExceeded {
       rethrow;
     } on Object {
-      if (budget.tripped) throw _unsafe;
+      if (tripped()) throw _unsafe;
       continue; // one bad page must not lose the rest of the document.
     }
-    if (budget.tripped) throw _unsafe;
+    if (tripped()) throw _unsafe;
     if (text.isEmpty) continue;
     chars += text.length;
     _checkLength(chars);
     pages.add(PageText(i + 1, text));
   }
-  if (budget.tripped) throw _unsafe;
+  if (tripped()) throw _unsafe;
   if (chars < _minUsableChars) {
     throw const DocumentException(
       DocumentFailureKind.noText,

@@ -262,12 +262,13 @@ void main() {
       expect(budget.tripped, isTrue);
     });
 
-    // Nine pages, each a 15 MB (under the 16 MB stream cap) content stream:
-    // 135 MB together, over the 128 MB document cap. The guard's own limits
-    // (64 MB / 200 MB) let it through, so the decoder is what refuses.
-    test('a real document over 128 MB total is refused as unsafe', () {
-      final z = ZLibEncoder(level: 9).convert(_filled(15 * _mb, 0x20));
-      final pdf = _multiPagePdf(9, z);
+    // 22 pages, each a 3 MB (under the 4 MB stream cap) content stream:
+    // 66 MB together, over the 64 MB document cap. The guard's own limits
+    // (64 MB per stream / 200 MB total) let it through, so the decoder is
+    // what refuses.
+    test('a real document over 64 MB total is refused as unsafe', () {
+      final z = ZLibEncoder(level: 9).convert(_filled(3 * _mb, 0x20));
+      final pdf = _multiPagePdf(22, z);
       expect(pdfSafeToParse(pdf), isTrue, reason: 'guard alone lets it pass');
       expect(
         () => extractDocumentBytes(pdf, 'big.pdf'),
@@ -281,10 +282,10 @@ void main() {
       );
     });
 
-    test('eight such pages (120 MB) stay under the cap', () {
-      final z = ZLibEncoder(level: 9).convert(_filled(15 * _mb, 0x20));
-      final doc = PdfDocument.open(_multiPagePdf(8, z));
-      for (var i = 0; i < 8; i++) {
+    test('twenty such pages (60 MB) stay under the cap', () {
+      final z = ZLibEncoder(level: 9).convert(_filled(3 * _mb, 0x20));
+      final doc = PdfDocument.open(_multiPagePdf(20, z));
+      for (var i = 0; i < 20; i++) {
         PdfTextExtractor.extract(doc, i);
       }
       expect(doc.cos.decodeBudget.tripped, isFalse);

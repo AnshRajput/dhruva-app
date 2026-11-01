@@ -100,6 +100,33 @@ class ContentStreamSerializer {
 class ContentStreamParser {
   ContentStreamParser._();
 
+  // dhruva: parse limits. A decoded content stream within the byte cap can
+  // still expand into millions of objects (`[(a)-1 (a)-1 ...] TJ`, `()` or
+  // `<>` repeated, `0 1 Td (a) Tj` repeated), each far larger than the byte
+  // that made it. Hostile input is refused instead of materialised.
+
+  /// Most operators one content stream (one page, or one form XObject) may
+  /// hold.
+  static const maxOperations = 500000;
+
+  /// Most operands one operator, array or dictionary may hold.
+  static const maxOperands = 100000;
+
+  /// Deepest nesting of arrays/dictionaries in an operand.
+  static const maxNesting = 64;
+
+  /// Count of limit breaches in this isolate, ever. Library code swallows
+  /// exceptions per page, so a caller reads this before and after a read to
+  /// learn that a limit fired even if the throw was swallowed. (The budget
+  /// latch of [DecodeBudget] does the same for byte caps.)
+  static int get limitTrips => _limitTrips;
+  static int _limitTrips = 0;
+
+  static Never _tooMuch(String detail) {
+    _limitTrips++;
+    throw PdfDecodeLimitExceeded(detail);
+  }
+
   /// Shared immutable [CosInteger]s for the small values that saturate a
   /// content stream - text/graphics-state modes, glyph indices, colour
   /// components, small coordinates. Content streams are integer-dense, and
@@ -159,7 +186,9 @@ class ContentStreamParser {
   /// Parses one operand object from [first] (already consumed). Mirrors
   /// [CosParser.parseObject] for the object kinds that appear in content
   /// streams - no indirect references, no streams.
-  static CosObject _parseObject(CosLexer lexer, CosToken first) {
+  static CosObject _parseObject(CosLexer lexer, CosToken first,
+      [int depth = 0]) {
+    if (depth > maxNesting) _tooMuch('operand nested past $maxNesting levels');
     switch (first.type) {
       case CosTokenType.integer:
         return _intObject(first.intValue);
@@ -172,9 +201,9 @@ class ContentStreamParser {
       case CosTokenType.name:
         return CosName(first.textValue);
       case CosTokenType.arrayOpen:
-        return _parseLenientArray(lexer);
+        return _parseLenientArray(lexer, depth + 1);
       case CosTokenType.dictOpen:
-        return _parseDictionary(lexer);
+        return _parseDictionary(lexer, depth + 1);
       case CosTokenType.keyword:
         switch (first.textValue) {
           case 'true':
@@ -198,10 +227,15 @@ class ContentStreamParser {
   /// operators found inside it. Real-world generators emit junk like
   /// `[(a) 0.0 Tc -250.0 (b)] TJ`; a strict parse would abort the whole page
   /// on the `Tc`.
-  static CosArray _parseLenientArray(CosLexer lexer) {
+  static CosArray _parseLenientArray(CosLexer lexer, int depth) {
     final items = <CosObject>[];
     while (true) {
       final t = lexer.nextToken();
+      if (items.length >= maxOperands &&
+          t.type != CosTokenType.arrayClose &&
+          t.type != CosTokenType.eof) {
+        _tooMuch('array past $maxOperands items');
+      }
       switch (t.type) {
         case CosTokenType.arrayClose:
           return CosArray(items);
@@ -215,11 +249,11 @@ class ContentStreamParser {
           if (t.textValue == 'true' ||
               t.textValue == 'false' ||
               t.textValue == 'null') {
-            items.add(_parseObject(lexer, t));
+            items.add(_parseObject(lexer, t, depth));
           }
         // else: stray operator - drop it
         default:
-          items.add(_parseObject(lexer, t));
+          items.add(_parseObject(lexer, t, depth));
       }
     }
   }
@@ -227,10 +261,12 @@ class ContentStreamParser {
   /// Parses a dictionary operand (the `<<` already consumed). Content-stream
   /// dictionaries are property lists for marked content (`BDC`/`DP`); they
   /// never carry a stream.
-  static CosDictionary _parseDictionary(CosLexer lexer) {
+  static CosDictionary _parseDictionary(CosLexer lexer, int depth) {
     final dict = CosDictionary();
+    var entries = 0;
     while (true) {
       final t = lexer.nextToken();
+      if (++entries > maxOperands) _tooMuch('dictionary past $maxOperands entries');
       if (t.type == CosTokenType.dictClose) return dict;
       if (t.type == CosTokenType.eof) {
         throw CosParseException('unterminated dictionary', t.offset);
@@ -239,7 +275,7 @@ class ContentStreamParser {
         throw CosParseException(
             'expected name as dictionary key, found $t', t.offset);
       }
-      dict[t.textValue] = _parseObject(lexer, lexer.nextToken());
+      dict[t.textValue] = _parseObject(lexer, lexer.nextToken(), depth);
     }
   }
 
@@ -247,8 +283,10 @@ class ContentStreamParser {
     // `BI` already consumed.
     final dict = CosDictionary();
     CosToken idToken;
+    var entries = 0;
     while (true) {
       final t = lexer.nextToken();
+      if (++entries > maxOperands) _tooMuch('inline image dictionary past $maxOperands entries');
       if (t.isKeyword('ID')) {
         idToken = t;
         break;
@@ -260,7 +298,7 @@ class ContentStreamParser {
         throw CosParseException(
             'expected name in inline image dictionary, found $t', t.offset);
       }
-      dict[t.textValue] = _parseObject(lexer, lexer.nextToken());
+      dict[t.textValue] = _parseObject(lexer, lexer.nextToken(), 1);
     }
 
     // Exactly one whitespace byte separates ID from the data (§8.9.7).
@@ -522,6 +560,11 @@ class ContentOperationCursor {
     _pendingOperator = operator;
     _pendingCode = code;
     _operationCount++;
+    // dhruva: parse limits
+    if (_operationCount > ContentStreamParser.maxOperations) {
+      ContentStreamParser._tooMuch(
+          'content stream with over ${ContentStreamParser.maxOperations} operators');
+    }
     if (operationLimit != null && _operationCount >= operationLimit!) {
       _finished = true;
       _reportPerf();
@@ -542,10 +585,14 @@ class ContentOperationCursor {
   void _addInt(int value) {
     final objects = _objectOperands;
     if (objects != null) {
+      _checkOperandCount(objects);
       objects.add(ContentStreamParser._intObject(value));
       return;
     }
-    if (_numberCount == _numbers.length) _grow();
+    if (_numberCount == _numbers.length ||
+        _numberCount >= ContentStreamParser.maxOperands) {
+      _grow();
+    }
     final i = _numberCount++;
     _numbers[i] = value.toDouble();
     if (value > _maxExactInt || value < -_maxExactInt) {
@@ -561,10 +608,14 @@ class ContentOperationCursor {
     if (objects != null) {
       // Not `CosReal(value)`: on the web an integral real is an int and
       // materializes as a CosInteger (see [ContentStreamParser._numberObject]).
+      _checkOperandCount(objects);
       objects.add(ContentStreamParser._numberObject(value));
       return;
     }
-    if (_numberCount == _numbers.length) _grow();
+    if (_numberCount == _numbers.length ||
+        _numberCount >= ContentStreamParser.maxOperands) {
+      _grow();
+    }
     final i = _numberCount++;
     _numbers[i] = value;
     _kinds[i] = _real;
@@ -579,10 +630,24 @@ class ContentOperationCursor {
       ];
       _numberCount = 0;
     }
+    _checkOperandCount(objects);
     objects.add(value);
   }
 
+  // dhruva: parse limits
+  static void _checkOperandCount(List<CosObject> objects) {
+    if (objects.length >= ContentStreamParser.maxOperands) {
+      ContentStreamParser._tooMuch(
+          'operator with over ${ContentStreamParser.maxOperands} operands');
+    }
+  }
+
   void _grow() {
+    // dhruva: parse limits
+    if (_numberCount >= ContentStreamParser.maxOperands) {
+      ContentStreamParser._tooMuch(
+          'operator with over ${ContentStreamParser.maxOperands} operands');
+    }
     final length = _numbers.length * 2;
     _numbers = Float64List(length)..setRange(0, _numberCount, _numbers);
     _kinds = Uint8List(length)..setRange(0, _numberCount, _kinds);
