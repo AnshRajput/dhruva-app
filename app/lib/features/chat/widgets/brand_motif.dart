@@ -106,7 +106,9 @@ class TrustMark extends StatelessWidget {
         // one bit of color in an otherwise quiet line.
         DhruvaStar(size: starSize, color: theme.colorScheme.primary),
         SizedBox(width: tokens.spacing.xs),
-        Text('Runs 100% on your device', style: effectiveStyle),
+        Flexible(
+          child: Text('Runs 100% on your device', style: effectiveStyle),
+        ),
       ],
     );
   }

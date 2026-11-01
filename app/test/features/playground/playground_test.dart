@@ -5,8 +5,8 @@
 
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
-import 'package:dhruva/data/benchmark/speed_result.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/data/benchmark/speed_result.dart';
 import 'package:dhruva/data/downloads/storage_manager.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/playground/state/playground_controller.dart';

@@ -7,6 +7,7 @@ import 'package:dhruva/core/intents/process_text.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:dhruva/features/chat/ui/chat_thread_screen.dart';
@@ -285,6 +286,61 @@ void main() {
       expect(find.text('This is taking longer than usual'), findsNothing);
       // The empty stopped reply is marked and can be retried.
       expect(find.text('Stopped'), findsOneWidget);
+    });
+  });
+
+  group('D2 model load failures in the thread', () {
+    Future<void> pumpFailing(WidgetTester tester, EngineFailure failure) async {
+      tall(tester);
+      final modelId = await insertModel();
+      await tester.pumpWidget(
+        app(
+          FakeEngineService(loadFailure: failure),
+          ChatRouteArgs(initialModelId: modelId),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('corrupt file: Try again, Use a smaller model, then '
+        'Re-download with the real size', (tester) async {
+      await pumpFailing(tester, const EngineLoadFailure('bad gguf'));
+
+      expect(find.textContaining("file couldn't be read"), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Use a smaller model'), findsOneWidget);
+      expect(find.text('Re-download (379 MB)'), findsOneWidget);
+      // Try again leaves the card up while it fails again, never a crash.
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining("file couldn't be read"), findsOneWidget);
+    });
+
+    testWidgets('not enough memory: its own copy, no Re-download', (
+      tester,
+    ) async {
+      await pumpFailing(tester, const EngineOutOfMemoryFailure('oom'));
+      expect(find.textContaining('Not enough free memory'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Use a smaller model'), findsOneWidget);
+      expect(find.textContaining('Re-download'), findsNothing);
+    });
+
+    testWidgets('timeout: says it took too long, no Re-download', (
+      tester,
+    ) async {
+      await pumpFailing(tester, const EngineLoadTimeoutFailure('slow'));
+      expect(find.textContaining('took too long to start'), findsOneWidget);
+      expect(find.textContaining('Re-download'), findsNothing);
+    });
+
+    testWidgets('Use a smaller model with nothing smaller installed points '
+        'at Discover', (tester) async {
+      await pumpFailing(tester, const EngineLoadFailure('bad gguf'));
+      await tester.tap(find.text('Use a smaller model'));
+      await tester.pumpAndSettle();
+      expect(find.text('You have no smaller model installed.'), findsOneWidget);
+      expect(find.text('Find a smaller model'), findsOneWidget);
     });
   });
 

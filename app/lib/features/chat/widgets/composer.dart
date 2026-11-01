@@ -311,7 +311,7 @@ class _ComposerState extends ConsumerState<Composer> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   IconButton(
-                    tooltip: 'System prompt & sampling',
+                    tooltip: 'Chat settings',
                     icon: const Icon(Icons.tune),
                     onPressed: widget.onOpenSettings,
                   ),

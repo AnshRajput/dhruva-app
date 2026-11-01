@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -48,6 +49,7 @@ void main() {
     required void Function(String text, Uint8List? imageBytes) onSend,
     VoidCallback? onCancel,
     VoidCallback? onOpenSettings,
+    Future<bool> Function()? beforeSend,
   }) {
     final router = GoRouter(
       initialLocation: '/',
@@ -59,6 +61,7 @@ void main() {
               isGenerating: isGenerating,
               isMultimodal: isMultimodal,
               onSend: onSend,
+              beforeSend: beforeSend,
               onCancel: onCancel ?? () {},
               onOpenSettings: onOpenSettings ?? () {},
             ),
@@ -269,13 +272,60 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
-        expect(
-          find.textContaining('Microphone access is required'),
-          findsOneWidget,
-        );
+        expect(find.textContaining('Microphone access is off'), findsOneWidget);
+        // D15: the snackbar carries the fix, not just the bad news.
+        expect(find.text('Open settings'), findsOneWidget);
         expect(find.text('Listening…'), findsNothing);
       },
     );
+  });
+
+  group('D3 instant clear', () {
+    testWidgets('the field clears the moment send is tapped, even while the '
+        'battery check is still pending', (tester) async {
+      final gate = Completer<bool>();
+      final sent = <String>[];
+      await pumpComposer(
+        tester,
+        isGenerating: false,
+        onSend: (t, _) => sent.add(t),
+        beforeSend: () => gate.future,
+      );
+      await tester.enterText(find.byType(TextField), 'hello');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+      expect(sent, isEmpty, reason: 'not sent until the check passes');
+      gate.complete(true);
+      await tester.pump();
+      expect(sent, ['hello']);
+    });
+
+    testWidgets('a declined battery check puts the draft back', (tester) async {
+      final sent = <String>[];
+      await pumpComposer(
+        tester,
+        isGenerating: false,
+        onSend: (t, _) => sent.add(t),
+        beforeSend: () async => false,
+      );
+      await tester.enterText(find.byType(TextField), 'keep me');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'keep me',
+      );
+      expect(sent, isEmpty);
+    });
   });
 
   group('image attach (Loop 7)', () {
