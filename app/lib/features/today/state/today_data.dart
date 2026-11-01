@@ -25,6 +25,24 @@ final minuteTickProvider = StreamProvider<DateTime>((ref) async* {
   yield* Stream.periodic(const Duration(seconds: 30), (_) => clock());
 });
 
+/// "Now" as the screens see it: moves on with the ticker while Today is open.
+final nowProvider = Provider<DateTime>((ref) {
+  return ref.watch(minuteTickProvider).value ?? ref.watch(todayClockProvider)();
+});
+
+/// The local calendar day; changes only at midnight.
+final todayDayProvider = Provider<DateTime>((ref) {
+  final day = ref.watch(
+    minuteTickProvider.select((v) {
+      final t = v.value;
+      return t == null ? null : DateTime(t.year, t.month, t.day);
+    }),
+  );
+  if (day != null) return day;
+  final now = ref.watch(todayClockProvider)();
+  return DateTime(now.year, now.month, now.day);
+});
+
 /// The status entry of one connector, or null while the list loads / the
 /// platform does not offer it.
 ConnectorEntry? _entry(Ref ref, String id) {
@@ -58,17 +76,13 @@ final connectorsLoadedProvider = Provider<bool>(
 /// the date changes.
 final todayEventsProvider = StreamProvider<List<ConnectorItem>>((ref) {
   final store = ref.watch(connectorStoreProvider);
-  final now = ref.watch(todayClockProvider)();
-  final day = DateTime(now.year, now.month, now.day);
-  return store.watchTodaysEvents(day);
+  return store.watchTodaysEvents(ref.watch(todayDayProvider));
 });
 
 /// The next two events from now (today or later), refreshed as time passes.
 final upNextEventsProvider = StreamProvider<List<ConnectorItem>>((ref) {
   final store = ref.watch(connectorStoreProvider);
-  final now =
-      ref.watch(minuteTickProvider).value ?? ref.read(todayClockProvider)();
-  return store.watchNextEvents(now);
+  return store.watchNextEvents(ref.watch(nowProvider));
 });
 
 /// Lowercase email -> contact item, for names and avatars. Rebuilt when events
@@ -147,7 +161,7 @@ List<NotificationGroup> digestGroups(
 
 /// The fact list behind the brief (see `brief_facts.dart`).
 final briefFactsProvider = Provider<List<BriefFact>>((ref) {
-  final now = ref.watch(todayClockProvider)();
+  final now = ref.watch(nowProvider);
   final calendar = ref.watch(calendarEntryProvider);
   return gatherFacts(
     now: now,
@@ -167,7 +181,7 @@ final todayNameProvider = Provider<String?>((ref) {
 
 /// "3 meetings · 2 replies waiting".
 final daySummaryProvider = Provider<String>((ref) {
-  final now = ref.watch(todayClockProvider)();
+  final now = ref.watch(nowProvider);
   final events = ref.watch(todayEventsProvider).value ?? const [];
   final groups = ref.watch(notificationGroupsProvider).value ?? const [];
   return daySummary(

@@ -29,7 +29,11 @@ class UpNextSection extends ConsumerWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
     final loaded = ref.watch(connectorsLoadedProvider);
     final entry = ref.watch(calendarEntryProvider);
-    if (loaded && !(entry?.status.isConnected ?? false)) {
+    final state = entry?.status.state;
+    final shows =
+        (entry?.status.isConnected ?? false) ||
+        state == ConnectorState.needsAttention;
+    if (loaded && !shows) {
       // Not connected (or access off): the brief card explains and fixes it.
       return const SizedBox.shrink();
     }
@@ -250,7 +254,7 @@ class _UpNextCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final scheme = theme.colorScheme;
-    final now = ref.watch(todayClockProvider)();
+    final now = ref.watch(nowProvider);
     final contacts = ref.watch(contactsDirectoryProvider).value ?? const {};
     final first = events.first;
     final people = attendeesOf(first, contacts);

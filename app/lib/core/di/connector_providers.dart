@@ -28,11 +28,17 @@ final connectorStoreProvider = Provider<ConnectorStore>((ref) {
 });
 
 /// The four connectors + sync service over the real OS sources.
-final connectorHubProvider = FutureProvider<ConnectorHub>((ref) async {
-  final hub = await ConnectorHub.system(ref.watch(appDatabaseProvider));
-  ref.onDispose(() => unawaited(hub.dispose()));
-  return hub;
-});
+final connectorHubProvider = FutureProvider<ConnectorHub>(
+  (ref) async {
+    final hub = await ConnectorHub.system(ref.watch(appDatabaseProvider));
+    ref.onDispose(() => unawaited(hub.dispose()));
+    return hub;
+  },
+  // A hub that cannot start must surface as an error (the list then reads as
+  // "no connectors" and Today says so), not retry forever behind a loading
+  // state that never ends.
+  retry: (_, _) => null,
+);
 
 /// Keyword search over everything the connectors stored. The engine (FTS5, or
 /// the BM25 fallback when SQLite lacks it) is chosen once, here.

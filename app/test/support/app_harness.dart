@@ -2,11 +2,13 @@
 // singleton (shell, redirects, placeholder surfaces, appearance).
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/data/characters/character_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/main.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
@@ -54,6 +56,18 @@ Future<AppDatabase> pumpDhruvaApp(
         prefsStoreProvider.overrideWith(
           (ref) async =>
               prefs ?? MemoryPrefsStore({'what_moved_dismissed': 'true'}),
+        ),
+        // Drift live queries leave a zero-length timer when disposed, which
+        // fails a widget test; Today's streams read as empty here (the Today
+        // tests use the real store, see test/features/today).
+        // No OS connectors in app-level tests: nothing is connected.
+        connectorListProvider.overrideWith(
+          (ref) => Stream.value(const <ConnectorEntry>[]),
+        ),
+        todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
+        upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
+        notificationGroupsProvider.overrideWith(
+          (ref) => Stream.value(const []),
         ),
         hfApiClientProvider.overrideWithValue(
           mockHfClient(MockClient((r) async => http.Response('[]', 200))),

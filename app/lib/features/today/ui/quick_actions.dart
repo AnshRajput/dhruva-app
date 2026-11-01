@@ -29,7 +29,12 @@ class QuickActionsRow extends ConsumerWidget {
   const QuickActionsRow({super.key});
 
   Future<void> _clipboardAction(BuildContext context, String id) async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    ClipboardData? data;
+    try {
+      data = await Clipboard.getData(Clipboard.kTextPlain);
+    } on Object {
+      data = null; // an unreadable clipboard reads as empty
+    }
     var text = data?.text?.trim() ?? '';
     if (!context.mounted) return;
     if (text.isEmpty) {

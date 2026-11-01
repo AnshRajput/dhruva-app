@@ -36,7 +36,7 @@ class EventSheet extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final scheme = theme.colorScheme;
-    final now = ref.watch(todayClockProvider)();
+    final now = ref.watch(nowProvider);
     final contacts = ref.watch(contactsDirectoryProvider).value ?? const {};
     final people = attendeesOf(event, contacts);
     final place = placeLabel(event);

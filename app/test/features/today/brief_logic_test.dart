@@ -104,7 +104,12 @@ void main() {
     test('numbers facts 1..n and caps the list', () {
       final many = [
         for (var i = 0; i < 12; i++)
-          event(50 + i, 'Meeting $i', at(9 + (i % 8), i), at(9 + (i % 8), i + 5)),
+          event(
+            50 + i,
+            'Meeting $i',
+            at(9 + (i % 8), i),
+            at(9 + (i % 8), i + 5),
+          ),
       ];
       final facts = gatherFacts(
         now: fixtureNow,
@@ -114,7 +119,10 @@ void main() {
         maxFacts: 6,
       );
       expect(facts.length, lessThanOrEqualTo(6));
-      expect([for (final f in facts) f.n], [for (var i = 1; i <= facts.length; i++) i]);
+      expect(
+        [for (final f in facts) f.n],
+        [for (var i = 1; i <= facts.length; i++) i],
+      );
     });
 
     test('notifications older than 24 h are not waiting for you', () {
@@ -126,15 +134,41 @@ void main() {
         'hi',
         fixtureNow.subtract(const Duration(hours: 30)),
       );
-      expect(needsYou([notifGroup([old])], fixtureNow), isEmpty);
+      expect(
+        needsYou([
+          notifGroup([old]),
+        ], fixtureNow),
+        isEmpty,
+      );
     });
   });
 
   group('needs you rules', () {
     test('only messaging apps with a sender and text count', () {
-      final bank = notification(1, 'com.hdfc', 'HDFC', 'HDFC Bank', 'x', fixtureNow);
-      final noSender = notification(2, 'com.whatsapp', 'WhatsApp', 'WhatsApp', 'x', fixtureNow);
-      final noText = notification(3, 'com.whatsapp', 'WhatsApp', 'Ravi', ' ', fixtureNow);
+      final bank = notification(
+        1,
+        'com.hdfc',
+        'HDFC',
+        'HDFC Bank',
+        'x',
+        fixtureNow,
+      );
+      final noSender = notification(
+        2,
+        'com.whatsapp',
+        'WhatsApp',
+        'WhatsApp',
+        'x',
+        fixtureNow,
+      );
+      final noText = notification(
+        3,
+        'com.whatsapp',
+        'WhatsApp',
+        'Ravi',
+        ' ',
+        fixtureNow,
+      );
       expect(looksActionable(raviMessage), isTrue);
       expect(looksActionable(bank), isFalse);
       expect(looksActionable(noSender), isFalse);
@@ -163,8 +197,14 @@ void main() {
 
   group('daySummary', () {
     test('uses real counts and singulars', () {
-      expect(daySummary(meetings: 3, replies: 2), '3 meetings · 2 replies waiting');
-      expect(daySummary(meetings: 1, replies: 1), '1 meeting · 1 reply waiting');
+      expect(
+        daySummary(meetings: 3, replies: 2),
+        '3 meetings · 2 replies waiting',
+      );
+      expect(
+        daySummary(meetings: 1, replies: 1),
+        '1 meeting · 1 reply waiting',
+      );
       expect(daySummary(meetings: 0, replies: 0), '');
     });
   });
@@ -181,25 +221,30 @@ void main() {
   group('parseBrief', () {
     final valid = {1, 2, 3};
 
-    test('keeps cited phrases as spans and drops sentences without a marker',
-        () {
-      final p = parseBrief(
-        'Three meetings today, starting with Design sync at 9:30 [1]. '
-        'It will be a great day! '
-        'Ravi needs your OK [3] before 11:00.',
-        validIds: valid,
-      );
-      expect(p.sentences.length, 2);
-      expect(p.dropped, 1);
-      expect(p.sentences[0].spans, [
-        const BriefSpan('Three meetings today, starting with Design sync at 9:30', [1]),
-        const BriefSpan('.'),
-      ]);
-      expect(p.sentences[1].spans, [
-        const BriefSpan('Ravi needs your OK', [3]),
-        const BriefSpan(' before 11:00.'),
-      ]);
-    });
+    test(
+      'keeps cited phrases as spans and drops sentences without a marker',
+      () {
+        final p = parseBrief(
+          'Three meetings today, starting with Design sync at 9:30 [1]. '
+          'It will be a great day! '
+          'Ravi needs your OK [3] before 11:00.',
+          validIds: valid,
+        );
+        expect(p.sentences.length, 2);
+        expect(p.dropped, 1);
+        expect(p.sentences[0].spans, [
+          const BriefSpan(
+            'Three meetings today, starting with Design sync at 9:30',
+            [1],
+          ),
+          const BriefSpan('.'),
+        ]);
+        expect(p.sentences[1].spans, [
+          const BriefSpan('Ravi needs your OK', [3]),
+          const BriefSpan(' before 11:00.'),
+        ]);
+      },
+    );
 
     test('a marker that points at no fact does not count', () {
       final p = parseBrief('Everything is fine [9].', validIds: valid);
@@ -207,11 +252,17 @@ void main() {
       expect(p.dropped, 1);
     });
 
-    test('invented markers are removed from a sentence that has a real one', () {
-      final p = parseBrief('Design sync at 9:30 [1] and lunch [7].', validIds: valid);
-      expect(p.sentences.single.plain, 'Design sync at 9:30 and lunch.');
-      expect(p.sentences.single.spans.where((s) => s.isCited).length, 1);
-    });
+    test(
+      'invented markers are removed from a sentence that has a real one',
+      () {
+        final p = parseBrief(
+          'Design sync at 9:30 [1] and lunch [7].',
+          validIds: valid,
+        );
+        expect(p.sentences.single.plain, 'Design sync at 9:30 and lunch.');
+        expect(p.sentences.single.spans.where((s) => s.isCited).length, 1);
+      },
+    );
 
     test('marker after the full stop and stacked markers', () {
       final p = parseBrief(
@@ -224,7 +275,10 @@ void main() {
     });
 
     test('numbers with a decimal point stay in one sentence', () {
-      final p = parseBrief('Ravi wants an OK on the 18.4L line [1].', validIds: valid);
+      final p = parseBrief(
+        'Ravi wants an OK on the 18.4L line [1].',
+        validIds: valid,
+      );
       expect(p.sentences.single.plain, 'Ravi wants an OK on the 18.4L line.');
     });
 
@@ -281,7 +335,9 @@ void main() {
     });
 
     test('a corrupt cache reads as empty', () async {
-      final store = BriefCacheStore(MemoryPrefsStore({'today_brief_v1': '{nope'}));
+      final store = BriefCacheStore(
+        MemoryPrefsStore({'today_brief_v1': '{nope'}),
+      );
       expect(await store.read(), isNull);
     });
 
@@ -291,7 +347,12 @@ void main() {
         raw: 'x [1][2].',
         facts: const [
           BriefFact(n: 1, kind: FactKind.event, text: 'a', ref: 'event:1'),
-          BriefFact(n: 2, kind: FactKind.notification, text: 'b', ref: 'notif:p'),
+          BriefFact(
+            n: 2,
+            kind: FactKind.notification,
+            text: 'b',
+            ref: 'notif:p',
+          ),
         ],
       );
       bool ok(bool cal, bool notif) => briefStillAllowed(
@@ -347,14 +408,25 @@ void main() {
             NotificationEntry() => e.group.appLabel,
           },
       ];
-      expect(names, ['HDFC', 'Swiggy', 'WhatsApp', 'now', 'Design sync', 'Budget review']);
+      expect(names, [
+        'HDFC',
+        'Swiggy',
+        'WhatsApp',
+        'now',
+        'Design sync',
+        'Budget review',
+      ]);
       expect((t[3] as NowEntry).caption, 'Free until 9:30');
       expect((t[2] as NotificationEntry).actionable, isTrue);
       expect((t[1] as NotificationEntry).actionable, isFalse);
     });
 
     test('now sits inside a running meeting and says so', () {
-      final t = buildTimeline(now: at(9, 45), events: [designSync, budgetReview], groups: const []);
+      final t = buildTimeline(
+        now: at(9, 45),
+        events: [designSync, budgetReview],
+        groups: const [],
+      );
       final i = t.indexWhere((e) => e is NowEntry);
       expect(t[i - 1], isA<EventEntry>());
       expect((t[i] as NowEntry).caption, 'In Design sync until 10:15');
@@ -362,25 +434,38 @@ void main() {
     });
 
     test('after the last event: nothing more today, past events flagged', () {
-      final t = buildTimeline(now: at(18), events: [designSync], groups: const []);
+      final t = buildTimeline(
+        now: at(18),
+        events: [designSync],
+        groups: const [],
+      );
       expect(t.last, isA<NowEntry>());
       expect((t.last as NowEntry).caption, 'Nothing more today');
       expect((t.first as EventEntry).isPast, isTrue);
     });
 
-    test('ignores yesterday\'s notifications and all-day events on the rail', () {
-      final old = notification(
-        77,
-        'com.whatsapp',
-        'WhatsApp',
-        'Ravi',
-        'old',
-        DateTime(2026, 11, 1, 22),
-      );
-      final allDay = event(9, 'Holiday', at(0), at(23, 59), allDay: true);
-      final t = buildTimeline(now: fixtureNow, events: [allDay], groups: [notifGroup([old])]);
-      expect(timelineIsEmpty(t), isTrue);
-    });
+    test(
+      'ignores yesterday\'s notifications and all-day events on the rail',
+      () {
+        final old = notification(
+          77,
+          'com.whatsapp',
+          'WhatsApp',
+          'Ravi',
+          'old',
+          DateTime(2026, 11, 1, 22),
+        );
+        final allDay = event(9, 'Holiday', at(0), at(23, 59), allDay: true);
+        final t = buildTimeline(
+          now: fixtureNow,
+          events: [allDay],
+          groups: [
+            notifGroup([old]),
+          ],
+        );
+        expect(timelineIsEmpty(t), isTrue);
+      },
+    );
   });
 
   group('day text', () {

@@ -1,18 +1,25 @@
-// WS2: the guided first-run flow. Welcome states the value; "pick" shows the
+// The guided first-run flow (v2): welcome -> pick a model (download continues
+// in the background) -> connect your calendar -> Today. "pick" shows the
 // curated catalog ONLY (no raw HF firehose, no quant menu) with the
 // device-appropriate model badged "Recommended" and pre-selected; skipping
-// marks onboarding done (shown once) and lands on Today.
+// anywhere marks onboarding done (shown once) and lands on Today.
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/data/connectors/connector_sources.dart';
+import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/features/onboarding/ui/onboarding_screen.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../support/fake_connector_sources.dart';
 
 class _FakeOnboardingStore implements OnboardingStore {
   bool complete = false;
@@ -30,25 +37,37 @@ class _StubDownloadController extends OnboardingDownloadController {
       const OnboardingDownloadState();
 }
 
-/// Skips the real pipeline but lands the "installed" state (with a drift row
-/// id) the instant `download` is called — so the flow reaches the ready step
-/// without touching platform channels, to test the handoff into chat.
-class _ReadyStubController extends OnboardingDownloadController {
+/// Skips the real pipeline and lands [result] the instant `download` is
+/// called, so the flow reaches the next step without platform channels.
+class _DownloadResultController extends OnboardingDownloadController {
+  _DownloadResultController(this.result);
+  final OnboardingDownloadState result;
+
   @override
   Future<OnboardingDownloadState> build() async =>
       const OnboardingDownloadState();
 
   @override
   Future<void> download(String repoId, {bool force = false}) async {
-    state = const AsyncData(
-      OnboardingDownloadState(
-        status: OnboardingDownloadStatus.installed,
-        repoId: 'stub/model',
-        installedId: 42,
-      ),
-    );
+    state = AsyncData(result);
   }
 }
+
+const _installed = OnboardingDownloadState(
+  status: OnboardingDownloadStatus.installed,
+  repoId: 'stub/model',
+  installedId: 42,
+);
+const _downloading = OnboardingDownloadState(
+  status: OnboardingDownloadStatus.downloading,
+  repoId: 'stub/model',
+  progress: 0.42,
+);
+const _failed = OnboardingDownloadState(
+  status: OnboardingDownloadStatus.failed,
+  repoId: 'stub/model',
+  errorMessage: 'Not enough storage space.',
+);
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -57,10 +76,27 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
 
 final prefs = MemoryPrefsStore();
 
-Future<_FakeOnboardingStore> _pump(WidgetTester tester) async {
+class _Pumped {
+  _Pumped(this.store, this.kit);
+  final _FakeOnboardingStore store;
+  final ConnectorTestKit kit;
+}
+
+Future<_Pumped> _pumpFlow(
+  WidgetTester tester, {
+  OnboardingDownloadController Function()? controller,
+  bool notificationsSupported = true,
+}) async {
   await tester.binding.setSurfaceSize(const Size(420, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
+  final db = AppDatabase(NativeDatabase.memory());
+  addTearDown(db.close);
+  final kit = ConnectorTestKit.create(
+    db,
+    notificationsSupported: notificationsSupported,
+  );
+  addTearDown(kit.dispose);
   final store = _FakeOnboardingStore();
   final router = GoRouter(
     initialLocation: '/onboarding',
@@ -81,15 +117,28 @@ Future<_FakeOnboardingStore> _pump(WidgetTester tester) async {
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         onboardingStoreProvider.overrideWith((ref) async => store),
         prefsStoreProvider.overrideWith((ref) async => prefs),
+        appDatabaseProvider.overrideWithValue(db),
+        connectorHubProvider.overrideWith((ref) async => kit.hub),
         onboardingDownloadControllerProvider.overrideWith(
-          _StubDownloadController.new,
+          controller ?? _StubDownloadController.new,
         ),
       ],
       child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
     ),
   );
   await tester.pumpAndSettle();
-  return store;
+  return _Pumped(store, kit);
+}
+
+Future<_FakeOnboardingStore> _pump(WidgetTester tester) async =>
+    (await _pumpFlow(tester)).store;
+
+/// welcome -> pick -> Download (the controller stub lands its result).
+Future<void> _toConnect(WidgetTester tester) async {
+  await tester.tap(find.text('Get started'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.textContaining('Download'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -138,76 +187,147 @@ void main() {
     },
   );
 
-  testWidgets(
-    'a tapped "Try asking" chip carries its prompt into a new chat thread '
-    'with the installed model',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(420, 2200));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      final store = _FakeOnboardingStore();
-      String? threadLocation;
-      Object? threadExtra;
-      final router = GoRouter(
-        initialLocation: '/onboarding',
-        routes: [
-          GoRoute(
-            path: '/onboarding',
-            builder: (context, state) => const OnboardingScreen(),
-          ),
-          GoRoute(
-            path: '/ask',
-            builder: (context, state) => const Text('chat-home'),
-          ),
-          GoRoute(
-            path: '/chat/:id',
-            builder: (context, state) {
-              threadLocation = state.uri.toString();
-              threadExtra = state.extra;
-              return const Text('chat-thread');
-            },
-          ),
-        ],
+  group('connect your calendar', () {
+    testWidgets('an installed model moves on to "Start with your day"', (
+      tester,
+    ) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
       );
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
-            onboardingStoreProvider.overrideWith((ref) async => store),
-            prefsStoreProvider.overrideWith((ref) async => prefs),
-            onboardingDownloadControllerProvider.overrideWith(
-              _ReadyStubController.new,
-            ),
-          ],
-          child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
-        ),
+      await _toConnect(tester);
+      expect(find.text('Start with your day'), findsOneWidget);
+      expect(find.text('Allow calendar access'), findsOneWidget);
+      expect(find.text('Your model is ready.'), findsOneWidget);
+      expect(find.text('Example. Yours will appear on Today.'), findsOneWidget);
+    });
+
+    testWidgets('Allow connects the calendar, then Continue lands on Today '
+        'and marks onboarding done', (tester) async {
+      final p = await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
       );
+      p.kit.calendar.afterRequest = DevicePermission.granted;
+      await _toConnect(tester);
+      await tester.tap(find.byKey(const ValueKey('connect-allow')));
       await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Get started'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('Download'));
-      await tester.pumpAndSettle();
-
-      // The one-tap install lands on the ready step.
-      expect(find.text('You\'re ready'), findsOneWidget);
-
-      await tester.tap(find.text('Explain how a rainbow forms, simply'));
-      await tester.pumpAndSettle();
-
-      expect(store.complete, isTrue);
-      // Landed IN a chat thread (not the empty list), with the installed
-      // model handed off as `extra` and the tapped prompt on the URL so it
-      // auto-sends — the prompt is no longer thrown away.
-      expect(find.text('chat-thread'), findsOneWidget);
-      expect(threadExtra, 42);
-      expect(threadLocation, contains('prompt='));
+      expect(p.kit.calendar.requests, 1);
       expect(
-        Uri.parse(threadLocation!).queryParameters['prompt'],
-        'Explain how a rainbow forms, simply',
+        find.text('Calendar connected. Your day is waiting on Today.'),
+        findsOneWidget,
       );
-    },
-  );
+      expect(p.store.complete, isFalse);
+      await tester.tap(find.byKey(const ValueKey('connect-continue')));
+      await tester.pumpAndSettle();
+      expect(p.store.complete, isTrue);
+      expect(find.text('chat-home'), findsOneWidget);
+    });
+
+    testWidgets('permission denied: says what to do, Open settings works, '
+        'Not now still finishes', (tester) async {
+      final p = await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
+      );
+      p.kit.calendar.afterRequest = DevicePermission.denied;
+      await _toConnect(tester);
+      await tester.tap(find.byKey(const ValueKey('connect-allow')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('connect-calendar-denied')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('connect-open-settings')));
+      await tester.pumpAndSettle();
+      expect(p.kit.calendar.settingsOpened, 1);
+      await tester.tap(find.byKey(const ValueKey('connect-not-now')));
+      await tester.pumpAndSettle();
+      expect(p.store.complete, isTrue);
+      expect(find.text('chat-home'), findsOneWidget);
+    });
+
+    testWidgets('Skip is always there', (tester) async {
+      final p = await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toConnect(tester);
+      await tester.tap(find.byKey(const ValueKey('connect-skip')));
+      await tester.pumpAndSettle();
+      expect(p.store.complete, isTrue);
+      expect(find.text('chat-home'), findsOneWidget);
+    });
+
+    testWidgets('the download carries on: "Continue while it downloads" shows '
+        'progress on the connect step', (tester) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_downloading),
+      );
+      await _toConnect(tester);
+      expect(find.text('Continue while it downloads'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('onboarding-continue')));
+      await tester.pumpAndSettle();
+      expect(find.text('Start with your day'), findsOneWidget);
+      expect(
+        find.text('Your model is downloading in the background · 42%'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('download errors keep their recovery on the download step', (
+      tester,
+    ) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_failed),
+      );
+      await _toConnect(tester);
+      expect(find.text("Download didn't finish"), findsOneWidget);
+      expect(find.text('Not enough storage space.'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Pick another model'), findsOneWidget);
+    });
+
+    testWidgets('extras: Folder and (Android) Notifications can be added', (
+      tester,
+    ) async {
+      final p = await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
+      );
+      p.kit.folder.nextPick = const FolderGrant(id: 'g', name: 'Notes');
+      await _toConnect(tester);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('connect-extra-folder')),
+      );
+      expect(
+        find.byKey(const ValueKey('connect-extra-notifications')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('connect-extra-folder')));
+      await tester.pumpAndSettle();
+      expect(find.text('Added'), findsOneWidget);
+    });
+
+    testWidgets('iOS: no notifications row', (tester) async {
+      await _pumpFlow(
+        tester,
+        notificationsSupported: false,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toConnect(tester);
+      expect(
+        find.byKey(const ValueKey('connect-extra-notifications')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('connect-extra-folder')),
+        findsOneWidget,
+      );
+    });
+  });
 
   testWidgets('skip on the pick step also marks onboarding done', (
     tester,

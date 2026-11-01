@@ -226,7 +226,7 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final scheme = theme.colorScheme;
-    final now = ref.watch(todayClockProvider)();
+    final now = ref.watch(nowProvider);
     final fresh = isBriefFresh(widget.brief, now);
     final at = formatClock(context, widget.brief.writtenAt);
     final busy = widget.state.writing;

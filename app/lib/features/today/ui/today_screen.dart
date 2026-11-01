@@ -97,7 +97,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final today = widget.now ?? ref.watch(todayClockProvider)();
+    final DateTime today = widget.now ?? ref.watch(nowProvider);
     final scheme = theme.colorScheme;
     final name = ref.watch(todayNameProvider);
     final summary = ref.watch(daySummaryProvider);
@@ -168,6 +168,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
         onRefresh: _refresh,
         edgeOffset: inset.top,
         child: ListView(
+          key: const ValueKey('today-list'),
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.only(
             top: inset.top + tokens.spacing.xs,

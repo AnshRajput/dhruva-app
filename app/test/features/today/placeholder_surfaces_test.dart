@@ -1,13 +1,19 @@
-// Wave 1 placeholder surfaces (Today, Inbox, Library, timeline, connectors):
-// they match the comps' structure and every empty state ends in a working
-// next action (no dead ends).
+// The shell surfaces with no connector data (Today before anything is
+// connected, Inbox, Library, connectors): they match the comps' structure and
+// every empty state ends in a working next action (no dead ends). Today with
+// real data is covered in today_screen_test.dart.
 
 import 'package:dhruva/core/crash/crash_log.dart';
+import 'package:dhruva/core/di/connector_providers.dart';
+import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/today/state/day_text.dart';
+import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/features/today/ui/today_screen.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,31 +32,36 @@ void main() {
   });
 
   group('Today', () {
-    testWidgets('has the comp structure: header, brief, quick actions, '
-        'Up next + See day, inbox card', (tester) async {
+    testWidgets('has the comp structure: header, brief (connect), quick '
+        'actions, inbox card', (tester) async {
       await pumpDhruvaApp(tester);
       expect(find.text('Dhruva'), findsOneWidget); // wordmark from AppIdentity
       expect(find.byKey(const ValueKey('today-settings')), findsOneWidget);
       expect(find.byKey(const ValueKey('today-brief')), findsOneWidget);
-      expect(
-        find.text('Your brief appears here once you connect your calendar.'),
-        findsOneWidget,
-      );
-      for (final id in ['summarize', 'draft_reply']) {
+      // Nothing is connected: the brief card is the one-tap connect.
+      expect(find.text('Connect your calendar'), findsWidgets);
+      for (final id in ['summarize', 'draft_reply', 'plan']) {
         expect(find.byKey(ValueKey('today-action-$id')), findsOneWidget);
       }
-      expect(find.text('Up next'), findsOneWidget);
-      expect(find.byKey(const ValueKey('today-see-day')), findsOneWidget);
       expect(find.text('Set up your inbox'), findsOneWidget);
     });
 
     testWidgets('greeting and date come from the injected clock', (
       tester,
     ) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             prefsStoreProvider.overrideWith((ref) async => MemoryPrefsStore()),
+            // No real database or drift timers in this widget test.
+            appDatabaseProvider.overrideWithValue(db),
+            todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
+            upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
+            notificationGroupsProvider.overrideWith(
+              (ref) => Stream.value(const []),
+            ),
           ],
           child: MaterialApp(
             theme: AppTheme.dark,
@@ -98,7 +109,20 @@ void main() {
       expect(find.byType(NavigationBar), findsNothing);
     });
 
-    testWidgets('quick action "Draft reply" opens that Action', (tester) async {
+    testWidgets('quick action "Draft reply" opens that Action (empty '
+        'clipboard: tells you, still opens it)', (tester) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => call.method == 'Clipboard.getData'
+            ? <String, dynamic>{'text': ''}
+            : null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
       await pumpDhruvaApp(tester);
       await tester.tap(find.byKey(const ValueKey('today-action-draft_reply')));
       await tester.pumpAndSettle();
@@ -143,18 +167,6 @@ void main() {
       expect(find.text('Meeting moved to 4pm'), findsWidgets);
     });
 
-    testWidgets('"See day" opens the empty timeline, which has an action', (
-      tester,
-    ) async {
-      await pumpDhruvaApp(tester);
-      await tester.tap(find.byKey(const ValueKey('today-see-day')));
-      await tester.pumpAndSettle();
-      expect(find.text('Nothing on your day yet'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('day-connect-calendar')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
-    });
-
     testWidgets('"Set up inbox" opens Inbox full-screen, with a back button', (
       tester,
     ) async {
@@ -170,18 +182,6 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('Your brief'), findsOneWidget);
-    });
-
-    testWidgets('brief and Up next both lead to the connect screen', (
-      tester,
-    ) async {
-      for (final key in ['today-brief-connect', 'today-connect-calendar']) {
-        await pumpDhruvaApp(tester);
-        await tester.ensureVisible(find.byKey(ValueKey(key)));
-        await tester.tap(find.byKey(ValueKey(key)));
-        await tester.pumpAndSettle();
-        expect(find.widgetWithText(AppBar, 'Connectors'), findsOneWidget);
-      }
     });
   });
 

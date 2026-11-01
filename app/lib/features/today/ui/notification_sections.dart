@@ -22,7 +22,7 @@ class NeedsYouSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groups = ref.watch(notificationGroupsProvider).value ?? const [];
-    final now = ref.watch(todayClockProvider)();
+    final now = ref.watch(nowProvider);
     final entries = needsYou(groups, now);
     if (entries.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
@@ -147,7 +147,7 @@ class DigestCard extends ConsumerWidget {
     }
     if (!status.isConnected) return const SizedBox.shrink();
 
-    final now = ref.watch(todayClockProvider)();
+    final now = ref.watch(nowProvider);
     final groups = digestGroups(
       ref.watch(notificationGroupsProvider).value ?? const [],
       now,

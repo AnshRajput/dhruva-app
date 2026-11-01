@@ -11,6 +11,7 @@ library;
 
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
+import 'event_info.dart';
 
 enum FactKind { event, notification }
 
@@ -199,10 +200,9 @@ List<BriefFact> gatherFacts({
         ? ''
         : ' with ${who.take(3).join(', ')}'
               '${who.length > 3 ? ' and ${who.length - 3} more' : ''}';
-    final loc = e.flags['location'];
-    final where = loc is String && loc.trim().isNotEmpty
-        ? ' (${oneLine(loc, 40)})'
-        : '';
+    // "Google Meet" or the room, never a raw meeting URL.
+    final place = placeLabel(e);
+    final where = place == null ? '' : ' (${oneLine(place, 40)})';
     final title = oneLine(e.title, 80);
     final ongoing = !start.isAfter(now);
     add(

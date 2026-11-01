@@ -198,10 +198,13 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             children: [
               Icon(Icons.lock_outline, size: 14, color: tokens.success),
               SizedBox(width: tokens.spacing.xs),
-              Text(
-                'Stays on this phone. Nothing is uploaded.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Flexible(
+                child: Text(
+                  'Stays on this phone. Nothing is uploaded.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],

@@ -102,7 +102,13 @@ final designSync = event(
   location: 'Google Meet',
   body: 'Location: Google Meet\nAgenda: icons',
 );
-final budgetReview = event(2, 'Budget review', at(11), at(12), location: 'Room 4B');
+final budgetReview = event(
+  2,
+  'Budget review',
+  at(11),
+  at(12),
+  location: 'Room 4B',
+);
 final raviMessage = notification(
   10,
   'com.whatsapp',
@@ -113,9 +119,23 @@ final raviMessage = notification(
 );
 final swiggyPings = [
   for (var i = 0; i < 4; i++)
-    notification(20 + i, 'in.swiggy', 'Swiggy', 'Swiggy', 'Offer $i', at(6, 10 + i)),
+    notification(
+      20 + i,
+      'in.swiggy',
+      'Swiggy',
+      'Swiggy',
+      'Offer $i',
+      at(6, 10 + i),
+    ),
 ];
 final hdfcPings = [
   for (var i = 0; i < 3; i++)
-    notification(30 + i, 'com.hdfc', 'HDFC', 'HDFC Bank', 'Alert $i', at(5, 10 + i)),
+    notification(
+      30 + i,
+      'com.hdfc',
+      'HDFC',
+      'HDFC Bank',
+      'Alert $i',
+      at(5, 10 + i),
+    ),
 ];
