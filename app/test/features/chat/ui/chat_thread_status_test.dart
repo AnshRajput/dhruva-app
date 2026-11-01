@@ -3,6 +3,7 @@
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/intents/process_text.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
@@ -82,12 +83,17 @@ void main() {
     FakeEngineService engine,
     ChatRouteArgs args, {
     Duration? firstTokenTimeout,
+    bool replaceable = false,
+    ProcessTextBridge? bridge,
   }) {
     return ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        if (replaceable)
+          processTextSessionProvider.overrideWith(_ReplaceableSession.new),
+        if (bridge != null) processTextBridgeProvider.overrideWithValue(bridge),
         if (firstTokenTimeout != null)
           firstTokenTimeoutProvider.overrideWithValue(firstTokenTimeout),
         ...deviceHealthTestOverrides(),
@@ -282,6 +288,75 @@ void main() {
     });
   });
 
+  group('Replace selected text (PROCESS_TEXT)', () {
+    Future<ChatRouteArgs> doneThread() => savedThread(
+      status: MessageStatus.complete,
+      content: 'A tidier sentence.',
+    );
+
+    testWidgets('editable source: the newest reply offers the button and a '
+        'tap hands the text back', (tester) async {
+      tall(tester);
+      final bridge = _FakeBridge();
+      await tester.pumpWidget(
+        app(
+          FakeEngineService(),
+          await doneThread(),
+          replaceable: true,
+          bridge: bridge,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Replace selected text'), findsOneWidget);
+      await tester.tap(find.text('Replace selected text'));
+      await tester.pump();
+      expect(bridge.sent, ['A tidier sentence.']);
+    });
+
+    testWidgets('a refused hand-back explains and points at Copy', (
+      tester,
+    ) async {
+      tall(tester);
+      final bridge = _FakeBridge(failure: ProcessTextFailure.notReplaceable);
+      await tester.pumpWidget(
+        app(
+          FakeEngineService(),
+          await doneThread(),
+          replaceable: true,
+          bridge: bridge,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replace selected text'));
+      await tester.pump();
+      expect(find.textContaining('Use Copy instead'), findsOneWidget);
+    });
+
+    testWidgets('read-only source (or a normal launch): no button', (
+      tester,
+    ) async {
+      tall(tester);
+      await tester.pumpWidget(app(FakeEngineService(), await doneThread()));
+      await tester.pumpAndSettle();
+      expect(find.text('Replace selected text'), findsNothing);
+    });
+
+    testWidgets('an unfinished reply never offers replacing', (tester) async {
+      tall(tester);
+      final args = await savedThread(
+        status: MessageStatus.truncated,
+        content: 'Half a sentence',
+      );
+      await tester.pumpWidget(
+        app(FakeEngineService(), args, replaceable: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Replace selected text'), findsNothing);
+      expect(find.text('Continue'), findsOneWidget);
+    });
+  });
+
   group('WarmUpStatus', () {
     final start = DateTime(2026, 11, 1, 9);
 
@@ -321,4 +396,21 @@ void main() {
       expect(find.text('Thinking · 7 s'), findsOneWidget);
     });
   });
+}
+
+class _ReplaceableSession extends ProcessTextSession {
+  @override
+  bool build() => true;
+}
+
+class _FakeBridge extends ProcessTextBridge {
+  final ProcessTextFailure? failure;
+  final sent = <String>[];
+  _FakeBridge({this.failure});
+
+  @override
+  Future<ProcessTextFailure?> returnResult(String reply) async {
+    sent.add(reply);
+    return failure;
+  }
 }

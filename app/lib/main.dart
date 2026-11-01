@@ -7,6 +7,7 @@ import 'core/crash/crash_log.dart';
 import 'core/di/speed_providers.dart';
 import 'core/identity/app_identity.dart';
 import 'core/intents/intent_inbox.dart';
+import 'core/intents/process_text.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/appearance_providers.dart';
@@ -57,7 +58,12 @@ Future<void> main() async {
   // After the first frame, so the router has consumed its initial location
   // and a cold-start share/selection isn't overwritten by it.
   WidgetsBinding.instance.addPostFrameCallback(
-    (_) => unawaited(IntentInbox(navigate: navigateFromIntent).start()),
+    (_) => unawaited(
+      IntentInbox(
+        navigate: navigateFromIntent,
+        onReplaceable: container.read(processTextSessionProvider.notifier).set,
+      ).start(),
+    ),
   );
 }
 

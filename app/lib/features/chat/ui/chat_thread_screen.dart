@@ -13,6 +13,7 @@ import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/process_text.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -175,6 +176,9 @@ class _ThreadScaffold extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final visible = state.visibleMessages;
+    // Android text-selection round trip: true when this launch came from an
+    // editable field and the result can be handed back.
+    final canReplaceSelection = ref.watch(processTextSessionProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -291,6 +295,7 @@ class _ThreadScaffold extends ConsumerWidget {
                                 ref,
                                 visible,
                                 i,
+                                canReplaceSelection: canReplaceSelection,
                               ),
                             );
                           }
@@ -419,8 +424,9 @@ class _ThreadScaffold extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<MessageInfo> visible,
-    int index,
-  ) {
+    int index, {
+    bool canReplaceSelection = false,
+  }) {
     final message = visible[index];
     if (message.role == MessageRole.assistant &&
         message.status == MessageStatus.error &&
@@ -474,9 +480,35 @@ class _ThreadScaffold extends ConsumerWidget {
     if (message.role != MessageRole.assistant || isStreamingMessage) {
       return bubble;
     }
+    // "Replace selected text": only on the newest finished reply, only when
+    // the selection menu came from an editable field, only on the user's tap.
+    final end = _replyEnd(message);
+    if (canReplaceSelection &&
+        canAct &&
+        index == visible.length - 1 &&
+        end == null &&
+        message.content.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: Theme.of(context).extension<DhruvaTokens>()!.spacing.sm,
+            ),
+            child: FilledButton.icon(
+              key: const ValueKey('replace-selected-text'),
+              onPressed: () =>
+                  unawaited(_replaceSelection(context, ref, message)),
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Replace selected text'),
+            ),
+          ),
+        ],
+      );
+    }
     // D1: a reply that did not finish says why and can be resumed (only the
     // newest reply, and only while nothing else is running).
-    final end = _replyEnd(message);
     if (end == null) return bubble;
     final canContinue = canAct && index == visible.length - 1;
     final empty = message.content.trim().isEmpty;
@@ -499,6 +531,21 @@ class _ThreadScaffold extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [bubble, note],
     );
+  }
+
+  Future<void> _replaceSelection(
+    BuildContext context,
+    WidgetRef ref,
+    MessageInfo message,
+  ) async {
+    final failure = await ref
+        .read(processTextBridgeProvider)
+        .returnResult(message.content);
+    if (failure != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(processTextFailureMessage(failure))),
+      );
+    }
   }
 
   ReplyEnd? _replyEnd(MessageInfo m) {
