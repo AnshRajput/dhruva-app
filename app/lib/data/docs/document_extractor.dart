@@ -42,8 +42,21 @@ const _extractTimeout = Duration(seconds: 20);
 /// The most the process may grow (resident memory) while one document is
 /// being extracted, measured against the size before the extraction isolate
 /// starts. Past it the isolate is killed and the file is refused as unsafe.
-/// The one place this number lives.
+/// The one place this number lives. This is the CEILING; the limit actually
+/// used scales down with device RAM, see [extractionRssLimitFor].
 const maxExtractionRssGrowth = 350 * 1024 * 1024;
+
+/// Never let a small phone's limit drop below this.
+const minExtractionRssGrowth = 150 * 1024 * 1024;
+
+/// The RSS-growth limit for a device with [totalRamBytes] of RAM:
+/// `min(350 MB, 12% of RAM)`, floored at 150 MB. Phones with 3 GB or more
+/// keep the 350 MB ceiling; a 2 GB phone gets ~245 MB; 1 GB gets the floor.
+int extractionRssLimitFor(int totalRamBytes) {
+  if (totalRamBytes <= 0) return maxExtractionRssGrowth;
+  final scaled = (totalRamBytes * 0.12).floor();
+  return scaled.clamp(minExtractionRssGrowth, maxExtractionRssGrowth);
+}
 
 const _watchdogInterval = Duration(milliseconds: 25);
 

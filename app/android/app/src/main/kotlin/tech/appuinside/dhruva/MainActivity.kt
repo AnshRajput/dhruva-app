@@ -6,8 +6,10 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -34,6 +36,25 @@ open class MainActivity : FlutterActivity() {
     // on an editable field. Later onNewIntent deliveries never reset it to true.
     private var replaceable = false
 
+    companion object {
+        // "Hide content in app switcher" (Settings > Privacy). Process-wide so a
+        // recreated activity (rotation, theme change) keeps the flag; Dart
+        // re-sends it on every launch.
+        private var hideInSwitcher = false
+
+        const val MAX_RESULT_CHARS = 100_000
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        applySecureFlag()
+    }
+
+    private fun applySecureFlag() {
+        if (hideInSwitcher) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         replaceable = isReplaceableProcessText(intent)
@@ -44,6 +65,18 @@ open class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 if (call.method == "read") result.success(readDeviceHealth())
                 else result.notImplemented()
+            }
+        // FLAG_SECURE on/off. Also hides the window from screenshots and screen
+        // recording; the Settings row says so.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.dhruva/privacy")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "setHideInSwitcher") {
+                    hideInSwitcher = call.arguments as? Boolean ?: false
+                    runOnUiThread { applySecureFlag() }
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
             }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dhruva/intents")
             .also { ch ->
@@ -163,10 +196,6 @@ open class MainActivity : FlutterActivity() {
             return mapOf("text" to text, "replaceable" to (replaceable && intent?.action == Intent.ACTION_PROCESS_TEXT))
         }
         return intent?.getStringExtra("route")?.let { mapOf("route" to it) }
-    }
-
-    companion object {
-        const val MAX_RESULT_CHARS = 100_000
     }
 }
 

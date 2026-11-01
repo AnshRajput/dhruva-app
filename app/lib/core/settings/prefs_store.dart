@@ -65,6 +65,8 @@ final class MemoryPrefsStore implements PrefsStore {
   Future<void> write(String key, String value) async => values[key] = value;
 }
 
+// No automatic retry: a failed directory lookup should reach callers as an
+// error (they all fall back to defaults), not leave their futures pending.
 final prefsStoreProvider = FutureProvider<PrefsStore>((ref) async {
   return FilePrefsStore(await getApplicationSupportDirectory());
-});
+}, retry: (_, _) => null);

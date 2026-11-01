@@ -10,6 +10,7 @@ import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/settings/app_info.dart';
+import 'package:dhruva/features/settings/ui/privacy_screen.dart';
 import 'package:dhruva/features/settings/ui/settings_screen.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -67,7 +68,10 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(
+    WidgetTester tester, [
+    Widget home = const SettingsScreen(),
+  ]) async {
     tallSurface(tester);
     await tester.pumpWidget(
       ProviderScope(
@@ -75,7 +79,7 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         ],
-        child: MaterialApp(theme: AppTheme.dark, home: const SettingsScreen()),
+        child: MaterialApp(theme: AppTheme.dark, home: home),
       ),
     );
     await tester.pumpAndSettle();
@@ -100,11 +104,15 @@ void main() {
 
     const key = ValueKey('device-guard-switch');
     expect(find.text('Battery & heat guard'), findsOneWidget);
-    expect(tester.widget<SwitchListTile>(find.byKey(key)).value, isTrue);
+    final tile = find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(SwitchListTile),
+    );
+    expect(tester.widget<SwitchListTile>(tile).value, isTrue);
 
     await tester.tap(find.byKey(key));
     await tester.pumpAndSettle();
-    expect(tester.widget<SwitchListTile>(find.byKey(key)).value, isFalse);
+    expect(tester.widget<SwitchListTile>(tile).value, isFalse);
     expect(store.enabled, isFalse);
 
     await tester.tap(find.byKey(key));
@@ -147,7 +155,7 @@ void main() {
         );
     await repo.createConversation(title: 'Old chat', modelId: modelId);
 
-    await pump(tester);
+    await pump(tester, const PrivacyScreen());
 
     await tester.tap(find.text('Clear all chat history'));
     await tester.pumpAndSettle();
@@ -172,7 +180,7 @@ void main() {
 
   testWidgets('cancelling the first dialog deletes nothing', (tester) async {
     await repo.createConversation(title: 'Keep me');
-    await pump(tester);
+    await pump(tester, const PrivacyScreen());
 
     await tester.tap(find.text('Clear all chat history'));
     await tester.pumpAndSettle();

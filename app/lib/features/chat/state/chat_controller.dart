@@ -29,6 +29,7 @@ import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
+import '../../../core/profile/user_profile.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
@@ -425,6 +426,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   @override
   Future<ChatThreadState> build() async {
     _lease = ref.read(engineLeaseProvider);
+    // Keep the "About the user" block warm so a send reads it synchronously
+    // (never waits on disk); main() also warms it at startup.
+    ref.listen(userContextProvider, (_, _) {});
     ref.onDispose(() {
       _disposed = true;
       unawaited(_genSub?.cancel());
@@ -1225,6 +1229,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // from before the load (the composer's attach button being gated on
     // isMultimodal should already prevent this, but a stale in-flight image
     // from a just-swapped model must not reach a text-only engine).
+    // Settings > About me: the short "About the user" block rides on the
+    // system turn for Ask, Actions and character chats alike ('' when empty).
+    final userContext = ref.read(userContextProvider).value ?? '';
     final turns = _historyTurns(
       continued == null
           ? historyMessages
@@ -1239,6 +1246,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             ],
       current.systemPrompt,
       current.isMultimodal ? current.attachedImages : const {},
+      userContext: userContext,
     );
     if (continued != null) turns.add(const ChatTurn.user(_continuePrompt));
     final samplingParams = current.samplingParams;
@@ -1692,13 +1700,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   List<ChatTurn> _historyTurns(
     List<MessageInfo> messages,
     String systemPrompt,
-    Map<int, Uint8List> attachedImages,
-  ) {
+    Map<int, Uint8List> attachedImages, {
+    String userContext = '',
+  }) {
     // Safety instruction rides on the system turn (prepended to the
-    // persona/system prompt, or emitted alone) for every path.
-    final system = systemPrompt.trim().isEmpty
-        ? SafetyGuard.systemInstruction
-        : '${SafetyGuard.systemInstruction}\n\n$systemPrompt';
+    // persona/system prompt, or emitted alone) for every path; the "About
+    // the user" block (when the user filled it in) follows it.
+    final system = [
+      SafetyGuard.systemInstruction,
+      if (userContext.isNotEmpty) userContext,
+      if (systemPrompt.trim().isNotEmpty) systemPrompt,
+    ].join('\n\n');
     // Growable: `_runAssistantTurn` swaps the last user turn for its
     // document-grounded version.
     return [
