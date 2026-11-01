@@ -10,6 +10,7 @@ import 'package:dhruva/core/device_health/device_health.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
+import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/features/today/state/brief_cache.dart';
 import 'package:dhruva/features/today/state/brief_facts.dart';
 import 'package:dhruva/features/today/state/brief_writer.dart';
@@ -344,6 +345,48 @@ void main() {
       final cached = jsonDecode(h.prefs.values['today_brief_v1']!) as Map;
       expect(cached['raw'], 'Budget review is at 11:00 [2].');
       expect((cached['facts'] as List), isNotEmpty);
+    });
+
+    todayTest('a failed rewrite keeps the old brief and shows the facts', (
+      tester,
+    ) async {
+      final h = await pumpToday(tester, seed: _seedDay);
+      expect(find.byKey(const ValueKey('today-brief-text')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-brief-facts')), findsNothing);
+      h.writer.failWith = StateError('model crashed');
+      await tester.tap(find.byKey(const ValueKey('today-brief-regenerate')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('today-brief-text')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-brief-error')), findsOneWidget);
+      // The error says "read the facts below": they are below.
+      expect(find.byKey(const ValueKey('today-brief-facts')), findsOneWidget);
+    });
+
+    todayTest('while a model downloads the card says so, with progress', (
+      tester,
+    ) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+        download: const DownloadProgress(
+          taskId: 't',
+          repoId: 'org/model',
+          fileName: 'm.gguf',
+          state: DownloadState.running,
+          downloadedBytes: 250,
+          totalBytes: 1000,
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('today-brief-downloading')),
+        findsOneWidget,
+      );
+      expect(find.text('Downloading your model · 25%'), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-brief-get-model')), findsNothing);
+      expect(find.textContaining('No model'), findsNothing);
+      expect(find.textContaining('Design sync at 9:30'), findsWidgets);
+      expect(h.writer.prompts, isEmpty);
     });
 
     todayTest('pull to refresh rewrites the brief', (tester) async {
@@ -731,6 +774,49 @@ void main() {
       expect(ravi, lessThan(now)); // 7:12 is before now (7:42)
       expect(now, lessThan(design));
       expect(design, lessThan(budget));
+    });
+
+    todayTest('every row paints a rail segment, joined top to bottom', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-see-day')));
+      await settle(tester);
+      final rows = <int>[
+        for (
+          var i = 0;
+          find.byKey(ValueKey('timeline-$i')).evaluate().isNotEmpty;
+          i++
+        )
+          i,
+      ];
+      expect(rows.length, greaterThan(2));
+      double? prevBottom;
+      for (final i in rows) {
+        final row = find.byKey(ValueKey('timeline-$i'));
+        final rail = find.descendant(
+          of: row,
+          matching: find.byKey(const ValueKey('timeline-rail')),
+        );
+        expect(rail, findsOneWidget, reason: 'row $i has no rail');
+        final r = tester.getRect(rail);
+        final rowRect = tester.getRect(row);
+        expect(r.width, 2);
+        expect(r.height, greaterThan(0), reason: 'row $i rail is empty');
+        if (i < rows.length - 1) {
+          // Runs to the bottom edge of its row, so it meets the next row's.
+          expect(r.bottom, closeTo(rowRect.bottom, 0.5));
+        } else {
+          // The last row stops at its dot, not the card's bottom.
+          expect(r.bottom, lessThan(rowRect.bottom));
+        }
+        if (prevBottom != null) expect(r.top, closeTo(prevBottom, 0.5));
+        prevBottom = r.bottom;
+      }
     });
 
     todayTest('empty day: a clear day with an action', (tester) async {

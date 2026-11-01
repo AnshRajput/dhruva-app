@@ -325,6 +325,112 @@ void main() {
       expect(p.sentences.first.plain, 'One.');
     });
 
+    group('citation styles', () {
+      String cited(BriefSentence s) =>
+          s.spans.where((x) => x.isCited).map((x) => x.cites).join('|');
+
+      test('actual 0.5B output: markers first, one per line', () {
+        final p = parseBrief(
+          '[1] Design sync at 10:06 PM (Google Meet).\n'
+          '[2] Budget review at 11:00 PM (Room 4B).\n'
+          '[3] Call with Ravi at 11:51 PM.',
+          validIds: valid,
+        );
+        expect(p.dropped, 0);
+        expect(p.sentences.length, 3);
+        expect(p.sentences[0].plain, startsWith('Design sync'));
+        expect(p.sentences[0].spans.first.cites, [1]);
+        expect(p.sentences[1].spans.first.cites, [2]);
+        expect(p.sentences[2].spans.first.cites, [3]);
+        // No stray leading space, no empty cited span.
+        for (final s in p.sentences) {
+          expect(s.spans.every((x) => x.text.isNotEmpty), isTrue);
+          expect(s.spans.first.text, isNot(startsWith(' ')));
+        }
+      });
+
+      test('markers first on one line', () {
+        final p = parseBrief(
+          '[1] Design sync at 9:30. [2] Budget review at 11:00. [3] Call Ravi.',
+          validIds: valid,
+        );
+        expect(p.sentences.map(cited), ['[1]', '[2]', '[3]']);
+        expect(p.sentences[0].plain, 'Design sync at 9:30.');
+      });
+
+      test('markers last, one sentence per line', () {
+        final p = parseBrief(
+          'Design sync at 9:30 [1].\nBudget review at 11:00 [2].\n'
+          'Call Ravi [3].',
+          validIds: valid,
+        );
+        expect(p.sentences.map(cited), ['[1]', '[2]', '[3]']);
+      });
+
+      test('markers last, all on one line', () {
+        final p = parseBrief(
+          'Design sync at 9:30 [1]. Budget review [2]. Call Ravi [3].',
+          validIds: valid,
+        );
+        expect(p.sentences.map(cited), ['[1]', '[2]', '[3]']);
+      });
+
+      test('stacked and mid-sentence markers', () {
+        final p = parseBrief(
+          '[1][2] Design sync and budget review overlap.\n'
+          'Ravi [3] wants an OK on the plan [1].',
+          validIds: valid,
+        );
+        expect(p.sentences[0].spans.first.cites, [1, 2]);
+        expect(p.sentences[0].plain, 'Design sync and budget review overlap.');
+        expect(
+          p.sentences[1].spans.map((x) => x.cites).where((c) => c.isNotEmpty),
+          [
+            [3],
+            [1],
+          ],
+        );
+      });
+
+      test('mixed styles across and within lines', () {
+        final p = parseBrief(
+          'Design sync at 9:30 [1].\n[2] Budget review at 11:00.\n'
+          'Call Ravi [3]. [2] Room 4B is booked.',
+          validIds: valid,
+        );
+        expect(p.sentences.map(cited), ['[1]', '[2]', '[3]', '[2]']);
+      });
+
+      test(
+        'a trailing marker after the last full stop joins that sentence',
+        () {
+          final p = parseBrief('[1] Design sync at 9:30. [2]', validIds: valid);
+          expect(p.sentences.length, 1);
+          expect(p.sentences.single.spans.first.cites, [1, 2]);
+        },
+      );
+
+      test('garbage output parses to nothing, without throwing', () {
+        for (final g in [
+          '[[[ ]]] [] [x] [1',
+          '1] 2] 3]',
+          '[9] [8] nothing real. [0] still nothing.',
+          '...\n\n   \n!!!',
+          '[1]',
+          '[1]\n[2]\n',
+        ]) {
+          final p = parseBrief(g, validIds: valid);
+          expect(p.isEmpty, isTrue, reason: g);
+        }
+      });
+
+      test('a leading invented marker does not cite the sentence', () {
+        final p = parseBrief('[9] Everything is fine.', validIds: valid);
+        expect(p.isEmpty, isTrue);
+        expect(p.dropped, 1);
+      });
+    });
+
     test('empty or marker-free text parses to nothing', () {
       expect(parseBrief('', validIds: valid).isEmpty, isTrue);
       expect(parseBrief('No markers here.', validIds: valid).isEmpty, isTrue);

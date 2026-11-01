@@ -65,6 +65,13 @@ final class ConnectorHub {
     }
   }
 
+  /// Runs after any connector's local data was wiped on revoke.
+  set onWiped(Future<void> Function()? callback) {
+    for (final c in [calendar, contacts, folder, notifications]) {
+      c.onWiped = callback;
+    }
+  }
+
   /// In sync order.
   List<Connector> get all => [calendar, folder, notifications, contacts];
 

@@ -25,6 +25,11 @@ abstract class BaseConnector implements Connector {
   /// hub sets it to keep the background job in step with what is connected.
   Future<void> Function()? onConnectionChanged;
 
+  /// Called after [revoke] has wiped this connector's local data. The app sets
+  /// it to drop derived copies of that data (the written Today brief), so text
+  /// from a disconnected source never lingers. Must not throw (guarded).
+  Future<void> Function()? onWiped;
+
   /// True once [revoke] has been asked for while a sync runs; long reads
   /// (the folder index) check it and stop.
   bool get syncCancelled => _cancelled;
@@ -161,6 +166,11 @@ abstract class BaseConnector implements Connector {
       // what the user asked for and always runs.
     }
     await store.wipeConnector(id);
+    try {
+      await onWiped?.call();
+    } catch (_) {
+      // Derived copies are best effort; the stored data is already gone.
+    }
     emit(ConnectorStatus.notConnected);
     await onConnectionChanged?.call();
   }

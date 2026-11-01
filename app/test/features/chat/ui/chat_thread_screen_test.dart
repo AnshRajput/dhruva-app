@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/model_download.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/docs/document_extractor.dart';
+import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/docs/document_picker.dart';
 import 'package:dhruva/docs/fake_document_picker.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
@@ -120,6 +123,58 @@ void main() {
       expect(find.text('Message Dhruva…'), findsOneWidget);
     },
   );
+
+  testWidgets('opened while a model downloads: says so, keeps the prompt, and '
+      'sends it when the model lands', (tester) async {
+    final downloads = StreamController<DownloadProgress?>();
+    addTearDown(downloads.close);
+    const running = DownloadProgress(
+      taskId: 't',
+      repoId: 'bartowski/Llama-3.2-1B-Instruct-GGUF',
+      fileName: 'model.gguf',
+      state: DownloadState.running,
+      downloadedBytes: 400,
+      totalBytes: 1000,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+          ...deviceHealthTestOverrides(),
+          modelDownloadProvider.overrideWith((ref) => downloads.stream),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: ChatThreadScreen(
+            args: const ChatRouteArgs(initialPrompt: 'Prep me for 9:30'),
+          ),
+        ),
+      ),
+    );
+    downloads.add(running);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('No model installed yet'), findsNothing);
+    expect(find.text('Downloading your model · 40%'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('model-downloading-prompt')),
+      findsOneWidget,
+    );
+    expect(find.text('Prep me for 9:30'), findsOneWidget);
+
+    // The model lands: the saved question is sent.
+    await insertModel();
+    downloads.add(null);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pumpAndSettle(const Duration(milliseconds: 200));
+    expect(find.text('Downloading your model · 40%'), findsNothing);
+    expect(find.text('Prep me for 9:30'), findsWidgets); // now a chat bubble
+    expect(find.text('Hello world!'), findsOneWidget);
+  });
 
   testWidgets('with no model installed, the chip reads "Pick a model"', (
     tester,

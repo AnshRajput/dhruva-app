@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/next_step_card.dart';
+import '../../../core/widgets/platform_chrome.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_facts.dart';
@@ -41,80 +42,83 @@ class DayTimelineScreen extends ConsumerWidget {
     final events = ref.watch(todayEventsProvider);
     final groups = ref.watch(notificationGroupsProvider);
 
-    Widget body;
-    if (!loaded || events.isLoading && !events.hasValue) {
-      body = const _TimelineSkeleton();
-    } else {
-      final entries = buildTimeline(
-        now: clock,
-        events: events.value ?? const [],
-        groups: groups.value ?? const [],
-      );
-      final calendarOn = calendar?.status.isConnected ?? false;
-      if (timelineIsEmpty(entries)) {
-        body = ListView(
-          padding: EdgeInsets.all(tokens.spacing.base),
-          children: [
-            if (!calendarOn)
-              NextStepCard(
-                icon: Icons.timeline_rounded,
-                title: 'Nothing on your day yet',
-                body:
-                    'Meetings from your calendar show up here as a timeline, '
-                    'with your notifications in between. It needs no sign-in '
-                    'and never leaves this phone.',
-                actionLabel: 'Connect your calendar',
-                actionKey: const ValueKey('day-connect-calendar'),
-                onAction: () async {
-                  final status = await connectCalendar(ref);
-                  if (!context.mounted) return;
-                  if (status == null || !status.isConnected) {
-                    unawaited(context.push('/settings/connectors'));
-                  }
-                },
-              )
-            else
-              NextStepCard(
-                icon: Icons.timeline_rounded,
-                title: 'A clear day',
-                body:
-                    'Nothing on your calendar today. Add something in your '
-                    'calendar app and it shows up here.',
-                actionLabel: 'Open calendar',
-                actionKey: const ValueKey('day-open-calendar'),
-                onAction: () => ref.read(openCalendarProvider)(clock),
-              ),
-          ],
-        );
+    Widget body(BuildContext context, EdgeInsets inset) {
+      if (!loaded || events.isLoading && !events.hasValue) {
+        return _TimelineSkeleton(inset: inset);
       } else {
-        body = ListView(
-          padding: EdgeInsets.fromLTRB(
-            tokens.spacing.base,
-            tokens.spacing.sm,
-            tokens.spacing.base,
-            tokens.spacing.xl2,
-          ),
-          children: [
-            for (final (i, e) in entries.indexed)
-              _RailRow(
-                key: ValueKey('timeline-$i'),
-                entry: e,
-                first: i == 0,
-                last: i == entries.length - 1,
-              ),
-          ],
+        final entries = buildTimeline(
+          now: clock,
+          events: events.value ?? const [],
+          groups: groups.value ?? const [],
         );
+        final calendarOn = calendar?.status.isConnected ?? false;
+        if (timelineIsEmpty(entries)) {
+          return ListView(
+            padding: EdgeInsets.all(tokens.spacing.base).add(inset),
+            children: [
+              if (!calendarOn)
+                NextStepCard(
+                  icon: Icons.timeline_rounded,
+                  title: 'Nothing on your day yet',
+                  body:
+                      'Meetings from your calendar show up here as a timeline, '
+                      'with your notifications in between. It needs no sign-in '
+                      'and never leaves this phone.',
+                  actionLabel: 'Connect your calendar',
+                  actionKey: const ValueKey('day-connect-calendar'),
+                  onAction: () async {
+                    final status = await connectCalendar(ref);
+                    if (!context.mounted) return;
+                    if (status == null || !status.isConnected) {
+                      unawaited(context.push('/settings/connectors'));
+                    }
+                  },
+                )
+              else
+                NextStepCard(
+                  icon: Icons.timeline_rounded,
+                  title: 'A clear day',
+                  body:
+                      'Nothing on your calendar today. Add something in your '
+                      'calendar app and it shows up here.',
+                  actionLabel: 'Open calendar',
+                  actionKey: const ValueKey('day-open-calendar'),
+                  onAction: () => openCalendarWithFeedback(context, ref, clock),
+                ),
+            ],
+          );
+        } else {
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.base,
+              tokens.spacing.sm,
+              tokens.spacing.base,
+              tokens.spacing.xl2,
+            ).add(inset),
+            children: [
+              for (final (i, e) in entries.indexed)
+                _RailRow(
+                  key: ValueKey('timeline-$i'),
+                  entry: e,
+                  first: i == 0,
+                  last: i == entries.length - 1,
+                ),
+            ],
+          );
+        }
       }
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(formatDayLine(clock))),
-      body: body,
+
+    return ChromeScaffold(
+      appBar: AdaptiveAppBar(title: Text(formatDayLine(clock))),
+      bodyBuilder: body,
     );
   }
 }
 
 class _TimelineSkeleton extends StatelessWidget {
-  const _TimelineSkeleton();
+  const _TimelineSkeleton({required this.inset});
+  final EdgeInsets inset;
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +126,7 @@ class _TimelineSkeleton extends StatelessWidget {
     return Semantics(
       label: 'Loading your day',
       child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.base),
+        padding: EdgeInsets.all(tokens.spacing.base).add(inset),
         child: Column(
           children: [
             for (var i = 0; i < 3; i++) ...[
@@ -156,6 +160,10 @@ class _RailRow extends StatelessWidget {
   final TimelineEntry entry;
   final bool first;
   final bool last;
+
+  /// Where the dot's centre sits from the row's top (4 padding + half of the
+  /// 12 px dot).
+  static const _dotCenter = 10.0;
 
   @override
   Widget build(BuildContext context) {
@@ -233,14 +241,20 @@ class _RailRow extends StatelessWidget {
             child: Stack(
               alignment: Alignment.topCenter,
               children: [
-                Positioned.fill(
-                  top: first ? 10 : 0,
-                  bottom: last ? 0 : null,
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(width: 2, color: scheme.outlineVariant),
+                // One continuous rail: the first row starts at its dot, every
+                // row but the last runs to its bottom edge, and the last stops
+                // at its dot.
+                if (!(first && last))
+                  Positioned(
+                    top: first ? _dotCenter : 0,
+                    bottom: last ? null : 0,
+                    height: last ? _dotCenter : null,
+                    child: Container(
+                      key: const ValueKey('timeline-rail'),
+                      width: 2,
+                      color: scheme.outlineVariant,
+                    ),
                   ),
-                ),
                 Padding(padding: const EdgeInsets.only(top: 4), child: dot),
               ],
             ),

@@ -14,7 +14,7 @@ import 'brief_facts.dart';
 import 'brief_parser.dart';
 
 const briefMaxAge = Duration(hours: 3);
-const _cacheKey = 'today_brief_v1';
+const _cacheKey = briefCachePrefsKey;
 
 final class WrittenBrief {
   const WrittenBrief({

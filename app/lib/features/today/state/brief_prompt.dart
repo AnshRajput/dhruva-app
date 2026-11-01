@@ -30,9 +30,12 @@ String buildBriefPrompt(List<BriefFact> facts) {
     ..writeln()
     ..write(
       'Write the brief now: 3 to 5 short sentences in plain language, most '
-      'important first. End every sentence with the number of the fact it '
-      'comes from, like [1] (or [1][2]). A sentence without a number is '
-      'discarded.',
+      'important first, in one paragraph. Put the number of the fact a '
+      'sentence comes from at the END of that sentence, before the full '
+      'stop, like [1] (or [1][2]). A sentence without a number is '
+      'discarded.\n\n'
+      'Format example, for other facts: Your first meeting is Standup at '
+      '9:00 [1]. Ana needs a reply about the invoice [2].',
     );
   return b.toString();
 }

@@ -13,6 +13,7 @@ import '../../data/connectors/connector.dart';
 import '../../data/connectors/connector_hub.dart';
 import '../../data/connectors/connector_store.dart';
 import '../../data/connectors/search_index.dart';
+import '../settings/prefs_store.dart';
 import 'providers.dart';
 
 /// One row of the connector list: the connector and its latest status.
@@ -31,6 +32,11 @@ final connectorStoreProvider = Provider<ConnectorStore>((ref) {
 final connectorHubProvider = FutureProvider<ConnectorHub>(
   (ref) async {
     final hub = await ConnectorHub.system(ref.watch(appDatabaseProvider));
+    // Revoking a source deletes its data; the written brief quotes it, so the
+    // cached brief goes too (even if Today is not on screen to notice).
+    hub.onWiped = () async => (await ref.read(
+      prefsStoreProvider.future,
+    )).write(briefCachePrefsKey, '');
     ref.onDispose(() => unawaited(hub.dispose()));
     return hub;
   },

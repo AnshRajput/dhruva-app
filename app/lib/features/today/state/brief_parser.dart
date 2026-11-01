@@ -53,41 +53,50 @@ const maxBriefSentences = 5;
 final _marker = RegExp(r'\[\s*(\d{1,3}(?:\s*[,;]\s*\d{1,3})*)\s*\]');
 
 /// Parses [raw] against the fact numbers that really exist ([validIds]).
+///
+/// Small models cite in different styles, so all of these work: markers LAST
+/// ("Design sync at 9:30 [1]."), markers FIRST, one per line ("[1] Design sync
+/// at 9:30."), stacked ("[1][2]"), mid-sentence, and a mix. A marker is never
+/// absorbed into the previous sentence when sentence text follows it, unless
+/// that sentence has no marker of its own yet ("9:30. [1] Ravi ...").
 ParsedBrief parseBrief(
   String raw, {
   required Set<int> validIds,
   int maxSentences = maxBriefSentences,
 }) {
-  var text = raw
+  final text = raw
       .replaceAll(RegExp(r'<think>[\s\S]*?</think>'), ' ')
       .replaceAll(RegExp(r'<think>[\s\S]*$'), ' ');
-  // One paragraph: drop list bullets / numbering, join lines.
-  text = text
-      .split('\n')
-      .map((l) => l.replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)])\s+'), ''))
-      .join(' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
 
   final sentences = <BriefSentence>[];
   final seen = <String>{};
   var dropped = 0;
-  for (final chunk in _splitSentences(text)) {
-    final s = _toSentence(chunk, validIds);
-    if (s == null) {
-      dropped++;
-      continue;
+  // Lines first: a line break is a sentence break, and it is what tells a
+  // marker that leads the next line from one that trails this line.
+  for (final rawLine in text.split(RegExp(r'\r?\n'))) {
+    final line = rawLine
+        .replaceFirst(RegExp(r'^\s*(?:[-*\u2022]|\d+[.)])\s+'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (line.isEmpty) continue;
+    for (final chunk in _splitSentences(line)) {
+      final s = _toSentence(chunk, validIds);
+      if (s == null) {
+        dropped++;
+        continue;
+      }
+      if (!seen.add(s.plain)) continue;
+      if (sentences.length < maxSentences) sentences.add(s);
     }
-    if (!seen.add(s.plain)) continue;
-    if (sentences.length < maxSentences) sentences.add(s);
   }
   return ParsedBrief(sentences, dropped: dropped);
 }
 
-/// Splits on `.`/`!`/`?` that end a sentence (followed by space or the end,
-/// so "18.4L" and "9:30." inside a number stay whole), keeping markers that
-/// trail the punctuation ("... 9:30. [1] Ravi ...") with the sentence they
-/// belong to.
+/// Splits one line on `.`/`!`/`?` that end a sentence (followed by space or
+/// the end, so "18.4L" and "9:30." inside a number stay whole). Markers right
+/// after the punctuation stay with the NEXT sentence when text follows them
+/// ("[1] A. [2] B."), and go to the previous one when nothing follows or that
+/// sentence has no marker yet ("A. [1] B [2].").
 List<String> _splitSentences(String text) {
   final out = <String>[];
   var start = 0;
@@ -99,15 +108,20 @@ List<String> _splitSentences(String text) {
       while (j < text.length && '.!?'.contains(text[j])) {
         j++;
       }
-      // Absorb markers that trail the punctuation.
+      var e = j;
       while (true) {
-        var k = j;
+        var k = e;
         while (k < text.length && text[k] == ' ') {
           k++;
         }
         final m = _marker.matchAsPrefix(text, k);
         if (m == null) break;
-        j = m.end;
+        e = m.end;
+      }
+      if (e > j && (e >= text.length || text[e] == ' ')) {
+        final textFollows = text.substring(e).trim().isNotEmpty;
+        final prevCited = _marker.hasMatch(text.substring(start, j));
+        if (!textFollows || !prevCited) j = e;
       }
       if (j >= text.length || text[j] == ' ') {
         out.add(text.substring(start, j).trim());
@@ -127,7 +141,28 @@ int? _validId(String raw, Set<int> validIds) {
   return n != null && validIds.contains(n) ? n : null;
 }
 
+List<int> _ids(Match m, Set<int> validIds) => [
+  for (final p in m.group(1)!.split(RegExp(r'[,;]'))) ?_validId(p, validIds),
+];
+
+List<int> _union(List<int> a, List<int> b) => [
+  ...a,
+  for (final n in b)
+    if (!a.contains(n)) n,
+];
+
 BriefSentence? _toSentence(String chunk, Set<int> validIds) {
+  // Leading markers ("[1] Design sync ...") cite the text that follows them.
+  var lead = <int>[];
+  var body = chunk.trimLeft();
+  while (true) {
+    final m = _marker.matchAsPrefix(body);
+    if (m == null) break;
+    lead = _union(lead, _ids(m, validIds));
+    body = body.substring(m.end).trimLeft();
+  }
+  if (body.isEmpty) return null;
+
   final spans = <BriefSpan>[];
   var pos = 0;
   var anyValid = false;
@@ -136,12 +171,9 @@ BriefSentence? _toSentence(String chunk, Set<int> validIds) {
     if (s.isNotEmpty) spans.add(BriefSpan(s));
   }
 
-  for (final m in _marker.allMatches(chunk)) {
-    final ids = [
-      for (final p in m.group(1)!.split(RegExp(r'[,;]')))
-        ?_validId(p, validIds),
-    ];
-    final before = chunk.substring(pos, m.start);
+  for (final m in _marker.allMatches(body)) {
+    final ids = _ids(m, validIds);
+    final before = body.substring(pos, m.start);
     pos = m.end;
     if (ids.isEmpty) {
       // An invented marker is not evidence; its text stays, un-linked.
@@ -149,24 +181,38 @@ BriefSentence? _toSentence(String chunk, Set<int> validIds) {
       continue;
     }
     anyValid = true;
-    if (before.trim().isEmpty && spans.isNotEmpty && spans.last.isCited) {
+    if (before.trim().isEmpty && spans.isNotEmpty) {
       // "[1][2]": more evidence for the previous phrase.
       final last = spans.removeLast();
-      spans.add(
-        BriefSpan(last.text, [
-          ...last.cites,
-          for (final n in ids)
-            if (!last.cites.contains(n)) n,
-        ]),
-      );
+      spans.add(BriefSpan(last.text, _union(last.cites, ids)));
     } else {
       spans.add(BriefSpan(before.trimRight(), ids));
     }
   }
-  plain(chunk.substring(pos));
-  if (!anyValid) return null;
+  plain(body.substring(pos));
 
-  // Tidy: the first span has no leading space; spacing before punctuation.
+  if (lead.isNotEmpty) {
+    anyValid = true;
+    if (spans.isNotEmpty && spans.first.isCited) {
+      // "[1] A and B [2].": both markers cite the phrase before the second.
+      spans[0] = BriefSpan(spans.first.text, _union(lead, spans.first.cites));
+    } else {
+      // The leading marker cites the whole sentence; closing punctuation
+      // stays plain.
+      final first = spans.removeAt(0);
+      final t = first.text;
+      final cut = t.replaceFirst(RegExp(r'[\s.!?]+$'), '').length;
+      final rest = <BriefSpan>[
+        if (cut > 0) BriefSpan(t.substring(0, cut), lead),
+        if (cut < t.length) BriefSpan(t.substring(cut)),
+      ];
+      spans.insertAll(0, rest);
+    }
+  }
+  if (!anyValid || spans.isEmpty) return null;
+  if (spans.every((s) => !s.isCited)) return null;
+
+  // Tidy: the first span has no leading space.
   final first = spans.first;
   spans[0] = BriefSpan(first.text.trimLeft(), first.cites);
   return BriefSentence(spans);

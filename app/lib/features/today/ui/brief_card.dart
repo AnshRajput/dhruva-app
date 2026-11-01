@@ -15,8 +15,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/model_download.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/model_download_line.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_cache.dart';
 import '../state/brief_controller.dart';
@@ -219,7 +221,8 @@ class _WrittenCard extends ConsumerStatefulWidget {
 }
 
 class _WrittenCardState extends ConsumerState<_WrittenCard> {
-  bool _open = false;
+  /// Null = automatic: closed, but open under an error ('read the facts below').
+  bool? _open;
 
   void _openCites(List<int> cites) {
     final f = widget.brief.fact(cites.first);
@@ -234,6 +237,7 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
     final now = ref.watch(nowProvider);
     final fresh = isBriefFresh(widget.brief, now);
     final at = formatClock(context, widget.brief.writtenAt);
+    final open = _open ?? widget.state.error != null;
     final busy = widget.state.writing;
     final reduce = MediaQuery.disableAnimationsOf(context);
     return TodayCard(
@@ -287,7 +291,7 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
           InkWell(
             key: const ValueKey('today-brief-how'),
             borderRadius: BorderRadius.circular(tokens.radius.sm),
-            onTap: () => setState(() => _open = !_open),
+            onTap: () => setState(() => _open = !open),
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
               child: Row(
@@ -301,7 +305,7 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
                     ),
                   ),
                   AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
+                    turns: open ? 0.5 : 0,
                     duration: reduce ? Duration.zero : tokens.motion.fast,
                     curve: tokens.motion.decelerate,
                     child: Icon(
@@ -317,7 +321,7 @@ class _WrittenCardState extends ConsumerState<_WrittenCard> {
             duration: reduce ? Duration.zero : tokens.motion.fast,
             curve: tokens.motion.decelerate,
             alignment: Alignment.topCenter,
-            child: _open
+            child: open
                 ? _FactList(
                     key: const ValueKey('today-brief-facts'),
                     facts: widget.brief.facts,
@@ -395,11 +399,29 @@ class _FactsCard extends ConsumerWidget {
   }
 }
 
-class _GetModel extends StatelessWidget {
+class _GetModel extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final download = ref.watch(modelDownloadProvider).value;
+    if (download != null) {
+      // A model is on its way: say so, instead of offering to get one.
+      return Column(
+        key: const ValueKey('today-brief-downloading'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ModelDownloadLine(progress: download),
+          SizedBox(height: tokens.spacing.sm),
+          Text(
+            'Your brief is written as soon as it is ready.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

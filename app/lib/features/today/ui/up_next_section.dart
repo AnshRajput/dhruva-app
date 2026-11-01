@@ -120,8 +120,11 @@ class _NothingNext extends ConsumerWidget {
           SizedBox(height: tokens.spacing.md),
           OutlinedButton(
             key: const ValueKey('up-next-open-calendar'),
-            onPressed: () =>
-                ref.read(openCalendarProvider)(ref.read(todayClockProvider)()),
+            onPressed: () => openCalendarWithFeedback(
+              context,
+              ref,
+              ref.read(todayClockProvider)(),
+            ),
             child: const Text('Open calendar'),
           ),
         ],
@@ -154,10 +157,7 @@ class _AttentionRow extends ConsumerWidget {
           ),
           TextButton(
             key: const ValueKey('up-next-retry'),
-            onPressed: () async {
-              final hub = await ref.read(connectorHubProvider.future);
-              await hub.sync.refresh();
-            },
+            onPressed: () => retryConnectorSync(context, ref),
             child: const Text('Try again'),
           ),
         ],

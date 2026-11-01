@@ -6,11 +6,13 @@
 import 'package:dhruva/core/device_health/device_health.dart';
 import 'package:dhruva/core/device_health/device_health_provider.dart';
 import 'package:dhruva/core/di/connector_providers.dart';
+import 'package:dhruva/core/di/model_download.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/features/today/state/brief_writer.dart';
 import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/features/today/ui/day_timeline_screen.dart';
@@ -123,6 +125,9 @@ Future<TodayHarness> pumpToday(
   Widget? home,
   List<Override> overrides = const [],
   DeviceHealth? health,
+
+  /// A model download running right now (null: none).
+  DownloadProgress? download,
 }) async {
   await tester.binding.setSurfaceSize(const Size(420, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -180,6 +185,8 @@ Future<TodayHarness> pumpToday(
         minuteTickProvider.overrideWith((ref) => Stream.value(fixtureNow)),
         prefsStoreProvider.overrideWith((ref) async => h.prefs),
         briefWriterProvider.overrideWithValue(h.writer),
+        // No real download manager (plugins) in widget tests.
+        modelDownloadProvider.overrideWith((ref) => Stream.value(download)),
         openCalendarProvider.overrideWithValue((t) async {
           h.openedCalendarAt.add(t);
           return true;

@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/model_download.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
@@ -29,6 +30,7 @@ import '../widgets/empty_states.dart';
 import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
+import '../widgets/model_downloading_view.dart';
 import '../widgets/reply_status.dart';
 import '../widgets/report_sheet.dart';
 import 'model_picker_sheet.dart';
@@ -97,6 +99,17 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     final provider = chatControllerProvider(widget.args);
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
+
+    // Opened (Prep / Plan my day) while the first model was still
+    // downloading: when the download ends, rebuild the thread so it picks the
+    // new model and sends the saved question.
+    ref.listen(modelDownloadProvider, (prev, next) {
+      if (prev?.value != null &&
+          next.value == null &&
+          asyncState.value?.model == null) {
+        ref.invalidate(provider);
+      }
+    });
 
     ref.listen(provider, (previous, next) {
       final prevLen = previous?.value?.messages.length ?? 0;
@@ -175,6 +188,9 @@ class _ThreadScaffold extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final download = state.model == null
+        ? ref.watch(modelDownloadProvider).value
+        : null;
     final visible = state.visibleMessages;
     // Android text-selection round trip: true when this launch came from an
     // editable field and the result can be handed back.
@@ -241,9 +257,17 @@ class _ThreadScaffold extends ConsumerWidget {
                     state.modelLoadError == null
                 ? Center(
                     child: state.model == null
-                        ? NoModelInstalledView(
-                            onBrowseModels: () => context.push('/models/hub'),
-                          )
+                        ? (download != null
+                              ? ModelDownloadingView(
+                                  progress: download,
+                                  pendingPrompt: args.initialPrompt,
+                                  onOpenDownloads: () =>
+                                      context.push('/models/downloads'),
+                                )
+                              : NoModelInstalledView(
+                                  onBrowseModels: () =>
+                                      context.push('/models/hub'),
+                                ))
                         : SuggestedPrompts(
                             onSelect: (prompt) {
                               onScrollToBottom();

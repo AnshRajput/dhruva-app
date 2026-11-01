@@ -50,16 +50,46 @@ Future<void> openInCalendar(
   BuildContext context,
   WidgetRef ref,
   ConnectorItem event,
-) async {
-  final ok = await ref.read(openCalendarProvider)(
-    event.startsAt ?? ref.read(todayClockProvider)(),
-  );
+) => openCalendarWithFeedback(
+  context,
+  ref,
+  event.startsAt ?? ref.read(todayClockProvider)(),
+  message:
+      "Couldn't open your calendar app. Open it yourself to see this event.",
+);
+
+/// Opens the OS calendar at [at]; says so when it could not.
+Future<void> openCalendarWithFeedback(
+  BuildContext context,
+  WidgetRef ref,
+  DateTime at, {
+  String message =
+      "Couldn't open your calendar app. Open it yourself to see your day.",
+}) async {
+  var ok = false;
+  try {
+    ok = await ref.read(openCalendarProvider)(at);
+  } on Object {
+    ok = false;
+  }
   if (!ok && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+/// Re-reads every connector. Says so when that failed, instead of a silent
+/// button.
+Future<void> retryConnectorSync(BuildContext context, WidgetRef ref) async {
+  try {
+    final hub = await ref.read(connectorHubProvider.future);
+    await hub.sync.refresh();
+  } on Object {
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text(
-          "Couldn't open your calendar app. Open it yourself to see this event.",
-        ),
+        content: Text("Couldn't read your calendar just now. Try again soon."),
       ),
     );
   }

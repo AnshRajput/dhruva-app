@@ -91,7 +91,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               icon: Icons.wb_sunny_outlined,
               title: 'Morning brief',
               subtitle:
-                  'A daily nudge to read your brief. It only says "$morningBriefBody", '
+                  'A daily nudge to read your brief. It only says “$morningBriefBody”, '
                   'never anything from your calendar or messages.',
               value: briefOn,
               onChanged: _setBrief,
