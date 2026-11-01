@@ -4,7 +4,9 @@
 // and the opt-in AI-news digest (load / empty / error).
 
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/di/speed_providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/data/benchmark/speed_result.dart';
 import 'package:dhruva/data/downloads/storage_manager.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/playground/state/playground_controller.dart';
@@ -81,7 +83,8 @@ void main() {
       expect(find.textContaining('Llama-3.2-1B-Instruct'), findsWidgets);
       expect(find.textContaining('Qwen2.5-1.5B-Instruct'), findsWidgets);
       expect(find.text('Run on both'), findsOneWidget);
-      expect(find.text('Temperature'), findsOneWidget);
+      expect(find.text('Creativity'), findsOneWidget);
+      expect(find.text('Temperature'), findsNothing);
       expect(find.byType(Slider), findsNWidgets(3));
       // No winner badge before a run.
       expect(find.text('Fastest'), findsNothing);
@@ -252,9 +255,8 @@ void main() {
   });
 
   group('Playground empty states', () {
-    testWidgets('zero models: shows a labelled A/B preview + Browse CTA', (
-      tester,
-    ) async {
+    testWidgets('zero models: an example labelled as such, no invented '
+        'numbers, plus the Browse CTA', (tester) async {
       await _pump(
         tester,
         overrides: [
@@ -262,21 +264,57 @@ void main() {
           hf(MockClient((_) async => http.Response('[]', 200))),
         ],
       );
-      expect(find.textContaining('Install two GGUF models'), findsOneWidget);
-      // The payoff is SHOWN, not just described: a labelled two-column preview
-      // with example replies and a "Fastest" verdict on one column.
-      expect(find.text('PREVIEW'), findsOneWidget);
-      expect(find.text('Llama 3.2 1B'), findsOneWidget);
-      expect(find.text('Qwen2.5 1.5B'), findsOneWidget);
-      expect(find.text('Fastest'), findsOneWidget);
+      expect(find.textContaining('Install two models'), findsOneWidget);
+      expect(find.textContaining('GGUF'), findsNothing);
+      // D4: the payoff is shown, but only as an EXAMPLE: no model names the
+      // user lacks, no speeds, no "Fastest" verdict.
+      expect(find.text('EXAMPLE'), findsOneWidget);
+      expect(find.text('PREVIEW'), findsNothing);
+      expect(find.text('Example reply · not measured'), findsNWidgets(2));
+      expect(find.text('Llama 3.2 1B'), findsNothing);
+      expect(find.text('Qwen2.5 1.5B'), findsNothing);
+      expect(find.text('Fastest'), findsNothing);
+      expect(find.textContaining('tok/s'), findsNothing);
       expect(
         find.textContaining('Gravity is an invisible pull'),
         findsOneWidget,
       );
       expect(find.text('Browse models'), findsOneWidget);
+      expect(find.text('A / B'), findsNothing);
     });
 
-    testWidgets('one model prompts to add one more, still with the preview', (
+    testWidgets('one model: shows ITS measured speed from the speed test', (
+      tester,
+    ) async {
+      final model = twoModels.first;
+      await _pump(
+        tester,
+        overrides: [
+          installed([model]),
+          hf(MockClient((_) async => http.Response('[]', 200))),
+          speedResultsProvider.overrideWith(
+            () => _FakeSpeedResults({
+              speedKey(model.repoId, model.fileName): SpeedResult(
+                decodeTps: 17.4,
+                prefillTps: 80,
+                loadMs: 900,
+                measuredAt: DateTime.utc(2026, 11, 1),
+                appVersion: '0.7.0',
+              ),
+            }),
+          ),
+        ],
+      );
+      expect(find.textContaining('one more'), findsOneWidget);
+      expect(find.text('MEASURED ON YOUR PHONE'), findsOneWidget);
+      expect(find.text('17 tok/s'), findsOneWidget);
+      // The example never shows a number of its own.
+      expect(find.textContaining('tok/s'), findsOneWidget);
+      expect(find.text('EXAMPLE'), findsOneWidget);
+      expect(find.text('Browse models'), findsOneWidget);
+    });
+
+    testWidgets('one model with no speed test yet: no measured section', (
       tester,
     ) async {
       await _pump(
@@ -286,9 +324,8 @@ void main() {
           hf(MockClient((_) async => http.Response('[]', 200))),
         ],
       );
-      expect(find.textContaining('one more'), findsOneWidget);
-      expect(find.text('PREVIEW'), findsOneWidget);
-      expect(find.text('Browse models'), findsOneWidget);
+      expect(find.text('MEASURED ON YOUR PHONE'), findsNothing);
+      expect(find.textContaining('tok/s'), findsNothing);
     });
   });
 
@@ -374,4 +411,12 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
     });
   });
+}
+
+class _FakeSpeedResults extends SpeedResultsNotifier {
+  final Map<String, SpeedResult> results;
+  _FakeSpeedResults(this.results);
+
+  @override
+  Future<Map<String, SpeedResult>> build() async => results;
 }

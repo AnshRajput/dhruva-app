@@ -13,6 +13,7 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../data/models/starter_catalog.dart';
 import '../state/downloads_controller.dart';
 import '../state/storage_controller.dart';
@@ -293,7 +294,11 @@ class _CompletedSection extends ConsumerWidget {
                           friendlyModelName(m.repoId),
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(m.quant ?? m.fileName),
+                        subtitle: Text(
+                          m.quant == null
+                              ? m.fileName
+                              : plainQuantName(m.quant),
+                        ),
                       ),
                     )
                     .toList(),

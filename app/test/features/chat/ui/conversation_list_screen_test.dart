@@ -58,6 +58,14 @@ void main() {
           path: '/models/hub',
           builder: (context, state) => const Text('models hub'),
         ),
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const Text('actions stand-in'),
+        ),
+        GoRoute(
+          path: '/personas',
+          builder: (context, state) => const Text('personas stand-in'),
+        ),
       ],
     );
     return ProviderScope(
@@ -210,4 +218,48 @@ void main() {
       expect(find.text('thread:$id'), findsOneWidget);
     },
   );
+
+  testWidgets('Actions and Personas are labelled entry points, not bare '
+      'icons, and still carry tooltips', (tester) async {
+    await insertModel();
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Visible text labels (a chip's label is real text, not just a tooltip).
+    final actions = find.widgetWithText(ActionChip, 'Actions');
+    final personas = find.widgetWithText(ActionChip, 'Personas');
+    expect(actions, findsOneWidget);
+    expect(personas, findsOneWidget);
+    expect(find.byTooltip('Actions'), findsOneWidget);
+    expect(find.byTooltip('Personas'), findsOneWidget);
+    // The old icon-only app-bar buttons are gone.
+    expect(
+      find.widgetWithIcon(IconButton, Icons.auto_awesome_outlined),
+      findsNothing,
+    );
+    expect(
+      find.widgetWithIcon(IconButton, Icons.theater_comedy_outlined),
+      findsNothing,
+    );
+
+    await tester.tap(personas);
+    await tester.pumpAndSettle();
+    expect(find.text('personas stand-in'), findsOneWidget);
+  });
+
+  testWidgets('the entry points also show on a narrow phone with big text', (
+    tester,
+  ) async {
+    await insertModel();
+    await tester.binding.setSurfaceSize(const Size(300, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.widgetWithText(ActionChip, 'Actions'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Personas'), findsOneWidget);
+  });
 }

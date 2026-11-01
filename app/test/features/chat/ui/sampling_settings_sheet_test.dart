@@ -37,6 +37,11 @@ void main() {
   });
 
   Future<void> pumpSheet(WidgetTester tester) async {
+    // A phone-sized surface: the plain-language sheet is taller than the
+    // default 800x600 test view.
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await container.read(chatControllerProvider(args).future);
     // chatControllerProvider is autoDispose (B1) — in the real app it's
     // kept alive by the ChatThreadScreen's own `ref.watch`, which stays
@@ -69,13 +74,38 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('uses plain language and keeps Top-P / Top-K under Advanced', (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+
+    expect(find.text('Chat settings'), findsOneWidget);
+    expect(find.text('Instructions for this chat'), findsOneWidget);
+    expect(find.text('Creativity'), findsOneWidget);
+    expect(find.text('Answer length'), findsOneWidget);
+    expect(find.text('Memory for this chat'), findsOneWidget);
+    // Jargon labels are gone from the main surface.
+    expect(find.text('Temperature'), findsNothing);
+    expect(find.text('Max tokens'), findsNothing);
+    expect(find.text('Context length'), findsNothing);
+    expect(find.text('System prompt & sampling'), findsNothing);
+    // Top-P / Top-K only appear once Advanced is opened.
+    expect(find.text('Top-P'), findsNothing);
+    expect(find.text('Top-K'), findsNothing);
+    await tester.ensureVisible(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(find.text('Top-P'), findsOneWidget);
+    expect(find.text('Top-K'), findsOneWidget);
+  });
+
   testWidgets('shows default SamplingParams values', (tester) async {
     await pumpSheet(tester);
 
-    expect(find.text('Temperature'), findsOneWidget);
-    expect(find.text('0.80'), findsOneWidget);
-    expect(find.text('40'), findsOneWidget); // Top-K default
-    expect(find.text('512'), findsOneWidget); // Max tokens default
+    expect(find.text('0.80'), findsOneWidget); // Creativity default
+    expect(find.text('512'), findsOneWidget); // Answer length default
+    expect(find.text('4096'), findsOneWidget); // Memory default
   });
 
   testWidgets('reset restores defaults after a drag', (tester) async {

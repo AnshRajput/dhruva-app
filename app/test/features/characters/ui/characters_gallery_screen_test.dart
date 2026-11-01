@@ -101,6 +101,12 @@ void main() {
 
     expect(find.text('No personas yet'), findsOneWidget);
     expect(find.text('Create a persona'), findsOneWidget);
+    // D8: exactly one Create CTA (the FAB only shows once there is a grid).
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Create'), findsNothing);
+    await tester.tap(find.text('Create a persona'));
+    await tester.pumpAndSettle();
+    expect(find.text('new character form'), findsOneWidget);
   });
 
   testWidgets('the "+ Create" FAB navigates to /characters/new', (

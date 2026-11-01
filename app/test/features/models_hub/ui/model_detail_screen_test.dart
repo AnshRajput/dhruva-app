@@ -1,7 +1,7 @@
 // Model detail screen (reworked): the PRIMARY flow is one prominent
 // "Recommended download" card (device-appropriate default quant + verdict +
 // one big Download button); the full per-quant list lives in a COLLAPSED
-// "All quantizations (advanced)" section. License/gated status is still shown
+// "Other versions (advanced)" section. License/gated status is still shown
 // first, and a gated repo blocks the download affordance with an explanation.
 // AppTheme.dark is supplied — the verdict chip / "May be slow" note need
 // DhruvaTokens.
@@ -101,8 +101,8 @@ void main() {
 
       // The advanced list is still offered (collapsed); expanding it shows the
       // per-quant blocking explanation instead of a working button.
-      expect(find.text('All quantizations (advanced)'), findsOneWidget);
-      await tester.tap(find.text('All quantizations (advanced)'));
+      expect(find.text('Other versions (advanced)'), findsOneWidget);
+      await tester.tap(find.text('Other versions (advanced)'));
       await tester.pumpAndSettle();
       expect(
         find.text('Requires Hugging Face sign-in — not supported yet'),
@@ -136,16 +136,74 @@ void main() {
       // the advanced list is collapsed (its buttons aren't built yet).
       expect(find.text('Recommended download'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
-      expect(find.text('All quantizations (advanced)'), findsOneWidget);
+      expect(find.text('Other versions (advanced)'), findsOneWidget);
 
       // SECONDARY: expand → the full per-quant list appears, so now there are
       // several Download buttons.
-      await tester.tap(find.text('All quantizations (advanced)'));
+      await tester.tap(find.text('Other versions (advanced)'));
       await tester.pumpAndSettle();
       expect(
         find.widgetWithText(FilledButton, 'Download').evaluate().length,
         greaterThan(1),
       );
+    },
+  );
+
+  testWidgets(
+    'D5/D6: human name as title, repo id as caption, the download before the '
+    'license, and no quant jargon until Advanced is opened',
+    (tester) async {
+      await _pump(
+        tester,
+        repoId: 'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+        responder: (request) {
+          if (request.url.path.endsWith('/tree/main')) {
+            return http.Response(_fixture('repo_tree.json'), 200);
+          }
+          if (request.url.path.endsWith('/mmproj')) {
+            return http.Response(_fixture('mmproj_tree.json'), 200);
+          }
+          return http.Response(_fixture('model_info_open.json'), 200);
+        },
+      );
+
+      // Title is the human name (AppBar) and again as the headline; the raw
+      // repo id is only a caption.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Qwen2.5-1.5B-Instruct'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('bartowski/Qwen2.5-1.5B-Instruct-GGUF'), findsOneWidget);
+      expect(find.byKey(const ValueKey('repo-id-caption')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.textContaining('bartowski'),
+        ),
+        findsNothing,
+      );
+
+      // CTA first, license after it.
+      final download = tester.getTopLeft(
+        find.widgetWithText(FilledButton, 'Download'),
+      );
+      final license = tester.getTopLeft(find.text('License & access'));
+      expect(download.dy, lessThan(license.dy));
+
+      // Jargon stays out of the primary path.
+      expect(find.textContaining('Q4_K_M'), findsNothing);
+      expect(find.textContaining('quantization'), findsNothing);
+      // (the only "GGUF" left is the repo id caption itself)
+      expect(find.textContaining('GGUF'), findsOneWidget);
+      expect(find.textContaining('Balanced'), findsWidgets);
+
+      // ...and shows up inside Advanced.
+      await tester.tap(find.text('Other versions (advanced)'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Q4_K_M'), findsWidgets);
     },
   );
 

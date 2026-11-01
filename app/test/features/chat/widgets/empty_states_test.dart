@@ -51,6 +51,7 @@ void main() {
   testWidgets(
     'SuggestedPrompts tapping a starter fires onSelect with its text',
     (tester) async {
+      _tall(tester);
       String? selected;
       await tester.pumpWidget(
         MaterialApp(
@@ -59,7 +60,7 @@ void main() {
         ),
       );
 
-      expect(find.text('SUGGESTED'), findsOneWidget);
+      expect(find.text('What can I ask?'), findsOneWidget);
       final first = SuggestedPrompts.prompts.first.text;
       expect(find.text(first), findsOneWidget);
       await tester.tap(find.text(first));
@@ -70,6 +71,7 @@ void main() {
   testWidgets(
     'SuggestedPrompts vision hint routes to library when no vision model',
     (tester) async {
+      _tall(tester);
       var getVision = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -93,6 +95,7 @@ void main() {
   testWidgets('SuggestedPrompts vision hint offers to switch when installed', (
     tester,
   ) async {
+    _tall(tester);
     var switched = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -117,6 +120,7 @@ void main() {
   testWidgets(
     'SuggestedPrompts vision hint points at attach button when multimodal',
     (tester) async {
+      _tall(tester);
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.dark,
@@ -136,4 +140,61 @@ void main() {
       );
     },
   );
+
+  testWidgets('What can I ask? offers 4-6 starters across writing, '
+      'summarizing, planning and explaining, plus a connect hint', (
+    tester,
+  ) async {
+    _tall(tester);
+    var connect = 0;
+    final picked = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: SuggestedPrompts(
+            onSelect: picked.add,
+            onOpenConnect: () => connect++,
+          ),
+        ),
+      ),
+    );
+
+    expect(SuggestedPrompts.prompts.length, inInclusiveRange(4, 6));
+    for (final topic in ['Writing', 'Summarizing', 'Planning', 'Explaining']) {
+      expect(find.text(topic), findsWidgets, reason: topic);
+    }
+    for (final p in SuggestedPrompts.prompts) {
+      expect(find.text(p.text), findsOneWidget);
+    }
+    // Hint: connecting calendar / folder unlocks more; it is tappable.
+    final hint = find.byKey(const ValueKey('connect-hint'));
+    expect(hint, findsOneWidget);
+    expect(find.textContaining('calendar or a folder'), findsOneWidget);
+    await tester.tap(hint);
+    expect(connect, 1);
+    // Nothing is sent until the user taps a starter.
+    expect(picked, isEmpty);
+  });
+
+  testWidgets('the connect hint is plain text when nothing can open yet', (
+    tester,
+  ) async {
+    _tall(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(body: SuggestedPrompts(onSelect: (_) {})),
+      ),
+    );
+    expect(find.textContaining('calendar or a folder'), findsOneWidget);
+  });
+}
+
+/// A phone-sized surface: the starters + hints are taller than the default
+/// 800x600 test view.
+void _tall(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 1800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
 }

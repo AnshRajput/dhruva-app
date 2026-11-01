@@ -286,7 +286,7 @@ final class LlamaEngineService implements EngineService {
       );
       final r = await ready.future.timeout(
         loadTimeout,
-        onTimeout: () => throw EngineLoadFailure(
+        onTimeout: () => throw EngineLoadTimeoutFailure(
           'model load timed out after ${loadTimeout.inSeconds}s '
           '(worker never signalled ready)',
         ),

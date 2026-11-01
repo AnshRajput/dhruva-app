@@ -117,16 +117,6 @@ class _ConversationListScreenState
             icon: const Icon(Icons.record_voice_over_outlined, size: 18),
             label: const Text('Talk'),
           ),
-          IconButton(
-            tooltip: 'Personas',
-            onPressed: () => context.push('/personas'),
-            icon: const Icon(Icons.theater_comedy_outlined),
-          ),
-          IconButton(
-            tooltip: 'Actions',
-            onPressed: () => context.push('/actions'),
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
           SizedBox(width: tokens.spacing.xs),
         ],
       ),
@@ -215,6 +205,7 @@ class _ConversationBody extends ConsumerWidget {
           ),
           const ShorebirdUpdateBanner(),
           const CrashReportBanner(),
+          const AskEntryPoints(),
           const WorkflowStrip(),
           Expanded(
             child: state.conversations.isEmpty
@@ -260,6 +251,44 @@ class _ConversationBody extends ConsumerWidget {
           .read(conversationListControllerProvider.notifier)
           .createFolder(name);
     }
+  }
+}
+
+/// Labelled doors to the two things that used to hide behind icon-only
+/// buttons: Actions (one-tap text jobs) and Personas (ready-made assistants).
+/// Text labels always; the tooltip carries the one-line explanation.
+class AskEntryPoints extends StatelessWidget {
+  const AskEntryPoints({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.md,
+        tokens.spacing.xs,
+        tokens.spacing.md,
+        0,
+      ),
+      child: Wrap(
+        spacing: tokens.spacing.sm,
+        runSpacing: tokens.spacing.xs,
+        children: [
+          ActionChip(
+            tooltip: 'Actions',
+            avatar: const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: const Text('Actions'),
+            onPressed: () => context.push('/actions'),
+          ),
+          ActionChip(
+            tooltip: 'Personas',
+            avatar: const Icon(Icons.theater_comedy_outlined, size: 18),
+            label: const Text('Personas'),
+            onPressed: () => context.push('/personas'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

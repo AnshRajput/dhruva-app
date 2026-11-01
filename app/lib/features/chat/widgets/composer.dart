@@ -22,6 +22,7 @@
 /// For a text-only model the button opens the document picker directly.
 library;
 
+import 'dart:async' show unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -31,6 +32,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
@@ -113,8 +115,8 @@ class _ComposerState extends ConsumerState<Composer> {
 
   Future<void> _submit() async {
     if (widget.isGenerating || (!_hasText && _attachedImage == null)) return;
-    final gate = widget.beforeSend;
-    if (gate != null && !(await gate()) || !mounted) return;
+    // D3: the input clears the instant send is tapped (not after the battery
+    // check or the model load); a declined check puts the draft back.
     final text = _controller.text;
     final image = _attachedImage;
     _controller.clear();
@@ -122,6 +124,13 @@ class _ComposerState extends ConsumerState<Composer> {
       _hasText = false;
       _attachedImage = null;
     });
+    final gate = widget.beforeSend;
+    if (gate != null && !(await gate())) {
+      if (!mounted) return;
+      _controller.text = text;
+      setState(() => _attachedImage = image);
+      return;
+    }
     widget.onSend(text, image);
   }
 
@@ -244,10 +253,14 @@ class _ComposerState extends ConsumerState<Composer> {
 
   void _onPermissionDenied() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Microphone access is required for voice input — enable it in '
-          "your device's app settings.",
+      SnackBar(
+        content: const Text(
+          'Microphone access is off, so voice input cannot '
+          'hear you.',
+        ),
+        action: SnackBarAction(
+          label: 'Open settings',
+          onPressed: () => unawaited(ref.read(openAppSettingsProvider)()),
         ),
       ),
     );
@@ -298,7 +311,7 @@ class _ComposerState extends ConsumerState<Composer> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   IconButton(
-                    tooltip: 'System prompt & sampling',
+                    tooltip: 'Chat settings',
                     icon: const Icon(Icons.tune),
                     onPressed: widget.onOpenSettings,
                   ),

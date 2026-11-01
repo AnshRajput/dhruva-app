@@ -105,8 +105,12 @@ class SuggestedPrompts extends StatelessWidget {
   /// Opens the model picker to switch to an already-installed vision model.
   final VoidCallback? onSwitchModel;
 
-  /// Opens the Workflows screen. Null omits the "Try a workflow" link.
+  /// Opens the Actions screen. Null omits the "Try an action" link.
   final VoidCallback? onOpenWorkflows;
+
+  /// Opens Settings > Connectors. Null renders the "connect your calendar or
+  /// a folder" hint as plain text (nothing to tap yet).
+  final VoidCallback? onOpenConnect;
 
   const SuggestedPrompts({
     super.key,
@@ -116,22 +120,45 @@ class SuggestedPrompts extends StatelessWidget {
     this.onGetVisionModel,
     this.onSwitchModel,
     this.onOpenWorkflows,
+    this.onOpenConnect,
   });
 
-  /// General-purpose, model-agnostic starters. Kept short and concrete so a
-  /// small on-device model gives a satisfying first answer. First entry
-  /// mirrors the website chat mockup verbatim.
+  /// Starters that work with no setup on a fully offline model: one or two
+  /// each for writing, summarizing, planning and explaining. Short and
+  /// concrete so a small on-device model gives a satisfying first answer.
+  /// The first entry mirrors the website chat mockup verbatim.
   static const prompts = <_Starter>[
     _Starter(
-      Icons.code_rounded,
-      'Explain a stack in one line, then show a Dart example.',
+      Icons.auto_stories_outlined,
+      'Writing',
+      'Write a haiku about the ocean.',
     ),
-    _Starter(Icons.auto_stories_outlined, 'Write a haiku about the ocean.'),
+    _Starter(
+      Icons.edit_note_rounded,
+      'Writing',
+      'Write a short, friendly message thanking my neighbour for watering my '
+          'plants.',
+    ),
+    _Starter(
+      Icons.short_text_rounded,
+      'Summarizing',
+      'Summarize the story of Romeo and Juliet in 3 bullet points.',
+    ),
+    _Starter(
+      Icons.checklist_rounded,
+      'Planning',
+      'Plan a simple 3-day study schedule for an exam on Friday.',
+    ),
     _Starter(
       Icons.restaurant_outlined,
+      'Planning',
       'Give me 3 quick dinner ideas with chicken.',
     ),
-    _Starter(Icons.lightbulb_outline, 'Explain how a rainbow forms, simply.'),
+    _Starter(
+      Icons.lightbulb_outline,
+      'Explaining',
+      'Explain how a rainbow forms, simply.',
+    ),
   ];
 
   @override
@@ -147,28 +174,20 @@ class SuggestedPrompts extends StatelessWidget {
           Center(child: DhruvaStar(size: 64, color: theme.colorScheme.primary)),
           SizedBox(height: tokens.spacing.md),
           Text(
-            'Ready when you are',
+            'What can I ask?',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
           SizedBox(height: tokens.spacing.xs),
           Text(
-            'Ask anything, or tap a prompt to start.',
+            'Tap one to try it, or type your own. It all works with no '
+            'internet.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           SizedBox(height: tokens.spacing.lg),
-          Text(
-            'SUGGESTED',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.sm),
           for (final starter in prompts) ...[
             _StarterCard(starter: starter, onTap: () => onSelect(starter.text)),
             SizedBox(height: tokens.spacing.sm),
@@ -176,9 +195,17 @@ class SuggestedPrompts extends StatelessWidget {
           if (onOpenWorkflows != null)
             _TextLink(
               icon: Icons.auto_awesome_outlined,
-              text: 'Try a workflow: summarize, translate, rewrite',
+              text: 'Try an action: summarize, translate, rewrite',
               onTap: onOpenWorkflows,
             ),
+          _TextLink(
+            key: const ValueKey('connect-hint'),
+            icon: Icons.calendar_today_outlined,
+            text:
+                'Connect your calendar or a folder to ask about your day and '
+                'your files.',
+            onTap: onOpenConnect,
+          ),
           if (_visionHint case final hint?) ...[
             SizedBox(height: tokens.spacing.xs),
             hint,
@@ -272,7 +299,12 @@ class _TextLink extends StatelessWidget {
   final IconData icon;
   final String text;
   final VoidCallback? onTap;
-  const _TextLink({required this.icon, required this.text, this.onTap});
+  const _TextLink({
+    super.key,
+    required this.icon,
+    required this.text,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -297,12 +329,14 @@ class _TextLink extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(width: tokens.spacing.xs),
-            Icon(
-              Icons.arrow_forward,
-              size: 14,
-              color: theme.colorScheme.secondary,
-            ),
+            if (onTap != null) ...[
+              SizedBox(width: tokens.spacing.xs),
+              Icon(
+                Icons.arrow_forward,
+                size: 14,
+                color: theme.colorScheme.secondary,
+              ),
+            ],
           ],
         ),
       ),
@@ -312,8 +346,11 @@ class _TextLink extends StatelessWidget {
 
 class _Starter {
   final IconData icon;
+
+  /// Writing / Summarizing / Planning / Explaining.
+  final String topic;
   final String text;
-  const _Starter(this.icon, this.text);
+  const _Starter(this.icon, this.topic, this.text);
 }
 
 class _StarterCard extends StatelessWidget {
@@ -338,11 +375,22 @@ class _StarterCard extends StatelessWidget {
               Icon(starter.icon, size: 18, color: theme.colorScheme.primary),
               SizedBox(width: tokens.spacing.sm),
               Expanded(
-                child: Text(
-                  starter.text,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      starter.topic,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      starter.text,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               SizedBox(width: tokens.spacing.xs),

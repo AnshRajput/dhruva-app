@@ -210,4 +210,51 @@ void main() {
       expect(find.text('Larger models'), findsOneWidget);
     },
   );
+
+  group('D12 Recommended pill', () {
+    Future<void> pumpWith(
+      WidgetTester tester,
+      ListingDownloadController Function() controller,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(500, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+            listingDownloadControllerProvider.overrideWith(controller),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: const Scaffold(body: CuratedTab()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shown while the recommended model is not installed', (
+      tester,
+    ) async {
+      await pumpWith(tester, _StubController.new);
+      expect(find.text('Recommended'), findsOneWidget);
+    });
+
+    testWidgets('hidden once that model is installed', (tester) async {
+      await pumpWith(tester, _AllInstalledController.new);
+      expect(find.text('Recommended'), findsNothing);
+    });
+  });
+}
+
+/// Every catalog model reads as installed (so whichever is recommended is).
+class _AllInstalledController extends ListingDownloadController {
+  @override
+  Future<Map<String, ListingModelState>> build() async => {
+    for (final m in starterModelCatalog)
+      m.repoId: const ListingModelState(
+        status: ListingModelStatus.installed,
+        installedId: 1,
+      ),
+  };
 }

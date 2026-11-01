@@ -26,6 +26,7 @@ import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../voice/voice_model_catalog.dart'
     show VoiceModelRole, voiceBundleEntries;
 import '../state/recommended_models_provider.dart';
@@ -286,10 +287,16 @@ class _InstalledBody extends ConsumerWidget {
       onRefresh: () => ref.read(storageControllerProvider.notifier).refresh(),
       child: ListView(
         children: [
+          // D11: a Wrap, not a Row, so on a narrow phone (or a big text scale)
+          // the "N installed" line and the Import button stack with a
+          // 16 px gutter instead of colliding.
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 8,
               children: [
                 Text(
                   '${state.installed.length} installed · '
@@ -297,7 +304,7 @@ class _InstalledBody extends ConsumerWidget {
                 ),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('Import .gguf file'),
+                  label: const Text('Import a model file'),
                   onPressed: state.importingName != null
                       ? null
                       : () => _importFile(context, ref),
@@ -349,7 +356,7 @@ class _InstalledBody extends ConsumerWidget {
               child: EmptyStateView(
                 message:
                     'No models installed yet. Pick one from Discover or import '
-                    'a local GGUF.',
+                    'a model file from your phone.',
                 icon: Icons.folder_open,
               ),
             )
@@ -368,7 +375,7 @@ class _InstalledBody extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${m.quant ?? m.fileName} · ${_formatBytes(m.sizeBytes)}',
+                      '${plainQuantName(m.quant)} · ${_formatBytes(m.sizeBytes)}',
                     ),
                     SpeedTestRow(model: m),
                   ],
