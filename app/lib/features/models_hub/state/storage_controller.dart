@@ -11,8 +11,10 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
+import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/local_import.dart';
 import '../../../data/downloads/storage_manager.dart';
+import 'speed_test_controller.dart';
 
 final class StorageState {
   final List<InstalledModelInfo> installed;
@@ -111,7 +113,7 @@ class StorageController extends AsyncNotifier<StorageState> {
       final storage = await ref
           .read(deviceInfoServiceProvider)
           .getStorageInfo();
-      await importLocalGguf(
+      final imported = await importLocalGguf(
         sourceFile: sourceFile,
         modelsDirectory: modelsDirectory,
         db: db,
@@ -126,6 +128,9 @@ class StorageController extends AsyncNotifier<StorageState> {
         },
       );
       state = await AsyncValue.guard(_load);
+      ref
+          .read(speedTestOfferProvider.notifier)
+          .offer(speedKey(imported.repoId, imported.fileName));
     } on ImportCancelled {
       state = await AsyncValue.guard(_load);
     } on AppFailure catch (e) {

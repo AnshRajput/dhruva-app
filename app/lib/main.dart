@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/crash/crash_log.dart';
+import 'core/di/speed_providers.dart';
 import 'core/intents/intent_inbox.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -27,7 +28,10 @@ Future<void> main() async {
   final crashLog = CrashLog(appVersion: appVersion, appBuild: appBuildNumber)
     ..install();
   final container = ProviderContainer(
-    overrides: [crashLogProvider.overrideWithValue(crashLog)],
+    overrides: [
+      crashLogProvider.overrideWithValue(crashLog),
+      appVersionProvider.overrideWithValue(appVersion),
+    ],
   );
   try {
     final done = await container.read(onboardingCompleteProvider.future);

@@ -29,9 +29,11 @@ import '../../../data/downloads/storage_manager.dart';
 import '../../../voice/voice_model_catalog.dart'
     show VoiceModelRole, voiceBundleEntries;
 import '../state/recommended_models_provider.dart';
+import '../state/speed_test_controller.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
 import '../widgets/curated_tab.dart';
+import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
 
 class ModelsHubScreen extends StatelessWidget {
@@ -303,6 +305,24 @@ class _InstalledBody extends ConsumerWidget {
               ],
             ),
           ),
+          if (state.installed.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.bolt),
+                  label: const Text('Test all speeds'),
+                  onPressed: ref.watch(speedTestControllerProvider).active
+                      ? null
+                      : () => ref
+                            .read(speedTestControllerProvider.notifier)
+                            .run(state.installed),
+                ),
+              ),
+            ),
+          const SpeedTestStatusBar(),
+          SpeedTestOfferBanner(installed: state.installed),
           if (state.importingName != null)
             _ImportProgress(
               name: state.importingName!,
@@ -344,8 +364,14 @@ class _InstalledBody extends ConsumerWidget {
                   friendlyModelName(m.repoId),
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(
-                  '${m.quant ?? m.fileName} · ${_formatBytes(m.sizeBytes)}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${m.quant ?? m.fileName} · ${_formatBytes(m.sizeBytes)}',
+                    ),
+                    SpeedTestRow(model: m),
+                  ],
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,

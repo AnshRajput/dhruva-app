@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
 import '../../../core/di/providers.dart';
+import '../../../core/di/speed_providers.dart';
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
@@ -288,7 +289,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// flush-timer). This flag is set synchronously at the entry of every
   /// generation path BEFORE the first `await`, checked by all of them, and
   /// cleared on every exit path — so exactly one turn is ever in flight.
-  bool _turnInFlight = false;
+  bool get _turnInFlight => _turnInFlightFlag;
+  set _turnInFlight(bool value) {
+    if (value == _turnInFlightFlag) return;
+    _turnInFlightFlag = value;
+    // Mirror into the app-wide engine lease so a speed test never starts
+    // while a turn is in flight.
+    value ? _lease.chatEnter() : _lease.chatLeave();
+  }
+
+  bool _turnInFlightFlag = false;
+
+  /// Captured in [build] (a plain object, safe to use after provider disposal).
+  late EngineLease _lease;
 
   /// Set when the streamed reply tripped [SafetyGuard.blocks]: further
   /// tokens are dropped and the reply is replaced by the notice.
@@ -304,6 +317,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   @override
   Future<ChatThreadState> build() async {
+    _lease = ref.read(engineLeaseProvider);
     ref.onDispose(() {
       unawaited(_genSub?.cancel());
       _flushTimer?.cancel();
@@ -435,14 +449,28 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// [_loadInFlight]) so a second call can never start a second
   /// `engine.load()`/isolate while the first is still awaiting.
   Future<void> ensureModelLoaded() {
-    return _loadInFlight ??= _ensureModelLoaded().whenComplete(() {
-      _loadInFlight = null;
-    });
+    return _loadInFlight ??= () {
+      _lease.chatEnter();
+      return _ensureModelLoaded().whenComplete(() {
+        _loadInFlight = null;
+        _lease.chatLeave();
+      });
+    }();
   }
 
   Future<void> _ensureModelLoaded() async {
     final current = state.value;
     if (current == null || current.modelId == null || current.isGenerating) {
+      return;
+    }
+    // A speed test owns the engine (it swaps the loaded model): don't load or
+    // generate underneath it. Surfaces as the "model is busy" error card.
+    if (_lease.speedTestRunning) {
+      state = AsyncData(
+        current.copyWith(
+          modelLoadError: const EngineStateFailure('a speed test is running'),
+        ),
+      );
       return;
     }
     final engine = ref.read(engineServiceProvider);
