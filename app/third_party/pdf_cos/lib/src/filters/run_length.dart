@@ -13,7 +13,8 @@ class RunLengthFilter extends CosFilter {
   @override
   Uint8List decode(Uint8List data, CosDictionary? params, DecodeBudget budget) {
     final stage = budget.stage(); // dhruva: bounded decode
-    final out = BytesBuilder(copy: false);
+    // dhruva: bounded decode - one growing buffer; never one object per run.
+    final out = DecodeBuffer(stage, expected: data.length);
     var i = 0;
     while (i < data.length) {
       final length = data[i++];
@@ -22,12 +23,12 @@ class RunLengthFilter extends CosFilter {
         final count = length + 1;
         stage.add(count); // dhruva: bounded decode
         final end = i + count > data.length ? data.length : i + count;
-        out.add(Uint8List.sublistView(data, i, end));
+        out.addRange(data, i, end);
         i = end;
       } else {
         if (i >= data.length) break;
         stage.add(257 - length); // dhruva: bounded decode
-        out.add(Uint8List(257 - length)..fillRange(0, 257 - length, data[i]));
+        out.fill(data[i], 257 - length);
         i++;
       }
     }

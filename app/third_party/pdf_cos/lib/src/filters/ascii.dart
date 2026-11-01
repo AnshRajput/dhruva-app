@@ -12,8 +12,8 @@ class AsciiHexFilter extends CosFilter {
   @override
   Uint8List decode(Uint8List data, CosDictionary? params, DecodeBudget budget) {
     final stage = budget.stage(); // dhruva: bounded decode
+    final out = DecodeBuffer(stage, expected: (data.length + 1) >> 1);
     stage.add((data.length + 1) >> 1); // never more than 1 byte per 2 digits
-    final out = BytesBuilder();
     int? pending;
     for (final b in data) {
       if (b == 0x3E) break; // > terminator
@@ -40,7 +40,8 @@ class Ascii85Filter extends CosFilter {
   @override
   Uint8List decode(Uint8List data, CosDictionary? params, DecodeBudget budget) {
     final stage = budget.stage(); // dhruva: bounded decode
-    final out = BytesBuilder();
+    // dhruva: bounded decode - one growing buffer, five-digit group reused.
+    final out = DecodeBuffer(stage, expected: data.length);
     final group = <int>[];
     for (final b in data) {
       if (CosLexer.isWhitespace(b)) continue;
@@ -48,7 +49,7 @@ class Ascii85Filter extends CosFilter {
       if (b == 0x7A && group.isEmpty) {
         // z is shorthand for four zero bytes
         stage.add(4); // dhruva: bounded decode
-        out.add(const [0, 0, 0, 0]);
+        out.fill(0, 4);
         continue;
       }
       if (b < 0x21 || b > 0x75) {
@@ -75,17 +76,15 @@ class Ascii85Filter extends CosFilter {
     return out.takeBytes();
   }
 
-  void _emit(BytesBuilder out, List<int> group, int count) {
+  void _emit(DecodeBuffer out, List<int> group, int count) {
     var value = 0;
     for (final digit in group) {
       value = value * 85 + digit;
     }
-    final bytes = [
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ];
-    out.add(bytes.sublist(0, count));
+    // dhruva: bounded decode - written straight into the buffer (upstream
+    // allocated a list and a sublist per group).
+    for (var i = 0; i < count; i++) {
+      out.addByte((value >> (24 - 8 * i)) & 0xFF);
+    }
   }
 }

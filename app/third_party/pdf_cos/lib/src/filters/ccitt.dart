@@ -79,7 +79,16 @@ class CcittDecoder {
   /// rows produced so far are returned (padded to [rows] when set).
   Uint8List decode() {
     final rowBytes = (columns + 7) >> 3;
-    final out = BytesBuilder();
+    // dhruva: bounded decode - with a declared /Rows the result is allocated
+    // once (already charged) and rows are written in place; without it one
+    // growing buffer. One scratch row is reused, never one object per row.
+    final fixed = rows > 0
+        ? (Uint8List(rows * rowBytes)
+          ..fillRange(0, rows * rowBytes, blackIs1 ? 0x00 : 0xFF))
+        : null;
+    final grow =
+        fixed == null ? DecodeBuffer(stage ?? DecodeBudget().stage()) : null;
+    final scratch = Uint8List(rowBytes);
     // changing-element positions of the reference row; an imaginary
     // all-white row precedes the first one
     var reference = <int>[columns, columns];
@@ -110,28 +119,26 @@ class CcittDecoder {
       }
       if (current == null) break;
       stage?.add(rowBytes); // dhruva: bounded decode
-      out.add(_renderRow(current, rowBytes));
+      _renderRow(scratch, current, rowBytes);
+      if (fixed != null) {
+        fixed.setRange(decoded * rowBytes, (decoded + 1) * rowBytes, scratch);
+      } else {
+        grow!.addRange(scratch, 0, rowBytes);
+      }
       decoded++;
       reference = [...current, columns, columns];
     }
 
-    // honor a declared height even if the data fell short
-    final result = out.toBytes();
-    if (rows > 0 && decoded < rows) {
-      final padded = Uint8List(rows * rowBytes)
-        ..fillRange(0, rows * rowBytes, blackIs1 ? 0x00 : 0xFF)
-        ..setRange(0, result.length, result);
-      return padded;
-    }
-    return result;
+    // a declared height is honored even if the data fell short: the unwritten
+    // rows keep the blank fill
+    return fixed ?? grow!.takeBytes();
   }
 
   /// Renders transition positions (color changes, starting white) to
   /// packed bits. White is 1 under the default polarity (/BlackIs1 false
   /// means 0 bits are black).
-  Uint8List _renderRow(List<int> transitions, int rowBytes) {
-    final row = Uint8List(rowBytes);
-    if (!blackIs1) row.fillRange(0, rowBytes, 0xFF);
+  void _renderRow(Uint8List row, List<int> transitions, int rowBytes) {
+    row.fillRange(0, rowBytes, blackIs1 ? 0x00 : 0xFF);
     var position = 0;
     var white = true;
     for (final transition in transitions) {
@@ -145,7 +152,6 @@ class CcittDecoder {
       final pad = rowBytes * 8 - columns;
       if (pad > 0) row[rowBytes - 1] &= 0xFF << pad;
     }
-    return row;
   }
 
   /// Sets (or clears) bits `[start, end)` of a packed row. Whole interior
@@ -201,6 +207,9 @@ class CcittDecoder {
     var position = 0;
     var white = true;
     while (position < columns) {
+      // dhruva: bounded decode - a real row has at most columns + 2 changes;
+      // zero-length runs must not grow the list without limit.
+      if (transitions.length > columns + 4) throw const _CodingError();
       final run = _readRun(white: white);
       if (run == null) {
         if (transitions.isEmpty && position == 0) return null; // clean EOF
@@ -260,6 +269,8 @@ class CcittDecoder {
     }
 
     while (a0 < columns) {
+      // dhruva: bounded decode - see _decodeOneDRow.
+      if (transitions.length > columns + 4) throw const _CodingError();
       final mode = _readMode();
       if (mode == null) {
         if (transitions.isEmpty && a0 <= 0) return null; // clean EOF

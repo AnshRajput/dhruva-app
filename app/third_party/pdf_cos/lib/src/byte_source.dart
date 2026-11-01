@@ -184,13 +184,14 @@ Future<CosSourceOpenResult> openCosDocumentFromSourceWithStatus(
   PdfSourceLoadOptions options = const PdfSourceLoadOptions(),
 }) async {
   late final Uint8List buffer;
+  final budget = DecodeBudget(); // dhruva: bounded decode
   var isFirstPaintBuffer = false;
   // Null once a full download replaces the sparse buffer: those bytes are all
   // real, so the parser needs no hole map.
   List<int>? populated;
   final t0 = PdfPerf.begin();
   try {
-    final loader = _ProgressiveLoader(source, options);
+    final loader = _ProgressiveLoader(source, options, budget); // dhruva: bounded decode
     final loaded = await loader.load();
     buffer = loaded.bytes;
     isFirstPaintBuffer = loaded.isFirstPaintBuffer;
@@ -206,7 +207,10 @@ Future<CosSourceOpenResult> openCosDocumentFromSourceWithStatus(
   // which opens them again (see [cosSparseBufferRanges]).
   if (populated != null) cosSparseBufferRanges[buffer] = populated;
   return CosSourceOpenResult(
-    CosDocument.open(buffer, password: password, populatedRanges: populated),
+    CosDocument.open(buffer,
+        password: password,
+        populatedRanges: populated,
+        decodeBudget: budget),
     isFirstPaintBuffer: isFirstPaintBuffer,
   );
 }
@@ -256,7 +260,12 @@ Future<Uint8List> _downloadFully(
 /// objects' byte ranges are populated; free space and dead revisions are
 /// left as zeros the parser never reads.
 class _ProgressiveLoader {
-  _ProgressiveLoader(this.source, this.options);
+  _ProgressiveLoader(this.source, this.options, this.budget); // dhruva: bounded decode
+
+  /// dhruva: bounded decode - the document's budget; every decode this loader
+  /// does (xref streams, object streams) draws from it, and the document is
+  /// opened with the same one.
+  final DecodeBudget budget;
 
   final PdfByteSource source;
   final PdfSourceLoadOptions options;
@@ -439,7 +448,7 @@ class _ProgressiveLoader {
     // within the fetched window, otherwise part of it is still zero-filled.
     final bodyEnd = object.rawBytes.offsetInBytes + object.rawBytes.length;
     if (bodyEnd > limit) throw const _NeedMoreBytes();
-    final data = decodeStream(object);
+    final data = decodeStream(object, budget: budget); // dhruva: bounded decode
 
     final w = dict['W'];
     final size = dict['Size'];
@@ -597,7 +606,8 @@ class _ProgressiveLoader {
       int rawStartXref, int shift, List<int> sortedOffsets) async {
     try {
       _sortedInUseOffsets = sortedOffsets;
-      final chain = CosXrefReader(_buffer, shift: shift).walkFrom(rawStartXref);
+      final chain = CosXrefReader(_buffer, shift: shift, decodeBudget: budget)
+          .walkFrom(rawStartXref);
       _entries = chain.entries;
 
       // CosDocument.open validates /Root (and /Encrypt) resolve, so fetch them
@@ -771,7 +781,7 @@ class _ProgressiveLoader {
       final indirect = CosParser(_buffer, offset: start).parseIndirectObject();
       final object = indirect.object;
       if (object is! CosStream) return null;
-      final data = decodeStream(object);
+      final data = decodeStream(object, budget: budget); // dhruva: bounded decode
       final n = object.dictionary['N'];
       final first = object.dictionary['First'];
       if (n is! CosInteger || first is! CosInteger) return null;

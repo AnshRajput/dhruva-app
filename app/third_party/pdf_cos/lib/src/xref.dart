@@ -79,11 +79,13 @@ class CosXrefChain {
 /// `/Prev`-cycle bug is provokable from a bare section plus trailer, without
 /// hand-crafting a whole valid document.
 class CosXrefReader {
-  CosXrefReader(this.bytes, {this.shift = 0});
+  CosXrefReader(this.bytes, {this.shift = 0, DecodeBudget? decodeBudget})
+      : decodeBudget = decodeBudget ?? DecodeBudget(); // dhruva: bounded decode
 
   /// dhruva: bounded decode - shared by every cross-reference stream this
-  /// reader decodes.
-  final DecodeBudget decodeBudget = DecodeBudget();
+  /// reader decodes; pass the document's own so no decode site starts a
+  /// fresh budget.
+  final DecodeBudget decodeBudget;
 
   /// The document image the cross-reference offsets refer to.
   final Uint8List bytes;

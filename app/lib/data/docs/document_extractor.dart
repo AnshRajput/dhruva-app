@@ -13,7 +13,11 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:pdf_cos/pdf_cos.dart' show PdfDecodeLimitExceeded;
+import 'package:pdf_cos/pdf_cos.dart'
+    show
+        CosPasswordException,
+        PdfDecodeLimitExceeded,
+        UnsupportedEncryptionException;
 import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 
@@ -47,6 +51,7 @@ enum DocumentFailureKind {
   noText,
   unreadable,
   unsafe,
+  encrypted,
 }
 
 /// A user-facing extraction failure. [message] is plain language, ready to
@@ -214,11 +219,23 @@ const _unsafe = DocumentException(
   'or unsafe.',
 );
 
+const _encrypted = DocumentException(
+  DocumentFailureKind.encrypted,
+  "This PDF is password-protected or encrypted. Dhruva can't read it.",
+);
+
 ExtractedDocument _extractPdf(Uint8List bytes, String name) {
   // Defence in depth: refuse stream encodings the guard cannot bound before
   // the parser sees them. The hard protection is the output cap inside the
   // vendored decoder (third_party/pdf_cos), which no guard guess can bypass.
-  if (!pdfSafeToParse(bytes)) throw _unsafe;
+  switch (pdfGuard(bytes)) {
+    case PdfGuardVerdict.safe:
+      break;
+    case PdfGuardVerdict.encrypted:
+      throw _encrypted;
+    case PdfGuardVerdict.unsafe:
+      throw _unsafe;
+  }
   try {
     return _readPdf(bytes, name);
   } on PdfDecodeLimitExceeded {
@@ -232,12 +249,20 @@ ExtractedDocument _readPdf(Uint8List bytes, String name) {
     doc = PdfDocument.open(bytes);
   } on PdfDecodeLimitExceeded {
     rethrow;
+  } on CosPasswordException {
+    throw _encrypted;
+  } on UnsupportedEncryptionException {
+    throw _encrypted;
   } on Object {
     throw const DocumentException(
       DocumentFailureKind.unreadable,
-      "Couldn't open that PDF. It may be password-protected or damaged.",
+      "Couldn't open that PDF. It may be damaged.",
     );
   }
+  // Backstop for a file the guard's byte scan missed: `PdfDocument.open`
+  // authenticates the empty password, and an encrypted file's streams are
+  // ciphertext to the guard, so never read one.
+  if (doc.cos.isEncrypted) throw _encrypted;
   final pageCount = doc.pageCount < maxPdfPages ? doc.pageCount : maxPdfPages;
   // Library code swallows per-stream errors in places; the budget latches.
   final budget = doc.cos.decodeBudget;

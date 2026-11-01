@@ -7,6 +7,11 @@ import 'filters.dart';
 
 /// LZWDecode (§7.4.4): TIFF-style LZW with 9–12 bit codes packed MSB-first,
 /// optionally followed by a PNG/TIFF predictor.
+///
+/// dhruva: bounded decode - the dictionary is four fixed arrays of 4096
+/// entries (prefix code, last byte, first byte, length), so a code costs no
+/// allocation; output goes through one growing [DecodeBuffer]. Upstream kept
+/// a fresh `Uint8List` per code and per literal emission.
 class LzwFilter extends CosFilter {
   const LzwFilter();
 
@@ -23,12 +28,21 @@ class LzwFilter extends CosFilter {
     final early = params?['EarlyChange'];
     if (early is CosInteger && early.value == 0) earlyChange = 0;
 
-    final out = BytesBuilder(copy: false);
-    // table[i] for i < 256 is implicit (single byte i); entries hold the
-    // expanded byte sequences for codes >= 258
-    var table = <Uint8List>[];
+    final out = DecodeBuffer(stage, expected: data.length * 2);
+    // Entry for code c >= 258 lives at index c; codes < 256 are implicit
+    // single bytes. An entry is the expansion of `prefix[c]` plus `last[c]`.
+    final prefix = Uint16List(_maxCode + 1);
+    final last = Uint8List(_maxCode + 1);
+    final first = Uint8List(_maxCode + 1);
+    final length = Uint16List(_maxCode + 1);
+    for (var c = 0; c < 256; c++) {
+      last[c] = c;
+      first[c] = c;
+      length[c] = 1;
+    }
+    var next = _firstFree; // next code to define
     var codeWidth = 9;
-    Uint8List? previous;
+    var previous = -1;
 
     var buffer = 0;
     var bitsInBuffer = 0;
@@ -37,7 +51,7 @@ class LzwFilter extends CosFilter {
     int? nextCode() {
       while (bitsInBuffer < codeWidth) {
         if (position >= data.length) return null;
-        buffer = (buffer << 8) | data[position++];
+        buffer = ((buffer << 8) | data[position++]) & 0xFFFFFF;
         bitsInBuffer += 8;
       }
       bitsInBuffer -= codeWidth;
@@ -45,44 +59,48 @@ class LzwFilter extends CosFilter {
       return code;
     }
 
-    Uint8List entryFor(int code) {
-      if (code < 256) return Uint8List.fromList([code]);
-      final index = code - _firstFree;
-      if (index >= table.length) {
-        throw CosParseException(
-            'LZWDecode: code referenced before it was defined');
-      }
-      return table[index];
-    }
-
     while (true) {
       final code = nextCode();
       if (code == null || code == _eodCode) break;
       if (code == _clearCode) {
-        table = [];
+        next = _firstFree;
         codeWidth = 9;
-        previous = null;
+        previous = -1;
         continue;
       }
-      Uint8List sequence;
-      if (code - _firstFree == table.length && previous != null) {
+      if (code == next && previous >= 0 && next <= _maxCode) {
         // the one special case: code being defined by this very step
-        sequence = Uint8List(previous.length + 1)
-          ..setRange(0, previous.length, previous)
-          ..[previous.length] = previous[0];
+        prefix[next] = previous;
+        last[next] = first[previous];
+        first[next] = first[previous];
+        length[next] = length[previous] + 1;
+        next++;
       } else {
-        sequence = entryFor(code);
+        if (code >= next && code >= _firstFree) {
+          throw CosParseException(
+            'LZWDecode: code referenced before it was defined',
+          );
+        }
+        if (previous >= 0 && next <= _maxCode) {
+          prefix[next] = previous;
+          last[next] = first[code];
+          first[next] = first[previous];
+          length[next] = length[previous] + 1;
+          next++;
+        }
       }
-      stage.add(sequence.length); // dhruva: bounded decode
-      out.add(sequence);
-      if (previous != null && _firstFree + table.length <= _maxCode) {
-        final entry = Uint8List(previous.length + 1)
-          ..setRange(0, previous.length, previous)
-          ..[previous.length] = sequence[0];
-        table.add(entry);
+      // Emit the expansion of [code] by walking its prefix chain backwards
+      // into the reserved tail of the output buffer.
+      final len = length[code];
+      stage.add(len); // dhruva: bounded decode
+      final at = out.reserve(len);
+      final bytes = out.bytes;
+      var c = code;
+      for (var k = at + len - 1; k >= at; k--) {
+        bytes[k] = last[c];
+        c = prefix[c];
       }
-      previous = sequence;
-      final next = _firstFree + table.length;
+      previous = code;
       if (codeWidth < 12 && next + earlyChange > (1 << codeWidth)) {
         codeWidth++;
       }

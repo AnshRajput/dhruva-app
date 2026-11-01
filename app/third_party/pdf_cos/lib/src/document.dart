@@ -28,7 +28,7 @@ final Expando<List<int>> cosSparseBufferRanges =
 /// on-demand object loading. Page-level semantics live in `pdf_document`.
 class CosDocument {
   CosDocument._(this.bytes, this._offsetShift, this._xref, this.trailer,
-      this.startXref, this._populated);
+      this.startXref, this._populated, this.decodeBudget); // dhruva: bounded decode
 
   /// Half-open `[start, end)` byte ranges of [bytes] that actually hold file
   /// bytes, flattened and sorted, or null when the buffer is the whole file.
@@ -102,7 +102,9 @@ class CosDocument {
 
   /// dhruva: bounded decode - the per-stream and per-document output caps
   /// shared by every stream decoded for this document.
-  final DecodeBudget decodeBudget = DecodeBudget();
+  /// The one budget of this document: the same object decoded the
+  /// cross-reference streams while it was opening ([CosXrefReader]).
+  final DecodeBudget decodeBudget;
 
   // Decoded stream-payload cache (#392). [decodeStreamData] re-runs the whole
   // filter chain (and the cipher, on encrypted files) on every call, and every
@@ -194,8 +196,12 @@ class CosDocument {
   /// buffer coordinates. Null - the default, and every whole-file open - means
   /// the buffer is complete.
   static CosDocument open(Uint8List bytes,
-          {String password = '', List<int>? populatedRanges}) =>
-      _open(bytes, password, populatedRanges, null);
+          {String password = '',
+          List<int>? populatedRanges,
+          DecodeBudget? decodeBudget}) =>
+      // dhruva: bounded decode - [decodeBudget] lets a caller that already
+      // decoded part of this file (the ranged loader) keep one budget.
+      _open(bytes, password, populatedRanges, null, decodeBudget);
 
   /// Opens [bytes] - another revision of this document: its own bytes with
   /// incremental updates appended, such as an editor's save over it, or the
@@ -212,7 +218,9 @@ class CosDocument {
       _open(bytes, password, null, this);
 
   static CosDocument _open(Uint8List bytes, String password,
-      List<int>? populatedRanges, CosDocument? keysFrom) {
+      List<int>? populatedRanges, CosDocument? keysFrom,
+      [DecodeBudget? budget]) { // dhruva: bounded decode
+    budget ??= DecodeBudget(); // dhruva: bounded decode - one per open
     final t0 = PdfPerf.begin();
     // Owned and growable: [applyIncrementalUpdate] extends it in place, and a
     // caller's literal may be neither.
@@ -228,7 +236,7 @@ class CosDocument {
     try {
       final shift = _findHeader(bytes);
       try {
-        final document = _openFromXref(bytes, shift, populated);
+        final document = _openFromXref(bytes, shift, populated, budget);
         document._initEncryption(password, keysFrom);
         final root = document.resolve(document.trailer['Root']);
         if (root is! CosDictionary) {
@@ -244,7 +252,7 @@ class CosDocument {
       } on RangeError {
         // ditto: an xref offset pointing outside the file
       }
-      return _recover(bytes, shift, password, populated, keysFrom);
+      return _recover(bytes, shift, password, populated, keysFrom, budget);
     } finally {
       PdfPerf.end(PdfPerfPhase.docOpen, t0);
     }
@@ -288,7 +296,9 @@ class CosDocument {
     // already loaded). First occurrence among the appended sections wins and
     // overrides whatever the old chain held for that object.
     final recovered = startXref <= 0;
-    final reader = CosXrefReader(newBytes, shift: _offsetShift);
+    final reader = CosXrefReader(newBytes,
+        shift: _offsetShift,
+        decodeBudget: decodeBudget); // dhruva: bounded decode
     final newStartXref = reader.findStartXref();
     final appended = reader.walkFrom(newStartXref,
         stopAt: startXref,
@@ -461,13 +471,15 @@ class CosDocument {
   }) =>
       openCosDocumentFromSource(source, password: password, options: options);
 
-  static CosDocument _openFromXref(
-      Uint8List bytes, int shift, List<int>? populated) {
+  static CosDocument _openFromXref(Uint8List bytes, int shift,
+      List<int>? populated, DecodeBudget budget) { // dhruva: bounded decode
     final t0 = PdfPerf.begin();
     try {
-      final xref = CosXrefReader(bytes, shift: shift).read();
-      return CosDocument._(
-          bytes, shift, xref.entries, xref.trailer, xref.startXref, populated);
+      final xref =
+          CosXrefReader(bytes, shift: shift, decodeBudget: budget)
+              .read(); // dhruva: bounded decode
+      return CosDocument._(bytes, shift, xref.entries, xref.trailer,
+          xref.startXref, populated, budget);
     } finally {
       PdfPerf.end(PdfPerfPhase.xrefParse, t0);
     }
@@ -481,19 +493,22 @@ class CosDocument {
   /// object streams so compressed objects stay reachable, and - failing a
   /// recovered /Root - locates the catalog by its /Type.
   static CosDocument _recover(Uint8List bytes, int shift, String password,
-      List<int>? populated, CosDocument? keysFrom) {
+      List<int>? populated, CosDocument? keysFrom, DecodeBudget budget) {
+    // dhruva: bounded decode (budget parameter)
     final t0 = PdfPerf.begin();
     PdfPerf.add(PdfPerfCount.xrefRecovered);
     PdfPerf.event(PdfPerfEvent.xrefRecoveryTriggered, 'bytes=${bytes.length}');
     try {
-      return _recoverTimed(bytes, shift, password, populated, keysFrom);
+      return _recoverTimed(
+          bytes, shift, password, populated, keysFrom, budget);
     } finally {
       PdfPerf.end(PdfPerfPhase.xrefRecovery, t0);
     }
   }
 
   static CosDocument _recoverTimed(Uint8List bytes, int shift, String password,
-      List<int>? populated, CosDocument? keysFrom) {
+      List<int>? populated, CosDocument? keysFrom, DecodeBudget budget) {
+    // dhruva: bounded decode (budget parameter)
     final trailerKeywords = <int>[];
     final entries =
         _scanObjectHeaders(bytes, shift, populated, trailers: trailerKeywords);
@@ -521,7 +536,8 @@ class CosDocument {
     }
 
     final document =
-        CosDocument._(bytes, shift, entries, trailer, 0, populated);
+        CosDocument._(bytes, shift, entries, trailer, 0, populated,
+            budget); // dhruva: bounded decode
 
     // Doc-level keys from xref stream dictionaries. This pass runs before
     // encryption is initialized (it has to: it may recover /Encrypt), so

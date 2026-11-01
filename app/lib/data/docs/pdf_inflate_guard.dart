@@ -17,6 +17,12 @@
 ///    that itself contains a stream (an object stream smuggling a filter
 ///    chain past step 1).
 ///
+/// 3. refuses encrypted files (any dictionary with an /Encrypt entry: the
+///    trailer, or a cross-reference stream's dictionary). Stream payloads of
+///    an encrypted file are ciphertext, so steps 1-2 would inflate noise and
+///    wave through a stream that only becomes a bomb once decrypted (and
+///    `PdfDocument.open` auto-authenticates the empty password).
+///
 /// Text extraction never decodes image streams (`resolveOverprint: false`
 /// and `collectImages: false` keep `drawImage` a no-op), and the parser
 /// decodes DCT/JPX/JBIG2 never (it throws), so those are safe to leave alone.
@@ -43,6 +49,11 @@ final class _LimitExceeded implements Exception {
   const _LimitExceeded();
 }
 
+/// An /Encrypt entry was found: the file must be refused as encrypted.
+final class _Encrypted implements Exception {
+  const _Encrypted();
+}
+
 /// Syntax the PDF parser would reject too, so no stream can come of it.
 final class _Malformed implements Exception {
   const _Malformed();
@@ -62,6 +73,9 @@ final class _ChunkSink extends ByteConversionSinkBase {
   void close() {}
 }
 
+/// What the guard decided about a file.
+enum PdfGuardVerdict { safe, encrypted, unsafe }
+
 /// True when [bytes] are safe to hand to the PDF parser (see the library
 /// comment). Garbage that is not zlib data is ignored here; the parser copes
 /// with that itself. Limits are parameters so tests can use small ones.
@@ -69,12 +83,25 @@ bool pdfSafeToParse(
   Uint8List bytes, {
   int maxStream = maxInflatedStreamBytes,
   int maxTotal = maxInflatedTotalBytes,
+}) =>
+    pdfGuard(bytes, maxStream: maxStream, maxTotal: maxTotal) ==
+    PdfGuardVerdict.safe;
+
+/// [pdfSafeToParse] with the reason for a refusal: [PdfGuardVerdict.encrypted]
+/// for a file with an /Encrypt entry, [PdfGuardVerdict.unsafe] for anything
+/// else the guard cannot bound.
+PdfGuardVerdict pdfGuard(
+  Uint8List bytes, {
+  int maxStream = maxInflatedStreamBytes,
+  int maxTotal = maxInflatedTotalBytes,
 }) {
   final List<_FlateStart> flateStarts;
   try {
     flateStarts = _flateStreamStarts(bytes, maxStream);
+  } on _Encrypted {
+    return PdfGuardVerdict.encrypted;
   } on _LimitExceeded {
-    return false;
+    return PdfGuardVerdict.unsafe;
   }
   var total = 0;
   // Bounds the work when an attacker packs many stream starts into the file.
@@ -142,12 +169,12 @@ bool pdfSafeToParse(
         if (n != _incomplete || end >= bytes.length) break;
         end = _indexOfEndstream(bytes, end + 9);
       }
-      if (n == _incomplete) return false;
+      if (n == _incomplete) return PdfGuardVerdict.unsafe;
     } on _LimitExceeded {
-      return false;
+      return PdfGuardVerdict.unsafe;
     }
   }
-  return true;
+  return PdfGuardVerdict.safe;
 }
 
 /// True when the big-endian [adler] sits in the last bytes of bytes[start, end)
@@ -434,7 +461,8 @@ final class _FlateStart {
 }
 
 /// Every FlateDecode stream the guard must inflate. Throws [_LimitExceeded]
-/// on the first stream that is not on the allow-list.
+/// on the first stream that is not on the allow-list, and [_Encrypted] on the
+/// first dictionary with an /Encrypt entry.
 List<_FlateStart> _flateStreamStarts(Uint8List bytes, int maxStream) {
   final starts = <_FlateStart>[];
   // Every `<<` is a candidate, so nested dictionaries, dictionaries inside
@@ -448,6 +476,7 @@ List<_FlateStart> _flateStreamStarts(Uint8List bytes, int maxStream) {
     int? length;
     try {
       final d = lx.dict(0);
+      if (d['Encrypt'] != null) throw const _Encrypted();
       final t = lx.peek();
       if (t.isWord('stream')) {
         data = t.end;
