@@ -1,4 +1,3 @@
-import '../../../support/device_health_fakes.dart';
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/safety/safety_guard.dart';
@@ -9,6 +8,7 @@ import 'package:dhruva/features/chat/state/chat_controller.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../../support/device_health_fakes.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
