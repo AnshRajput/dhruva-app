@@ -346,3 +346,25 @@ provisioning profile referenced as absent in RISKS.md R2 (and in the "Out of
 scope" note on the IOS METAL WIRING entry above) are now live — see R2's
 2026-08-01 update for the corrected, narrower residual constraint (profile
 covers one device only; real-hardware Metal perf still unmeasured).
+
+## CHAT WITH A DOCUMENT — on-device retrieval, no embedding model (2026-11-01)
+Decision: users attach a PDF/TXT/MD to a conversation (composer attach button,
+chip with name + page/char count); questions are answered from the best-matching
+excerpts, cited as [p.N], with a collapsible "Sources" row under the reply.
+- Retrieval: ~800-char chunks (100 overlap, page-tagged) ranked with pure-Dart
+  BM25 (`data/docs/bm25.dart`); no embeddings, no native code, no network. The
+  top excerpts that fit `n_ctx - maxTokens - history - overhead` (3 chars/token,
+  max 8 excerpts) replace the plain question on that request only; the stored
+  message keeps the user's words (`data/docs/grounding.dart`).
+- PDF text: `pdf_document` + `pdf_graphics` (pure Dart, Apache-2.0, active). Chosen
+  over pdfrx/pdfium (bundles a native .so per ABI: size + Google Play 16 KB
+  page-alignment risk) and over per-platform channels (Android has no text-
+  extraction API below API 35; PDFBox adds a stale Java dep). Image-only PDFs have
+  no text layer: detected (<50 chars) and reported plainly; no OCR.
+- Limits: 20 MB file, 400k extracted characters, 3 documents per chat.
+  Extraction + chunking run in `Isolate.run` (`document_extractor.dart`).
+- Schema v6 (this feature owns it): `attached_documents`, `document_chunks`
+  (FK cascade from conversations), `messages.sources_json`. Deleting a
+  conversation deletes its documents and chunks.
+- NOT done: TXT/MD/PDF shared INTO the app from other apps (Android SEND with
+  a content URI needs native copy-to-cache + route plumbing; not a small change).

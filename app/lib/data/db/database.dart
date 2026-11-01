@@ -144,6 +144,11 @@ class Messages extends Table {
   /// "Show" placeholder. The report itself lives in [ContentReports].
   BoolColumn get reported => boolean().withDefault(const Constant(false))();
   IntColumn get genMs => integer().nullable()();
+
+  /// JSON list of the document citations a reply was grounded in (v6, see
+  /// `data/docs/grounding.dart`'s `encodeSources`), or null for an ordinary
+  /// reply. Drives the collapsible "Sources" row under the bubble.
+  TextColumn get sourcesJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   /// Enables edit/regenerate history (a regenerated or edited message
@@ -214,6 +219,40 @@ class ContentReports extends Table {
   TextColumn get excerpt => text()();
 }
 
+/// A document (PDF/TXT/MD) the user attached to a conversation for
+/// "chat with a document" (v6). Its extracted text lives in
+/// [DocumentChunks]. Everything stays on the device. `conversationId`
+/// cascades: deleting a conversation deletes its documents (and, through
+/// [DocumentChunks.documentId], their chunks) — SQLite-enforced.
+class AttachedDocuments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get conversationId =>
+      integer().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text()();
+  TextColumn get mime => text()();
+
+  /// Real page count for a PDF; 0 for a page-less TXT/MD file.
+  IntColumn get pageCount => integer().withDefault(const Constant(0))();
+
+  /// Characters of extracted text (before chunk overlap).
+  IntColumn get charCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// One retrievable slice (~800 chars) of an [AttachedDocuments] row, tagged
+/// with the page it came from (for TXT/MD: the synthetic part number).
+class DocumentChunks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get documentId => integer().references(
+    AttachedDocuments,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
+  IntColumn get chunkIndex => integer()();
+  IntColumn get page => integer()();
+  TextColumn get body => text()();
+}
+
 @DriftDatabase(
   tables: [
     InstalledModels,
@@ -222,6 +261,8 @@ class ContentReports extends Table {
     Messages,
     Characters,
     ContentReports,
+    AttachedDocuments,
+    DocumentChunks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -229,13 +270,14 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
       await _createMessagesConversationIndex();
+      await _createDocumentChunksIndex();
     },
     onUpgrade: (m, from, to) async {
       // v1 -> v2 (Loop 4): chat data layer. installed_models is untouched.
@@ -274,6 +316,18 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(messages, messages.reported);
         }
       }
+      // v5 -> v6: chat with a document (attached documents + their chunks,
+      // and the per-reply citations column).
+      if (from < 6) {
+        await m.createTable(attachedDocuments);
+        await m.createTable(documentChunks);
+        await _createDocumentChunksIndex();
+        // `messages` is created fresh from the CURRENT definition (already
+        // with `sourcesJson`) when `from < 2` — same guard as above.
+        if (from >= 2) {
+          await m.addColumn(messages, messages.sourcesJson);
+        }
+      }
     },
     beforeOpen: (details) async {
       // SQLite foreign keys are opt-in per connection — required for the
@@ -288,6 +342,11 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _createMessagesConversationIndex() => customStatement(
     'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
     'ON messages (conversation_id)',
+  );
+
+  Future<void> _createDocumentChunksIndex() => customStatement(
+    'CREATE INDEX IF NOT EXISTS idx_document_chunks_document '
+    'ON document_chunks (document_id)',
   );
 
   static QueryExecutor _defaultExecutor() => driftDatabase(name: 'dhruva');

@@ -375,6 +375,12 @@ class _ThreadScaffold extends ConsumerWidget {
             Composer(
               isGenerating: state.isGenerating,
               isMultimodal: state.isMultimodal,
+              documents: state.documents,
+              extractingDocName: state.extractingDocName,
+              documentError: state.documentError,
+              onAttachDocument: controller.attachDocument,
+              onRemoveDocument: controller.removeDocument,
+              onDismissDocumentError: controller.dismissDocumentError,
               beforeSend: () => _confirmStart(context, ref),
               onSend: (text, imageBytes) {
                 onScrollToBottom();
