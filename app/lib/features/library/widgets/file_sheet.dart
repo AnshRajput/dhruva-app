@@ -33,12 +33,10 @@ class FileSheet extends ConsumerWidget {
 
   Future<void> _open(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
-    final grant = ref
-        .read(connectorAccountsProvider)
-        .value
-        ?.where((a) => a.connector == ConnectorIds.folder)
-        .firstOrNull
-        ?.config['grantId'];
+    final account = await ref
+        .read(connectorStoreProvider)
+        .account(ConnectorIds.folder);
+    final grant = account?.config['grantId'];
     if (grant is! String) {
       messenger.showSnackBar(
         const SnackBar(
