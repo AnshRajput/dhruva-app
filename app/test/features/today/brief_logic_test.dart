@@ -8,6 +8,7 @@ import 'package:dhruva/features/today/state/brief_parser.dart';
 import 'package:dhruva/features/today/state/brief_prompt.dart';
 import 'package:dhruva/features/today/state/day_text.dart';
 import 'package:dhruva/features/today/state/day_timeline.dart';
+import 'package:dhruva/features/today/state/event_info.dart';
 import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -466,6 +467,46 @@ void main() {
         expect(timelineIsEmpty(t), isTrue);
       },
     );
+  });
+
+  group('event info', () {
+    test('a meeting link becomes its app name, never a raw URL', () {
+      final meet = event(
+        5,
+        'Sync',
+        at(9),
+        at(10),
+        location: 'https://meet.google.com/abc-defg',
+      );
+      expect(meetingLabel(meet), 'Google Meet');
+      expect(placeLabel(meet), 'Google Meet');
+      final zoom = event(
+        6,
+        'Call',
+        at(9),
+        at(10),
+        body: 'Join: https://us02web.zoom.us/j/1',
+      );
+      expect(meetingLabel(zoom), 'Zoom');
+    });
+
+    test('a room is shown as is; a bare URL location is hidden', () {
+      expect(placeLabel(budgetReview), 'Room 4B');
+      final url = event(
+        7,
+        'Link',
+        at(9),
+        at(10),
+        location: 'https://example.com/x',
+      );
+      expect(placeLabel(url), isNull);
+      expect(placeLabel(event(8, 'None', at(9), at(10))), isNull);
+    });
+
+    test('notes drop the location line the connector prepends', () {
+      expect(eventNotes(designSync), 'Agenda: icons');
+      expect(eventNotes(budgetReview), '');
+    });
   });
 
   group('day text', () {

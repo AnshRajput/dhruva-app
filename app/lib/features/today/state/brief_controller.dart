@@ -68,8 +68,28 @@ final briefControllerProvider =
     AsyncNotifierProvider<BriefController, BriefState>(BriefController.new);
 
 class BriefController extends AsyncNotifier<BriefState> {
+  /// Runs [body], ignoring the failure of a pass that was still in flight when
+  /// this provider was replaced (the app shell invalidates it when a download
+  /// completes, and Today may be mid-write).
+  Future<void> _guard(Future<void> Function() body) async {
+    try {
+      await body();
+    } on Object {
+      if (ref.mounted) rethrow;
+    }
+  }
+
   @override
   Future<BriefState> build() async {
+    try {
+      return await _build();
+    } on Object {
+      if (ref.mounted) rethrow;
+      return const BriefState();
+    }
+  }
+
+  Future<BriefState> _build() async {
     BriefCacheStore? cache;
     try {
       cache = await ref.watch(briefCacheStoreProvider.future);
@@ -90,7 +110,9 @@ class BriefController extends AsyncNotifier<BriefState> {
 
   /// Today opened (or the app came back to the foreground): write a new brief
   /// only if the cached one is stale and nothing argues against it.
-  Future<void> onOpen() async {
+  Future<void> onOpen() => _guard(_onOpen);
+
+  Future<void> _onOpen() async {
     await future;
     final cur = _s;
     if (cur.writing) return;
@@ -100,7 +122,7 @@ class BriefController extends AsyncNotifier<BriefState> {
     if (ref.read(briefFactsProvider).isEmpty) return;
     if (cur.model == BriefModelStatus.none) return;
     if (!await _mayWriteUnasked()) return;
-    await regenerate();
+    await _regenerate();
   }
 
   /// Foreground, unprompted writing is held back on a low battery or a hot
@@ -121,7 +143,9 @@ class BriefController extends AsyncNotifier<BriefState> {
 
   /// Writes a new brief now (regenerate tap, pull-to-refresh, "Write my
   /// brief"). Keeps the old brief on screen if this one fails.
-  Future<void> regenerate() async {
+  Future<void> regenerate() => _guard(_regenerate);
+
+  Future<void> _regenerate() async {
     await future;
     if (_s.writing) return;
     final facts = ref.read(briefFactsProvider);
@@ -194,6 +218,16 @@ class BriefController extends AsyncNotifier<BriefState> {
   Future<void> forgetDisconnected({
     required bool calendarConnected,
     required bool notificationsConnected,
+  }) => _guard(
+    () => _forgetDisconnected(
+      calendarConnected: calendarConnected,
+      notificationsConnected: notificationsConnected,
+    ),
+  );
+
+  Future<void> _forgetDisconnected({
+    required bool calendarConnected,
+    required bool notificationsConnected,
   }) async {
     await future;
     final b = _s.brief;
@@ -214,7 +248,9 @@ class BriefController extends AsyncNotifier<BriefState> {
   }
 
   /// Re-reads which model state we are in (after a download finished).
-  Future<void> refreshModel() async {
+  Future<void> refreshModel() => _guard(_refreshModel);
+
+  Future<void> _refreshModel() async {
     await future;
     try {
       final m = await ref.read(briefWriterProvider).status();

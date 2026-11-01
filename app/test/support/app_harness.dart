@@ -20,6 +20,19 @@ import 'package:http/testing.dart';
 
 import 'mock_hf_client.dart';
 
+/// Today's connector reads as empty and nothing is connected, so a test that
+/// shows Today needs no OS connectors and leaves no drift timer behind (a live
+/// query leaves a zero-length timer when disposed, which fails a widget test).
+/// The Today tests use the real store instead, see test/features/today.
+List<Override> todayStubOverrides() => [
+  connectorListProvider.overrideWith(
+    (ref) => Stream.value(const <ConnectorEntry>[]),
+  ),
+  todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
+  upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
+  notificationGroupsProvider.overrideWith((ref) => Stream.value(const [])),
+];
+
 const harnessDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
@@ -60,15 +73,7 @@ Future<AppDatabase> pumpDhruvaApp(
         // Drift live queries leave a zero-length timer when disposed, which
         // fails a widget test; Today's streams read as empty here (the Today
         // tests use the real store, see test/features/today).
-        // No OS connectors in app-level tests: nothing is connected.
-        connectorListProvider.overrideWith(
-          (ref) => Stream.value(const <ConnectorEntry>[]),
-        ),
-        todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
-        upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
-        notificationGroupsProvider.overrideWith(
-          (ref) => Stream.value(const []),
-        ),
+        ...todayStubOverrides(),
         hfApiClientProvider.overrideWithValue(
           mockHfClient(MockClient((r) async => http.Response('[]', 200))),
         ),

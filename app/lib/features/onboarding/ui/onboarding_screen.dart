@@ -623,12 +623,13 @@ class _DownloadStep extends ConsumerWidget {
             SizedBox(height: tokens.spacing.sm),
             // No dead-end: a large model on a slow link is always cancellable.
             TextButton(onPressed: onCancel, child: const Text('Cancel')),
-            TextButton(
-              key: const ValueKey('onboarding-skip-download'),
-              onPressed: () => onSkip(),
-              child: const Text('Skip for now'),
-            ),
           ],
+          // Skip is on every step, including after an error.
+          TextButton(
+            key: const ValueKey('onboarding-skip-download'),
+            onPressed: () => onSkip(),
+            child: const Text('Skip for now'),
+          ),
         ],
       ),
     );

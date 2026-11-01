@@ -75,6 +75,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   /// Write a new brief only if the cached one is stale (see BriefController).
   void _onOpen() {
     if (!mounted) return;
+    // Foreground only: data arriving while the app is in the background never
+    // starts a model.
+    final life = WidgetsBinding.instance.lifecycleState;
+    if (life != null && life != AppLifecycleState.resumed) return;
     unawaited(ref.read(briefControllerProvider.notifier).onOpen());
   }
 

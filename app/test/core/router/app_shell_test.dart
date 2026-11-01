@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../support/app_harness.dart' show todayStubOverrides;
 import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -64,6 +65,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...todayStubOverrides(),
           downloadManagerProvider.overrideWith((ref) async => manager),
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
