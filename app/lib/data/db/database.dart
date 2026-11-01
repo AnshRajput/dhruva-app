@@ -255,6 +255,70 @@ class DocumentChunks extends Table {
   TextColumn get body => text()();
 }
 
+/// What kind of thing an [Items] row is. Stored as text (`textEnum`) so adding
+/// a kind (a later connector) never renumbers existing rows.
+enum ItemKind { mail, event, contact, file, notification }
+
+/// One connector's standing with the user (v7): at most one row per connector
+/// id. Presence means the user opted in; `status`/`lastError` mirror the last
+/// sync outcome for the Settings card. `configJson` carries small per-
+/// connector settings (excluded calendars, the granted folder, excluded
+/// notification apps). Credentials never live here.
+@DataClassName('ConnectorAccountRow')
+class ConnectorAccounts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get connector => text().unique()();
+  TextColumn get status => text()();
+  TextColumn get label => text().nullable()();
+  TextColumn get configJson => text().nullable()();
+  TextColumn get lastError => text().nullable()();
+  DateTimeColumn get connectedAt => dateTime()();
+  DateTimeColumn get lastSyncAt => dateTime().nullable()();
+}
+
+/// A piece of the user's own data pulled in by a connector (v7): a calendar
+/// event, a notification, a contact, one section of a file. Untrusted text:
+/// it only ever reaches a prompt inside a delimited sources block. `body` is
+/// capped at 8 KB by the writer. (source, externalId) is unique, which is what
+/// makes re-syncing idempotent.
+@DataClassName('ItemRow')
+class Items extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get source => text()();
+  TextColumn get externalId => text()();
+  TextColumn get kind => textEnum<ItemKind>()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get body => text().withDefault(const Constant(''))();
+
+  /// JSON list of `{name, email}` objects (attendees, sender).
+  TextColumn get peopleJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get startsAt => dateTime().nullable()();
+  DateTimeColumn get sentAt => dateTime().nullable()();
+
+  /// JSON object of small per-kind facts (all-day, package, mime, ...).
+  TextColumn get flagsJson => text().withDefault(const Constant('{}'))();
+  TextColumn get summary => text().nullable()();
+  TextColumn get summaryModel => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {source, externalId},
+  ];
+}
+
+/// The privacy ledger (v7): what a connector read, how much, when. Content is
+/// never stored here, only counts. Revoking wipes a connector's content rows
+/// and leaves one `revoke` row.
+@DataClassName('LedgerRow')
+class Ledger extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get connector => text()();
+  TextColumn get action => text()();
+  IntColumn get count => integer().withDefault(const Constant(0))();
+  DateTimeColumn get at => dateTime()();
+}
+
 @DriftDatabase(
   tables: [
     InstalledModels,
@@ -265,6 +329,9 @@ class DocumentChunks extends Table {
     ContentReports,
     AttachedDocuments,
     DocumentChunks,
+    ConnectorAccounts,
+    Items,
+    Ledger,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -272,7 +339,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -280,6 +347,7 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _createMessagesConversationIndex();
       await _createDocumentChunksIndex();
+      await _createConnectorIndexes();
     },
     onUpgrade: (m, from, to) async {
       // v1 -> v2 (Loop 4): chat data layer. installed_models is untouched.
@@ -330,11 +398,22 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(messages, messages.sourcesJson);
         }
       }
+      // v6 -> v7: connectors (accounts, ingested items, privacy ledger).
+      // Additive only: nothing existing is touched.
+      if (from < 7) {
+        await m.createTable(connectorAccounts);
+        await m.createTable(items);
+        await m.createTable(ledger);
+        await _createConnectorIndexes();
+      }
     },
     beforeOpen: (details) async {
       // SQLite foreign keys are opt-in per connection — required for the
       // onDelete: setNull/cascade behavior declared above to actually fire.
       await customStatement('PRAGMA foreign_keys = ON');
+      // The background sync opens a second connection; wait for the other
+      // writer instead of failing with "database is locked".
+      await customStatement('PRAGMA busy_timeout = 5000');
     },
   );
 
@@ -350,6 +429,17 @@ class AppDatabase extends _$AppDatabase {
     'CREATE INDEX IF NOT EXISTS idx_document_chunks_document '
     'ON document_chunks (document_id)',
   );
+
+  Future<void> _createConnectorIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_items_kind_starts '
+      'ON items (kind, starts_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_ledger_connector_at '
+      'ON ledger (connector, at)',
+    );
+  }
 
   static QueryExecutor _defaultExecutor() => driftDatabase(name: 'dhruva');
 

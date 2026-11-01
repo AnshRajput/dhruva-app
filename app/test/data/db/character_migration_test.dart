@@ -99,7 +99,7 @@ void main() {
     // this must trigger the real onUpgrade(2, 6), running both the v2->v3
     // and v3->v4 branches in one jump.
     final v3 = AppDatabase(NativeDatabase(dbFile));
-    expect(v3.schemaVersion, 6);
+    expect(v3.schemaVersion, 7);
 
     final conversations = await v3.select(v3.conversations).get();
     expect(conversations, hasLength(1));

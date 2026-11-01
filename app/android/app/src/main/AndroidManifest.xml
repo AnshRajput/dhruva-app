@@ -22,6 +22,13 @@
          Their absence was the 0.2.2 "app crashes when a download starts" regression. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Connectors (daily assistant, Wave 2A). READ ONLY: the calendar and
+         contacts connectors never write, so only the READ permissions are
+         declared; there is deliberately no WRITE_CALENDAR / WRITE_CONTACTS and
+         no MANAGE_EXTERNAL_STORAGE (the Files folder goes through the system
+         folder picker). Each is requested only when the user taps Connect. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <!-- Backup lockdown (daily-assistant spec B1): chats, the model index and,
          later, connector data must never leave the phone via Google backup or
          a device-to-device transfer. allowBackup/fullBackupContent cover
@@ -118,6 +125,22 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/dhruva_widget_info"/>
         </receiver>
+        <!-- Notification digest listener (Android only, off by default). Exported
+             because the system must bind it, but ONLY the system can: the
+             BIND_NOTIFICATION_LISTENER_SERVICE permission is signature-level.
+             It records nothing until the user grants notification access in
+             system settings AND turns the connector on in the app; it writes
+             title/text/app/time to an app-private queue file and never touches
+             the database or the network. See NotificationCaptureService. -->
+        <service
+            android:name="tech.appuinside.dhruva.connectors.NotificationCaptureService"
+            android:exported="true"
+            android:label="Dhruva AI"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
         <!-- background_downloader runs its download via a WorkManager worker that
              promotes itself to a foreground service (Config.runInForeground). On
              API 34+, WorkManager's SystemForegroundService starts foreground with

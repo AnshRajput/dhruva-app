@@ -134,8 +134,8 @@ void main() {
     expect(rows, hasLength(2));
   });
 
-  test('schemaVersion is 6', () {
-    expect(db.schemaVersion, 6);
+  test('schemaVersion is 7', () {
+    expect(db.schemaVersion, 7);
   });
 
   group('generated row/companion surface', () {

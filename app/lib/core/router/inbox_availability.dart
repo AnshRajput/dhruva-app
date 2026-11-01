@@ -3,11 +3,22 @@
 /// then Today carries a "Set up your inbox" card (spec B2: iOS without Gmail
 /// must never see an empty Inbox tab).
 ///
-/// Wave 1 has no inbox source, so this is a constant false. The connector
-/// work (Wave 2A / 3B) overrides it with a provider derived from the
-/// connector accounts.
+/// Derived from the connector list: true when an inbox source (today only
+/// notifications, which exists on Android alone; Gmail joins in 0.7b) is
+/// connected. While the list is still loading, or if it cannot load, the Inbox
+/// stays hidden rather than flashing an empty tab.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final inboxAvailableProvider = Provider<bool>((ref) => false);
+import '../../data/connectors/connector.dart';
+import '../di/connector_providers.dart';
+
+final inboxAvailableProvider = Provider<bool>((ref) {
+  final entries = ref.watch(connectorListProvider).value ?? const [];
+  return entries.any(
+    (e) =>
+        ConnectorIds.inboxSources.contains(e.connector.id) &&
+        e.status.isConnected,
+  );
+});

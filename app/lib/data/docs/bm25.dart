@@ -126,7 +126,10 @@ const _stopwords = <String>{
   'yours',
 };
 
-final _nonWord = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
+// \p{M} (combining marks) stays inside a word: Devanagari/Tamil/Thai vowel
+// signs are marks, and splitting on them shatters "पार्टी" into 1-character
+// tokens that the length filter then drops.
+final _nonWord = RegExp(r'[^\p{L}\p{N}\p{M}]+', unicode: true);
 
 /// Lowercases [text], splits on anything that is not a letter or digit, drops
 /// stopwords and 1-character tokens, and folds a plain plural `s`.
