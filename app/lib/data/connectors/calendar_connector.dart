@@ -29,6 +29,17 @@ class CalendarConnector extends BaseConnector {
       'Calendar access is off. Open settings and allow Calendar to bring '
       'your events back.';
 
+  static const _retry =
+      "Calendar wasn't allowed. Tap Connect to try again; it is how your "
+      'events get here.';
+  static const _blocked =
+      'Calendar access is blocked. Open settings, allow Calendar, then come '
+      'back and it connects by itself.';
+
+  @override
+  Future<bool> grantedNow() async =>
+      await source.permission() == DevicePermission.granted;
+
   @override
   Future<ConnectorStatus> evaluate(ConnectorAccount? account) async {
     if (account == null) return ConnectorStatus.notConnected;
@@ -57,9 +68,12 @@ class CalendarConnector extends BaseConnector {
     var p = await source.permission();
     if (p != DevicePermission.granted) p = await source.request();
     if (p != DevicePermission.granted) {
-      return const ConnectorStatus(
-        ConnectorState.permissionDenied,
-        detail: _off,
+      return deniedStatus(
+        await source.permission(),
+        await store.account(id),
+        retry: _retry,
+        blocked: _blocked,
+        revoked: _off,
       );
     }
     await store.saveAccount(id, status: 'connected', clearError: true);

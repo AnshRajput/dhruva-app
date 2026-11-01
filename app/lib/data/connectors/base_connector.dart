@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'connector.dart';
+import 'connector_sources.dart' show DevicePermission;
 import 'connector_store.dart';
 
 abstract class BaseConnector implements Connector {
@@ -24,6 +25,45 @@ abstract class BaseConnector implements Connector {
   /// A [doConnect] sets this when the user backed out of the OS UI (closed the
   /// folder picker): [connect] then records nothing and reports `false`.
   bool backedOut = false;
+
+  /// True after a first-time connect ended in a permission the OS will not ask
+  /// for again: the user was sent to system settings, and when the app comes
+  /// back with the grant in place the hub completes the connection by itself.
+  bool awaitingGrant = false;
+
+  /// Whether the OS permission is in place right now (no prompt). Connectors
+  /// with an in-app permission override it; the hub uses it for
+  /// [awaitingGrant].
+  Future<bool> grantedNow() async => false;
+
+  /// The status after the OS permission prompt ended without a grant. Three
+  /// different situations, three different sentences:
+  ///  - connected before, access since turned off: [revoked] (a fix card);
+  ///  - never connected, the prompt can still be shown (Android's first Deny):
+  ///    [retry], the row stays "Not connected";
+  ///  - never connected, denied for good: [blocked] plus "Open settings".
+  ConnectorStatus deniedStatus(
+    DevicePermission permission,
+    ConnectorAccount? account, {
+    required String retry,
+    required String blocked,
+    required String revoked,
+  }) {
+    if (account != null) {
+      return ConnectorStatus(
+        ConnectorState.permissionDenied,
+        detail: revoked,
+        lastSyncAt: account.lastSyncAt,
+      );
+    }
+    final isFinal = permission == DevicePermission.denied;
+    awaitingGrant = isFinal;
+    return ConnectorStatus(
+      ConnectorState.notConnected,
+      detail: isFinal ? blocked : retry,
+      needsSettings: isFinal,
+    );
+  }
 
   /// Called after [connect] and [revoke] finish (status already emitted). The
   /// hub sets it to keep the background job in step with what is connected.
@@ -98,6 +138,7 @@ abstract class BaseConnector implements Connector {
   @override
   Future<bool> connect() async {
     backedOut = false;
+    awaitingGrant = false;
     final next = await doConnect();
     if (backedOut) {
       // Nothing changed: no ledger row, no background-job churn. The status is
@@ -188,6 +229,7 @@ abstract class BaseConnector implements Connector {
       // what the user asked for and always runs.
     }
     await store.wipeConnector(id);
+    awaitingGrant = false;
     emit(ConnectorStatus.notConnected);
     await onConnectionChanged?.call();
   }

@@ -45,6 +45,25 @@ final class ConnectorActions {
     }
   }
 
+  /// Pull-to-refresh: reads every connected source now, ignoring the 10-minute
+  /// app-open throttle. Never throws; each card shows its own failure.
+  Future<void> refreshAll() async {
+    try {
+      await (await _hub).sync.refresh();
+    } catch (_) {
+      // No hub, nothing to refresh.
+    }
+  }
+
+  /// Moves queued notifications into the Inbox right now (Inbox opened).
+  Future<void> drainNotifications() async {
+    try {
+      await (await _hub).sync.drainNotifications();
+    } catch (_) {
+      // No hub, nothing to drain.
+    }
+  }
+
   /// Deletes the local copy of [id] (items, index, content ledger rows) and
   /// stops reading. With [openSystemSettings] it then opens the OS page where
   /// the user can switch the permission off too (an app cannot do that itself).

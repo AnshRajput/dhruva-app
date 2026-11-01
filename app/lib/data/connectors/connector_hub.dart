@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import '../db/database.dart';
 import '../docs/document_extractor.dart' show DocumentExtractor;
 import 'background_sync.dart';
+import 'base_connector.dart';
 import 'calendar_connector.dart';
 import 'connector.dart';
 import 'connector_sources.dart';
@@ -66,14 +67,33 @@ final class ConnectorHub {
   }
 
   /// App resume: re-reads every OS grant (so access given or taken away in
-  /// system settings shows up at once), reads right away from a source that
-  /// just became usable (notification access switched on: what the listener
-  /// queued appears now, not at the next 6 h job), then keeps the background
-  /// job in step with what is connected.
+  /// system settings shows up at once), finishes a first-time connect the user
+  /// just completed in system settings (calendar, contacts), reads right away
+  /// from a source that just became usable, drains the notification queue (a
+  /// new notification is in the Inbox now, not at the next 6 h job or the
+  /// 10-minute throttle), then keeps the background job in step with what is
+  /// connected.
   Future<void> onResume() async {
     final before = {for (final c in all) c.id: c.currentStatus.state};
     await Future.wait(all.map((c) => c.refreshStatus()));
+    final synced = <String>{};
     for (final c in all) {
+      if (c is BaseConnector && c.awaitingGrant) {
+        try {
+          if (await c.grantedNow()) {
+            await c.connect();
+            if (c.currentStatus.isConnected) {
+              await c.sync();
+              synced.add(c.id);
+            }
+          }
+        } catch (_) {
+          // The row shows what is wrong; resume must not throw.
+        }
+      }
+    }
+    for (final c in all) {
+      if (synced.contains(c.id)) continue;
       final was = before[c.id];
       final fixed =
           c.currentStatus.state == ConnectorState.connected &&
@@ -82,9 +102,13 @@ final class ConnectorHub {
       if (!fixed) continue;
       try {
         await c.sync();
+        synced.add(c.id);
       } catch (_) {
         // The card shows what is wrong; resume must not throw.
       }
+    }
+    if (!synced.contains(ConnectorIds.notifications)) {
+      await sync.drainNotifications();
     }
     await syncBackgroundJob();
   }

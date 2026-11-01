@@ -2,11 +2,15 @@
 // summaries requested only for rows built on screen, the detail actions
 // (Ask about this, Open app, Mark read) and every state.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/connector.dart';
+import 'package:dhruva/data/connectors/notification_queue.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
 import 'package:dhruva/engine_bindings/fake_engine_service.dart';
@@ -19,10 +23,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/app_harness.dart' show harnessDeviceInfo;
 import '../../support/connector_ui_harness.dart';
 import '../../support/load_fonts.dart';
+
+/// Lets real file IO (the notification queue) finish, then settles the UI. The
+/// drain hops between real IO and the test clock several times, so alternate.
+Future<void> _realTime(WidgetTester tester) async {
+  for (var i = 0; i < 15; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  await tester.pumpAndSettle();
+}
 
 Finder _key(String k) => find.byKey(ValueKey(k));
 
@@ -35,6 +52,7 @@ ConnectorItem _item(
   String body = 'Some text',
   String? summary,
   bool read = false,
+  bool otp = false,
 }) => ConnectorItem(
   id: id,
   source: 'notifications',
@@ -45,7 +63,7 @@ ConnectorItem _item(
   people: const [],
   startsAt: null,
   sentAt: at,
-  flags: {'pkg': pkg, 'app': app, if (read) 'read': true},
+  flags: {'pkg': pkg, 'app': app, if (read) 'read': true, if (otp) 'otp': true},
   summary: summary,
   summaryModel: null,
   updatedAt: at,
@@ -169,6 +187,52 @@ void main() {
       await tester.tap(_key('inbox-open-settings'));
       await tester.pumpAndSettle();
       expect(ui.kit.notifications.settingsOpened, 1);
+    });
+  });
+
+  group('notifications reach the Inbox promptly', () {
+    // A line the Kotlin listener would have queued a moment ago.
+    void queue(ConnectorUi ui, String title) {
+      File(
+        p.join(ui.kit.queueDir.path, NotificationQueue.liveName),
+      ).writeAsStringSync(
+        '${jsonEncode({'v': 1, 'pkg': 'com.chat.app', 'app': 'Chat', 'title': title, 'text': 'hi', 't': DateTime.now().millisecondsSinceEpoch})}\n',
+        mode: FileMode.append,
+      );
+    }
+
+    testWidgets('opening the Inbox drains the queue straight away, even '
+        'inside the 10-minute window', (tester) async {
+      final show = ValueNotifier(false);
+      final ui = await pumpConnectorScreen(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: show,
+          builder: (_, v, _) => v ? const InboxScreen() : const SizedBox(),
+        ),
+      );
+      ui.kit.notifications.granted = true;
+      await ui.kit.hub.notifications.connect();
+      await ui.kit.hub.notifications.sync(); // synced "just now"
+      queue(ui, 'Fresh one');
+      show.value = true;
+      await tester.pump();
+      await _realTime(tester);
+      expect(find.text('Fresh one'), findsOneWidget);
+    });
+
+    testWidgets('pull-to-refresh drains the queue', (tester) async {
+      final ui = await pumpConnectorScreen(tester, const InboxScreen());
+      ui.kit.notifications.granted = true;
+      await ui.kit.hub.notifications.connect();
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing here yet'), findsOneWidget);
+      queue(ui, 'Pulled in');
+      await tester.drag(find.byType(ListView).first, const Offset(0, 700));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await _realTime(tester);
+      expect(find.text('Pulled in'), findsOneWidget);
     });
   });
 
@@ -444,6 +508,24 @@ void main() {
       s.request(_item(98, pkg: 'a', app: 'A', at: item.when, body: '  '));
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(engine.generateCount, 0);
+    });
+
+    test('a hidden verification code is never summarised', () async {
+      final item = await seed('hello');
+      final s = container.read(inboxSummarizerProvider);
+      s.request(
+        _item(
+          97,
+          pkg: 'a',
+          app: 'Bank',
+          at: item.when,
+          body: 'Verification code (hidden)',
+          otp: true,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(engine.generateCount, 0);
+      expect(s.done, isEmpty);
     });
 
     test('a request withdrawn before its turn is not summarised', () async {

@@ -1,10 +1,14 @@
 // Wave 3B: the Library. Folder block, file search results, opening a file and
 // asking about it, saved answers, to-dos persistence, empty states.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dhruva/core/di/library_providers.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
+import 'package:dhruva/data/connectors/notification_queue.dart';
 import 'package:dhruva/data/connectors/search_index.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/library/ui/file_search_screen.dart';
@@ -13,6 +17,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/connector_ui_harness.dart';
 
@@ -107,6 +112,35 @@ void main() {
       await tester.tap(_key('library-connect-folder'));
       await tester.pumpAndSettle();
       expect(_key('library-connect-folder'), findsOneWidget);
+    });
+  });
+
+  group('pull to refresh', () {
+    testWidgets('re-reads every connected source (here: the notification '
+        'queue) without the 10-minute throttle', (tester) async {
+      final ui = await pumpConnectorScreen(tester, const LibraryScreen());
+      ui.kit.notifications.granted = true;
+      await ui.kit.hub.notifications.connect();
+      await tester.pumpAndSettle();
+      File(
+        p.join(ui.kit.queueDir.path, NotificationQueue.liveName),
+      ).writeAsStringSync(
+        '${jsonEncode({'v': 1, 'pkg': 'com.chat.app', 'app': 'Chat', 'title': 'Ravi', 'text': 'hi', 't': DateTime.now().millisecondsSinceEpoch})}\n',
+      );
+      await tester.drag(find.byType(ListView).first, const Offset(0, 700));
+      await tester.pump();
+      // The read hops between real file IO and the test clock: alternate.
+      for (var i = 0; i < 15; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 40)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pumpAndSettle();
+      final items = await tester.runAsync(
+        () => ui.kit.hub.store.itemsOf('notifications'),
+      );
+      expect(items, hasLength(1));
     });
   });
 

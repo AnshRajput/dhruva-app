@@ -41,9 +41,18 @@ class NotificationConnector extends BaseConnector {
   @override
   String get displayName => 'Notifications';
 
+  /// Access was on once and has since been switched off.
   static const _off =
-      'Notification access is off. Open settings and switch it on for this '
-      'app to see your notification digest.';
+      'Notification access was turned off. Open settings and switch it back '
+      'on to keep your digest current.';
+
+  /// First time: the user has not switched the system toggle on yet.
+  static const _pending =
+      'One more step. Open settings and switch notification access on for '
+      'this app to see your notification digest.';
+
+  /// Config flag: the OS grant has been seen in place at least once.
+  static const _everGranted = 'everGranted';
 
   @override
   ConnectorStatus get currentStatus =>
@@ -62,8 +71,16 @@ class NotificationConnector extends BaseConnector {
     if (!await access.isGranted()) {
       return ConnectorStatus(
         ConnectorState.needsAttention,
-        detail: _off,
+        detail: account.config[_everGranted] == true ? _off : _pending,
         lastSyncAt: account.lastSyncAt,
+      );
+    }
+    if (account.config[_everGranted] != true) {
+      // From here on a missing grant means "revoked", not "not done yet".
+      await store.saveAccount(
+        id,
+        config: {...account.config, _everGranted: true},
+        onlyIfExists: true,
       );
     }
     if (account.lastError != null) {
@@ -97,7 +114,10 @@ class NotificationConnector extends BaseConnector {
     );
     if (await access.isGranted()) return evaluate(await store.account(id));
     await access.openSettings();
-    return const ConnectorStatus(ConnectorState.needsAttention, detail: _off);
+    return const ConnectorStatus(
+      ConnectorState.needsAttention,
+      detail: _pending,
+    );
   }
 
   @override

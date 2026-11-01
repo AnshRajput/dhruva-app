@@ -12,6 +12,8 @@
 /// retry. Also reachable full-screen at `/inbox/connect` (back button shown).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +41,18 @@ class InboxScreen extends ConsumerStatefulWidget {
 class _InboxScreenState extends ConsumerState<InboxScreen> {
   /// Package of the app chip that is selected; null is "All".
   String? _filter;
+
+  @override
+  void initState() {
+    super.initState();
+    // Opening the Inbox shows what arrived since the last look: the queue is
+    // drained now, not at the next 10-minute sync.
+    Future.microtask(() {
+      if (mounted) {
+        unawaited(ref.read(connectorActionsProvider).drainNotifications());
+      }
+    });
+  }
 
   Future<void> _openItem(ConnectorItem item) async {
     // The detail (and a chat opened from it) needs the engine: stop writing
@@ -132,7 +146,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
           top: inset.top + tokens.spacing.xs,
           bottom: inset.bottom,
         ),
-        child: body,
+        child: RefreshIndicator(
+          onRefresh: ref.read(connectorActionsProvider).refreshAll,
+          child: body,
+        ),
       ),
     );
   }
@@ -146,6 +163,7 @@ class _Padded extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.all(tokens.spacing.base),
       children: [child],
     );
@@ -266,6 +284,7 @@ class _InboxList extends StatelessWidget {
           child: ListView.builder(
             // Rows built = rows on screen: the lazy summaries follow this.
             cacheExtent: 0,
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               tokens.spacing.base,
               0,
