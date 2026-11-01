@@ -15,6 +15,7 @@ void main() {
   test('shortcut routes', () {
     expect(IntentInbox.locationFor({'route': 'new_chat'}), '/chat/new');
     expect(IntentInbox.locationFor({'route': 'workflows'}), '/workflows');
+    expect(IntentInbox.locationFor({'route': 'talk'}), '/chat/new?talk=1');
   });
 
   test('text wins over route; blank and unknown are ignored', () {
