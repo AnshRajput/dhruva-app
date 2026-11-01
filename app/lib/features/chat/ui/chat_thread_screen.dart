@@ -22,13 +22,13 @@ import '../state/chat_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../state/lighter_model.dart';
 import '../state/message_info_x.dart';
-import '../widgets/brand_motif.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
 import '../widgets/empty_states.dart';
 import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
+import '../widgets/reply_status.dart';
 import '../widgets/report_sheet.dart';
 import 'model_picker_sheet.dart';
 import 'sampling_settings_sheet.dart';
@@ -276,7 +276,7 @@ class _ThreadScaffold extends ConsumerWidget {
                         padding: EdgeInsets.all(tokens.spacing.md),
                         itemCount:
                             visible.length +
-                            (state.awaitingFirstToken ? 1 : 0) +
+                            (_warming ? 1 : 0) +
                             (state.modelLoadError != null ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i < visible.length) {
@@ -293,21 +293,14 @@ class _ThreadScaffold extends ConsumerWidget {
                             );
                           }
                           var index = i - visible.length;
-                          if (state.awaitingFirstToken) {
-                            if (index == 0) {
-                              return const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: TypingIndicator(),
-                                ),
-                              );
-                            }
+                          if (_warming) {
+                            if (index == 0) return _buildWarmUp();
                             index -= 1;
                           }
                           return ChatErrorCard(
                             content: chatErrorContentFor(
                               state.modelLoadError!.runtimeType.toString(),
+                              modelSizeBytes: state.model?.sizeBytes,
                             ),
                             onAction: (action) =>
                                 _handleModelLoadError(context, ref, action),
@@ -346,7 +339,10 @@ class _ThreadScaffold extends ConsumerWidget {
                     ],
                   ),
           ),
-          if (state.modelLoading) const LinearProgressIndicator(),
+          // The in-thread "Warming up" row covers a send; the bar is only for
+          // the screen-open load, before any turn exists.
+          if (state.modelLoading && state.warmingSince == null)
+            const LinearProgressIndicator(),
           if (state.isGenerating &&
               DeviceGuardPolicy.thermalAction(
                     ref.watch(deviceHealthProvider.select((h) => h.thermal)),
@@ -395,6 +391,28 @@ class _ThreadScaffold extends ConsumerWidget {
     );
   }
 
+  bool get _warming => state.warmingSince != null || state.awaitingFirstToken;
+
+  /// The row under the user's message while the reply has not started:
+  /// "Warming up (model) · 4 s", or the plain-words timeout card.
+  Widget _buildWarmUp() {
+    final since = state.warmingSince ?? DateTime.now();
+    if (state.firstTokenTimedOut) {
+      return StalledTurnCard(
+        seconds: DateTime.now().difference(since).inSeconds,
+        onStop: () => unawaited(controller.cancel()),
+        onTryAgain: () => unawaited(controller.retryStalled()),
+      );
+    }
+    return WarmUpStatus(
+      modelName: state.model == null
+          ? null
+          : modelShortLabel(state.model!.repoId),
+      loading: state.modelLoading,
+      since: since,
+    );
+  }
+
   Widget _buildMessageItem(
     BuildContext context,
     WidgetRef ref,
@@ -403,9 +421,13 @@ class _ThreadScaffold extends ConsumerWidget {
   ) {
     final message = visible[index];
     if (message.role == MessageRole.assistant &&
-        message.status == MessageStatus.error) {
+        message.status == MessageStatus.error &&
+        message.content.trim().isEmpty) {
       return ChatErrorCard(
-        content: chatErrorContentFor(message.errorKind),
+        content: chatErrorContentFor(
+          message.errorKind,
+          modelSizeBytes: state.model?.sizeBytes,
+        ),
         onAction: (action) =>
             _handleMessageError(context, ref, message, action),
       );
@@ -447,11 +469,44 @@ class _ThreadScaffold extends ConsumerWidget {
             )
           : null,
     );
-    if (!state.heatStoppedMessageIds.contains(message.id)) return bubble;
+    if (message.role != MessageRole.assistant || isStreamingMessage) {
+      return bubble;
+    }
+    // D1: a reply that did not finish says why and can be resumed (only the
+    // newest reply, and only while nothing else is running).
+    final end = _replyEnd(message);
+    if (end == null) return bubble;
+    final canContinue = canAct && index == visible.length - 1;
+    final empty = message.content.trim().isEmpty;
+    final note = ReplyStatusNote(
+      end: end,
+      onContinue: !canContinue
+          ? null
+          : empty
+          ? () => unawaited(controller.regenerate(message.id))
+          : () => unawaited(
+              _confirmStart(context, ref).then((ok) {
+                if (ok) unawaited(controller.continueMessage(message.id));
+              }),
+            ),
+      actionLabel: empty ? 'Try again' : 'Continue',
+    );
+    // An empty stopped reply has no text worth a bubble: the note alone.
+    if (empty) return note;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [bubble, const HeatStoppedNote()],
+      children: [bubble, note],
     );
+  }
+
+  ReplyEnd? _replyEnd(MessageInfo m) {
+    if (state.heatStoppedMessageIds.contains(m.id)) return ReplyEnd.tooHot;
+    return switch (m.status) {
+      MessageStatus.cancelled => ReplyEnd.stopped,
+      MessageStatus.truncated => ReplyEnd.cutShort,
+      MessageStatus.error => ReplyEnd.failed,
+      MessageStatus.complete => null,
+    };
   }
 
   /// Battery guard, before a generation starts: a low-battery warning is a
@@ -565,6 +620,7 @@ class _ThreadScaffold extends ConsumerWidget {
           context,
           selectedModelId: state.modelId,
           smallerModelsOnly: true,
+          smallerThanBytes: state.model?.sizeBytes,
         );
         if (picked != null) {
           await controller.switchModel(picked);
@@ -606,6 +662,7 @@ class _ThreadScaffold extends ConsumerWidget {
           context,
           selectedModelId: state.modelId,
           smallerModelsOnly: true,
+          smallerThanBytes: state.model?.sizeBytes,
         );
         if (picked != null) await controller.switchModel(picked);
       case ChatRecoveryAction.redownload:

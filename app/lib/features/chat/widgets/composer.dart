@@ -113,8 +113,8 @@ class _ComposerState extends ConsumerState<Composer> {
 
   Future<void> _submit() async {
     if (widget.isGenerating || (!_hasText && _attachedImage == null)) return;
-    final gate = widget.beforeSend;
-    if (gate != null && !(await gate()) || !mounted) return;
+    // D3: the input clears the instant send is tapped (not after the battery
+    // check or the model load); a declined check puts the draft back.
     final text = _controller.text;
     final image = _attachedImage;
     _controller.clear();
@@ -122,6 +122,13 @@ class _ComposerState extends ConsumerState<Composer> {
       _hasText = false;
       _attachedImage = null;
     });
+    final gate = widget.beforeSend;
+    if (gate != null && !(await gate())) {
+      if (!mounted) return;
+      _controller.text = text;
+      setState(() => _attachedImage = image);
+      return;
+    }
     widget.onSend(text, image);
   }
 
