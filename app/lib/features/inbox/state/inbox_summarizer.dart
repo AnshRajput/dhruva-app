@@ -23,6 +23,7 @@ import '../../../core/di/engine_session.dart' show loadedModelIdProvider;
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../data/connectors/connector.dart';
+import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../../../data/connectors/sources_block.dart';
 import '../../../engine_bindings/engine_service.dart';
 
@@ -70,6 +71,8 @@ class InboxSummarizer with WidgetsBindingObserver {
   /// A row on screen wants a summary. Ignored when it already has one.
   void request(ConnectorItem item) {
     if (_disposed || item.summary != null || item.body.trim().isEmpty) return;
+    // A hidden verification code has nothing left to summarise.
+    if (item.flags[otpFlag] == true) return;
     _wanted.putIfAbsent(item.id, () => item);
     unawaited(_pump());
   }

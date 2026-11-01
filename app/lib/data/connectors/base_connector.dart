@@ -21,6 +21,10 @@ abstract class BaseConnector implements Connector {
   Future<void>? _running;
   bool _cancelled = false;
 
+  /// A [doConnect] sets this when the user backed out of the OS UI (closed the
+  /// folder picker): [connect] then records nothing and reports `false`.
+  bool backedOut = false;
+
   /// Called after [connect] and [revoke] finish (status already emitted). The
   /// hub sets it to keep the background job in step with what is connected.
   Future<void> Function()? onConnectionChanged;
@@ -63,6 +67,10 @@ abstract class BaseConnector implements Connector {
   /// The read. Throw [ConnectorException] for anything the user can fix.
   Future<SyncResult> doSync(ConnectorAccount account, DateTime? since);
 
+  /// False for a source that is polled often (notifications): a read that
+  /// found nothing then leaves no "Read 0" row in the privacy ledger.
+  bool get logEmptyReads => true;
+
   /// Releases whatever the connector holds besides stored rows (folder grant,
   /// notification capture switch). Runs before the wipe; must not throw.
   Future<void> onRevoke(ConnectorAccount? account) async {}
@@ -88,13 +96,21 @@ abstract class BaseConnector implements Connector {
   }
 
   @override
-  Future<void> connect() async {
+  Future<bool> connect() async {
+    backedOut = false;
     final next = await doConnect();
+    if (backedOut) {
+      // Nothing changed: no ledger row, no background-job churn. The status is
+      // re-emitted only so a card that showed a spinner settles again.
+      emit(next);
+      return false;
+    }
     if (next.isConnected) {
       await store.addLedger(id, LedgerAction.connect);
     }
     emit(next);
     await onConnectionChanged?.call();
+    return true;
   }
 
   @override
@@ -114,7 +130,11 @@ abstract class BaseConnector implements Connector {
     try {
       final result = await doSync(account, since);
       if (result.skipped == null) {
-        await store.recordSync(id, count: result.read);
+        await store.recordSync(
+          id,
+          count: result.read,
+          ledger: result.read > 0 || logEmptyReads,
+        );
       }
       emit(await _evaluateSafely(await store.account(id)));
       return result;

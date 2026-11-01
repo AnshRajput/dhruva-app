@@ -89,8 +89,9 @@ final class ConnectorHub {
     await syncBackgroundJob();
   }
 
-  /// In sync order.
-  List<Connector> get all => [calendar, folder, notifications, contacts];
+  /// In display order (Connectors screen). Sync order is
+  /// `ConnectorIds.syncOrder`: contacts run last there.
+  List<Connector> get all => [calendar, contacts, folder, notifications];
 
   Connector? byId(String id) {
     for (final c in all) {

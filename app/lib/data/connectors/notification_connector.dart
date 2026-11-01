@@ -16,6 +16,7 @@ import 'connector.dart';
 import 'connector_sources.dart';
 import 'connector_store.dart';
 import 'notification_queue.dart';
+import 'otp_guard.dart';
 
 /// Notifications older than this are dropped at each sync.
 const notificationRetention = Duration(days: 7);
@@ -28,6 +29,11 @@ class NotificationConnector extends BaseConnector {
     : super(store);
 
   final NotificationAccess access;
+
+  // Drained on every resume, Inbox open and pull-to-refresh: an empty drain is
+  // not worth a ledger row.
+  @override
+  bool get logEmptyReads => false;
 
   @override
   String get id => ConnectorIds.notifications;
@@ -109,14 +115,26 @@ class NotificationConnector extends BaseConnector {
     ).drain(now: now, excluded: _excluded(account));
     final drafts = [
       for (final n in batch.notifications)
-        ItemDraft(
-          externalId: n.dedupeId,
-          kind: ItemKind.notification,
-          title: n.title.isEmpty ? n.app : n.title,
-          body: n.text,
-          sentAt: n.time,
-          flags: {'pkg': n.pkg, 'app': n.app},
-        ),
+        if (looksLikeVerificationCode(n.title, n.text))
+          // The code is dropped here, before anything is stored: the title
+          // may carry it too, so the app name stands in for it.
+          ItemDraft(
+            externalId: n.dedupeId,
+            kind: ItemKind.notification,
+            title: n.app,
+            body: hiddenCodeBody,
+            sentAt: n.time,
+            flags: {'pkg': n.pkg, 'app': n.app, otpFlag: true},
+          )
+        else
+          ItemDraft(
+            externalId: n.dedupeId,
+            kind: ItemKind.notification,
+            title: n.title.isEmpty ? n.app : n.title,
+            body: n.text,
+            sentAt: n.time,
+            flags: {'pkg': n.pkg, 'app': n.app},
+          ),
     ];
     final result = await store.upsertItems(id, drafts, requireAccount: true);
     // Only now is it safe to forget the queue files.

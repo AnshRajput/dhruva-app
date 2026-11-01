@@ -144,7 +144,10 @@ abstract interface class Connector {
   /// Starts the opt-in: asks the OS for the permission or access this source
   /// needs. Ends in [ConnectorState.connected], [ConnectorState.permissionDenied]
   /// or [ConnectorState.needsAttention]; never throws for a user "no".
-  Future<void> connect();
+  ///
+  /// Returns false when the user backed out (closed the folder picker): nothing
+  /// changed, so nothing was recorded and callers must not read or reconnect.
+  Future<bool> connect();
 
   /// Reads the source into the local store. [since] lets a source limit the
   /// work; most ignore it. Throws [ConnectorException] when a fix is needed.

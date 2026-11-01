@@ -75,6 +75,27 @@ void main() {
       expect(await kit.hub.store.account('folder'), isNull);
     });
 
+    test('backing out of "Change folder" writes no ledger row, reports no '
+        'change and keeps the grant', () async {
+      expect(await kit.hub.folder.connect(), isTrue);
+      final before = await kit.hub.store.ledger(connector: 'folder');
+      expect(before.map((e) => e.action), [LedgerAction.connect]);
+      final schedules = kit.hub.scheduler;
+
+      kit.folder.nextPick = null;
+      expect(await kit.hub.folder.connect(), isFalse);
+
+      final after = await kit.hub.store.ledger(connector: 'folder');
+      expect(after.length, before.length);
+      expect(kit.hub.folder.currentStatus.state, ConnectorState.connected);
+      expect(kit.folder.released, isEmpty);
+      expect(
+        (await kit.hub.store.account('folder'))!.config['grantId'],
+        'tree:notes',
+      );
+      expect(schedules, same(kit.hub.scheduler));
+    });
+
     test('choosing a different folder releases the old grant', () async {
       await connect();
       kit.folder.nextPick = const FolderGrant(id: 'tree:other', name: 'Other');

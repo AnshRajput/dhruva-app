@@ -86,7 +86,7 @@ const _copy = <String, ConnectorCopy>{
     name: 'Notifications',
     reads:
         'The title and text of notifications from your apps, kept for 7 days. '
-        'Private ones and one-time codes are skipped.',
+        'Private notifications are skipped and verification codes are hidden.',
     disconnectEffect:
         'Deletes the notifications saved on this phone and stops listening. '
         'To fully revoke it, also switch off notification access in system '

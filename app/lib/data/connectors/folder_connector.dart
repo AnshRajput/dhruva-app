@@ -114,8 +114,10 @@ class FolderConnector extends BaseConnector {
         detail: 'Could not open the folder picker. Try again.',
       );
     }
-    // Cancelled: nothing changes (a previous grant, if any, stays).
+    // Cancelled: nothing changes (a previous grant, if any, stays) and
+    // `connect` writes no ledger row.
     if (grant == null) {
+      backedOut = true;
       return (await store.account(id)) == null
           ? ConnectorStatus.notConnected
           : await evaluate(await store.account(id));

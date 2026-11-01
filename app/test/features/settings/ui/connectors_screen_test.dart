@@ -42,7 +42,10 @@ void main() {
       expect(find.text('Not connected'), findsNWidgets(4));
       expect(find.text('Choose what Dhruva can read.'), findsOneWidget);
       expect(find.textContaining('who is invited'), findsOneWidget);
-      expect(find.textContaining('one-time codes'), findsOneWidget);
+      expect(
+        find.textContaining('verification codes are hidden'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Gmail'), findsNothing);
       expect(find.text('Android'), findsOneWidget);
     });

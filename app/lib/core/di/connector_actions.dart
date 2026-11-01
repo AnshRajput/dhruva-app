@@ -28,9 +28,10 @@ final class ConnectorActions {
   Future<ConnectorStatus> connect(String id) async {
     final c = await _connector(id);
     if (c == null) return ConnectorStatus.unsupported;
-    await c.connect();
+    final changed = await c.connect();
     // First read right away, so Today and the Library have something to show.
-    if (c.currentStatus.isConnected) {
+    // Not after backing out of a picker: nothing was connected just now.
+    if (changed && c.currentStatus.isConnected) {
       unawaited(_firstSync(c));
     }
     return c.currentStatus;
