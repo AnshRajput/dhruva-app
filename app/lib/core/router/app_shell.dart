@@ -30,6 +30,7 @@ import '../../features/models_hub/state/speed_test_controller.dart';
 import '../../features/models_hub/state/storage_controller.dart';
 import '../../features/playground/state/playground_installed_models_provider.dart'
     as playground_installed;
+import '../di/connector_actions.dart';
 import '../settings/what_moved.dart';
 import '../widgets/platform_chrome.dart';
 import 'inbox_availability.dart';
@@ -158,10 +159,17 @@ class AppShell extends ConsumerWidget {
       body: WhatMovedGate(child: navigationShell),
       bottomNavigationBar: AdaptiveTabBar(
         selectedIndex: selected < 0 ? 0 : selected,
-        onSelected: (index) => navigationShell.goBranch(
-          branches[index],
-          initialLocation: branches[index] == navigationShell.currentIndex,
-        ),
+        onSelected: (index) {
+          // The Inbox branch stays mounted (indexedStack), so its initState
+          // runs once: drain on every tap of the tab instead.
+          if (branches[index] == ShellBranch.inbox) {
+            unawaited(ref.read(connectorActionsProvider).drainNotifications());
+          }
+          navigationShell.goBranch(
+            branches[index],
+            initialLocation: branches[index] == navigationShell.currentIndex,
+          );
+        },
         destinations: [
           const NavigationDestination(
             icon: Icon(Icons.wb_sunny_outlined),

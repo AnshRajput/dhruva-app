@@ -162,6 +162,11 @@ abstract interface class Connector {
   /// changed, so nothing was recorded and callers must not read or reconnect.
   Future<bool> connect();
 
+  /// The status [connect] itself ended in (what the OS answered), unaffected
+  /// by a status refresh that landed afterwards. The Connectors card reads the
+  /// denial sentence from here, not from [currentStatus].
+  ConnectorStatus get lastConnectStatus;
+
   /// Reads the source into the local store. [since] lets a source limit the
   /// work; most ignore it. Throws [ConnectorException] when a fix is needed.
   Future<SyncResult> sync({DateTime? since});

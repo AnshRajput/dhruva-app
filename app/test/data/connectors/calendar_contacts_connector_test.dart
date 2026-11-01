@@ -52,6 +52,22 @@ void main() {
       expect(await kit.hub.store.ledger(connector: 'calendar'), isEmpty);
     });
 
+    test('a resume-time refresh around the prompt cannot erase the first '
+        'Deny: connect() still ends in the retry sentence', () async {
+      kit.calendar.afterRequest = DevicePermission.notDetermined;
+      final cal = kit.hub.calendar;
+      final connecting = cal.connect();
+      await cal.refreshStatus(); // resume while the prompt closes: skipped
+      await connecting;
+      await cal.refreshStatus(); // a later refresh replaces the emitted status
+      expect(cal.currentStatus.detail, isNull);
+      expect(
+        cal.lastConnectStatus.detail,
+        contains('Tap Connect to try again'),
+      );
+      expect(cal.lastConnectStatus.needsSettings, isFalse);
+    });
+
     test('Deny for good (second Deny): blocked copy, Open settings, nothing '
         'stored', () async {
       kit.calendar.afterRequest = DevicePermission.denied;

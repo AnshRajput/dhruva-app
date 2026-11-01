@@ -34,7 +34,11 @@ final class ConnectorActions {
     if (changed && c.currentStatus.isConnected) {
       unawaited(_firstSync(c));
     }
-    return c.currentStatus;
+    // A refresh after the prompt may have replaced the status: the answer to
+    // this tap is what connect() itself ended in.
+    return changed && !c.currentStatus.isConnected
+        ? c.lastConnectStatus
+        : c.currentStatus;
   }
 
   Future<void> _firstSync(Connector c) async {

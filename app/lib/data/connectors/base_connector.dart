@@ -21,6 +21,11 @@ abstract class BaseConnector implements Connector {
   bool _syncing = false;
   Future<void>? _running;
   bool _cancelled = false;
+  bool _connecting = false;
+  ConnectorStatus _lastConnect = ConnectorStatus.notConnected;
+
+  @override
+  ConnectorStatus get lastConnectStatus => _lastConnect;
 
   /// A [doConnect] sets this when the user backed out of the OS UI (closed the
   /// folder picker): [connect] then records nothing and reports `false`.
@@ -119,7 +124,9 @@ abstract class BaseConnector implements Connector {
 
   @override
   Future<void> refreshStatus() async {
-    if (_syncing) return;
+    // Resume fires while the OS prompt closes: a refresh then would overwrite
+    // the denial sentence connect() is about to emit.
+    if (_syncing || _connecting) return;
     emit(await _evaluateSafely(await store.account(id)));
   }
 
@@ -139,7 +146,14 @@ abstract class BaseConnector implements Connector {
   Future<bool> connect() async {
     backedOut = false;
     awaitingGrant = false;
-    final next = await doConnect();
+    _connecting = true;
+    final ConnectorStatus next;
+    try {
+      next = await doConnect();
+    } finally {
+      _connecting = false;
+    }
+    _lastConnect = next;
     if (backedOut) {
       // Nothing changed: no ledger row, no background-job churn. The status is
       // re-emitted only so a card that showed a spinner settles again.

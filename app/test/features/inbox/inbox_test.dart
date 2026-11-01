@@ -583,7 +583,12 @@ void main() {
   });
 
   group('detail', () {
-    Future<ConnectorUi> pumpDetail(WidgetTester tester) async {
+    Future<ConnectorUi> pumpDetail(
+      WidgetTester tester, {
+      String body = 'Sana shared onboarding v4',
+      String title = '#design-crit',
+      bool otp = false,
+    }) async {
       final ui = await pumpConnectorScreen(
         tester,
         const InboxItemScreen(itemId: 1),
@@ -591,13 +596,13 @@ void main() {
       ui.kit.notifications.granted = true;
       await ui.kit.hub.notifications.connect();
       await ui.kit.hub.store.upsertItems('notifications', [
-        _draft(
-          '1',
-          pkg: 'com.slack',
-          app: 'Slack',
-          at: DateTime.now(),
-          title: '#design-crit',
-          body: 'Sana shared onboarding v4',
+        ItemDraft(
+          externalId: '1',
+          kind: ItemKind.notification,
+          title: title,
+          body: body,
+          sentAt: DateTime.now(),
+          flags: {'pkg': 'com.slack', 'app': 'Slack', if (otp) 'otp': true},
         ),
       ]);
       await tester.pumpAndSettle();
@@ -622,6 +627,20 @@ void main() {
       final uri = Uri.parse(ui.visited.single);
       expect(uri.path, '/ask/new');
       expect(uri.queryParametersAll['focus'], ['1']);
+    });
+
+    testWidgets('a hidden verification code offers no Ask about this', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        title: 'Bank',
+        body: 'Verification code (hidden)',
+        otp: true,
+      );
+      expect(find.text('Verification code (hidden)'), findsWidgets);
+      expect(_key('inbox-ask'), findsNothing);
+      expect(_key('inbox-open-app'), findsOneWidget);
     });
 
     testWidgets('Open app launches the source app; a missing app is named', (
