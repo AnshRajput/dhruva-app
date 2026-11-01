@@ -881,12 +881,11 @@ packages:
     source: hosted
     version: "2.3.0"
   pdf_cos:
-    dependency: transitive
+    dependency: "direct main"
     description:
-      name: pdf_cos
-      sha256: "1c096ac5ba46f504c772bf5927faf581211391ab73962baec32ed1dddd2165a7"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/pdf_cos"
+      relative: true
+    source: path
     version: "14.0.0"
   pdf_document:
     dependency: "direct main"

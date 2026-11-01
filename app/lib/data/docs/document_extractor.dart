@@ -13,6 +13,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:pdf_cos/pdf_cos.dart' show PdfDecodeLimitExceeded;
 import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 
@@ -29,6 +30,9 @@ const maxDocumentChars = 400000;
 /// A read that runs longer than this is killed (the isolate is cancellable,
 /// unlike `Isolate.run`) as a backstop for inputs the guards do not model.
 const _extractTimeout = Duration(seconds: 60);
+
+/// Pages processed per PDF; later pages are ignored.
+const maxPdfPages = 2000;
 
 /// A PDF with fewer characters than this has no usable text layer.
 const _minUsableChars = 50;
@@ -203,41 +207,59 @@ ExtractedDocument _extractText(
   );
 }
 
+const _unsafe = DocumentException(
+  DocumentFailureKind.unsafe,
+  "Dhruva can't read this PDF safely. It uses an unusual encoding or "
+  'expands to far more data than a normal document, so it may be damaged '
+  'or unsafe.',
+);
+
 ExtractedDocument _extractPdf(Uint8List bytes, String name) {
-  // Refuse decompression bombs and stream encodings the guard cannot bound
-  // before the parser (which has no output cap) ever sees the stream.
-  if (!pdfSafeToParse(bytes)) {
-    throw const DocumentException(
-      DocumentFailureKind.unsafe,
-      "Dhruva can't read this PDF safely. It uses an unusual encoding or "
-      'expands to far more data than a normal document, so it may be damaged '
-      'or unsafe.',
-    );
+  // Defence in depth: refuse stream encodings the guard cannot bound before
+  // the parser sees them. The hard protection is the output cap inside the
+  // vendored decoder (third_party/pdf_cos), which no guard guess can bypass.
+  if (!pdfSafeToParse(bytes)) throw _unsafe;
+  try {
+    return _readPdf(bytes, name);
+  } on PdfDecodeLimitExceeded {
+    throw _unsafe;
   }
+}
+
+ExtractedDocument _readPdf(Uint8List bytes, String name) {
   final PdfDocument doc;
   try {
     doc = PdfDocument.open(bytes);
+  } on PdfDecodeLimitExceeded {
+    rethrow;
   } on Object {
     throw const DocumentException(
       DocumentFailureKind.unreadable,
       "Couldn't open that PDF. It may be password-protected or damaged.",
     );
   }
-  final pageCount = doc.pageCount;
+  final pageCount = doc.pageCount < maxPdfPages ? doc.pageCount : maxPdfPages;
+  // Library code swallows per-stream errors in places; the budget latches.
+  final budget = doc.cos.decodeBudget;
   final pages = <PageText>[];
   var chars = 0;
   for (var i = 0; i < pageCount; i++) {
     String text;
     try {
       text = normalizeWhitespace(PdfTextExtractor.extract(doc, i).text);
+    } on PdfDecodeLimitExceeded {
+      rethrow;
     } on Object {
+      if (budget.tripped) throw _unsafe;
       continue; // one bad page must not lose the rest of the document.
     }
+    if (budget.tripped) throw _unsafe;
     if (text.isEmpty) continue;
     chars += text.length;
     _checkLength(chars);
     pages.add(PageText(i + 1, text));
   }
+  if (budget.tripped) throw _unsafe;
   if (chars < _minUsableChars) {
     throw const DocumentException(
       DocumentFailureKind.noText,

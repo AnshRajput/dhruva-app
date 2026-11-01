@@ -1,7 +1,9 @@
-/// Decompression-bomb guard for PDFs. The PDF parser decodes every filter
-/// with no output cap, so a tiny crafted file can expand to gigabytes and
-/// take the whole app down (an isolate OOM kills the process). Before the
-/// parser sees the bytes this guard:
+/// Decompression-bomb guard for PDFs: DEFENCE IN DEPTH. The hard protection
+/// is the output cap inside the vendored decoders (third_party/pdf_cos,
+/// `// dhruva: bounded decode`), which holds whatever this guard guesses
+/// about stream boundaries. Upstream pdf_cos decodes with no cap, so a tiny
+/// crafted file could expand to gigabytes and kill the app. Before the
+/// parser sees the bytes this guard (which fails closed) also:
 ///
 /// 1. parses every stream dictionary (any `<<...>>` followed by `stream`,
 ///    wherever it sits in the file, because the parser also accepts streams
@@ -23,6 +25,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:archive/archive.dart' show getAdler32;
 
 /// Largest inflated size accepted for one stream.
 const maxInflatedStreamBytes = 64 * 1024 * 1024;
@@ -66,7 +70,7 @@ bool pdfSafeToParse(
   int maxStream = maxInflatedStreamBytes,
   int maxTotal = maxInflatedTotalBytes,
 }) {
-  final List<int> flateStarts;
+  final List<_FlateStart> flateStarts;
   try {
     flateStarts = _flateStreamStarts(bytes, maxStream);
   } on _LimitExceeded {
@@ -78,15 +82,19 @@ bool pdfSafeToParse(
 
   // Inflates bytes[start, end). Returns the inflated size, _incomplete when
   // the zlib data was cut off, or _garbage when it is not zlib. Throws
-  // _LimitExceeded past a limit.
+  // _LimitExceeded past a limit. dart:io's inflater reports a cut-off stream
+  // as success, so completeness is checked by finding the Adler-32 of
+  // everything inflated just before the end of the segment.
   int inflate(int start, int end) {
     var n = 0;
+    var adler = 1;
     final nested = _NestedStreamDetector();
     final sink = ZLibDecoder().startChunkedConversion(
       _ChunkSink((out) {
         if (n == 0 && _looksLikeZlib(out)) throw const _LimitExceeded();
         if (nested.feed(out)) throw const _LimitExceeded();
         n += out.length;
+        adler = getAdler32(out, adler);
         if (n > maxStream || total + n > maxTotal) {
           throw const _LimitExceeded();
         }
@@ -106,7 +114,7 @@ bool pdfSafeToParse(
     }
     try {
       sink.close();
-      return n;
+      return _adlerNearEnd(bytes, start, end, adler) ? n : _incomplete;
     } on _LimitExceeded {
       rethrow;
     } on Object {
@@ -114,20 +122,57 @@ bool pdfSafeToParse(
     }
   }
 
-  for (final start in flateStarts) {
+  for (final s in flateStarts) {
     try {
-      // The next `endstream` may sit inside the deflate data itself, so an
+      // Segment like the parser: a direct /Length is trusted when
+      // `endstream` follows it, else the next `endstream` marker ends the
+      // data. The marker may sit inside the deflate data itself, so an
       // incomplete result retries with the segment extended (a few times).
-      var end = _indexOfEndstream(bytes, start);
+      // A stream still incomplete after that is REFUSED: the guard cannot
+      // say where the parser ends it (the decoder's own cap would still
+      // hold, but this is defence in depth, so it fails closed).
+      final len = s.length;
+      var end = len != null && _endstreamFollows(bytes, s.data + len)
+          ? s.data + len
+          : _indexOfEndstream(bytes, s.data);
+      var n = _incomplete;
       for (var tries = 0; tries < 8; tries++) {
-        final n = inflate(start, end);
+        n = inflate(s.data, end);
         if (n >= 0) total += n;
         if (n != _incomplete || end >= bytes.length) break;
         end = _indexOfEndstream(bytes, end + 9);
       }
+      if (n == _incomplete) return false;
     } on _LimitExceeded {
       return false;
     }
+  }
+  return true;
+}
+
+/// True when the big-endian [adler] sits in the last bytes of bytes[start, end)
+/// (zlib's trailer, maybe followed by a little padding).
+bool _adlerNearEnd(Uint8List b, int start, int end, int adler) {
+  final from = end - 64 > start ? end - 64 : start;
+  for (var i = from; i + 4 <= end; i++) {
+    if ((b[i] << 24 | b[i + 1] << 16 | b[i + 2] << 8 | b[i + 3]) == adler) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The parser's `_endstreamFollows`: optional whitespace, then `endstream`.
+bool _endstreamFollows(Uint8List b, int at) {
+  if (at < 0 || at > b.length) return false;
+  var p = at;
+  while (p < b.length && _isWs(b[p])) {
+    p++;
+  }
+  const kw = [0x65, 0x6e, 0x64, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d];
+  if (p + kw.length > b.length) return false;
+  for (var k = 0; k < kw.length; k++) {
+    if (b[p + k] != kw[k]) return false;
   }
   return true;
 }
@@ -380,10 +425,18 @@ final class _Lexer {
   }
 }
 
-/// Data start of every FlateDecode stream the guard must inflate. Throws
-/// [_LimitExceeded] on the first stream that is not on the allow-list.
-List<int> _flateStreamStarts(Uint8List bytes, int maxStream) {
-  final starts = <int>{};
+/// Where a Flate stream's data begins, and its direct integer /Length (null
+/// when absent or indirect), which the parser trusts when `endstream` follows.
+final class _FlateStart {
+  const _FlateStart(this.data, this.length);
+  final int data;
+  final int? length;
+}
+
+/// Every FlateDecode stream the guard must inflate. Throws [_LimitExceeded]
+/// on the first stream that is not on the allow-list.
+List<_FlateStart> _flateStreamStarts(Uint8List bytes, int maxStream) {
+  final starts = <_FlateStart>[];
   // Every `<<` is a candidate, so nested dictionaries, dictionaries inside
   // raw object streams and overlapping decoys are all seen. The budget keeps
   // a file built from unclosed dictionaries or strings from going quadratic.
@@ -392,6 +445,7 @@ List<int> _flateStreamStarts(Uint8List bytes, int maxStream) {
     if (bytes[i] != 0x3c || bytes[i + 1] != 0x3c) continue;
     final lx = _Lexer(bytes, i);
     int? data;
+    int? length;
     try {
       final d = lx.dict(0);
       final t = lx.peek();
@@ -404,22 +458,26 @@ List<int> _flateStreamStarts(Uint8List bytes, int maxStream) {
           data++;
         }
         if (!_classify(d, maxStream)) data = null;
+        final len = d['Length'];
+        if (len is int && len >= 0) length = len;
       }
     } on _Malformed {
       // the parser would reject this too
     }
-    if (data != null) starts.add(data);
+    // Overlapping decoys can give one data start two /Length readings: keep
+    // every (start, length) pair.
+    if (data != null) starts.add(_FlateStart(data, length));
     budget -= lx.p - i;
     if (budget < 0) throw const _LimitExceeded();
   }
-  return starts.toList();
+  return starts;
 }
 
 /// True for a stream to inflate-check, false for one needing no decoding;
 /// throws [_LimitExceeded] for anything else. The parser reads only /Filter
 /// and /DecodeParms (/DP); it follows indirect objects in them, which the
-/// guard cannot do cheaply, so those are refused. /Length is not read at all:
-/// the inflate pass starts at the stream keyword like the parser's zlib does.
+/// guard cannot do cheaply, so those are refused. A direct /Length steers the
+/// segmentation in [pdfSafeToParse]; an indirect one is not followed.
 bool _classify(Map<String, Object?> d, int maxStream) {
   const refuse = _LimitExceeded();
   final f = d['Filter'];

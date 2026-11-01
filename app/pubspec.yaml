@@ -30,7 +30,7 @@ environment:
 dependencies:
   # Loop 6 (voice). Pure-Dart tar.bz2 extraction for sherpa's model bundles
   # (ASR/TTS ship as .tar.bz2 archives of encoder/decoder/tokens files). MIT.
-  archive: ^4.0.7
+  archive: ^4.6.0
   # Loop 6 (voice). Plays a synthesized WAV file through the OS audio stack.
   # MIT. Lighter surface than just_audio for "play this file"; used only in
   # the coverage-excluded VoicePlayer adapter.
@@ -98,6 +98,7 @@ dependencies:
   # identical on Android + iOS), Apache-2.0, no network. Runs inside an
   # isolate (data/docs/document_extractor.dart). Scanned PDFs have no text
   # layer and are reported as such rather than OCR'd.
+  pdf_cos: ^14.0.0 # vendored + patched, see dependency_overrides
   pdf_document: ^14.0.0
   pdf_graphics: ^14.0.0
   # Loop 6 (voice). Mic capture as a 16kHz mono PCM stream (record.startStream)
@@ -122,6 +123,14 @@ dependencies:
   # path_provider/device_info_plus already in this file.
   shorebird_code_push: ^2.0.7
   url_launcher: ^6.3.2
+
+# Vendored pdf_cos 14.0.0 (Apache-2.0) with a hard output cap on every stream
+# decoding filter (see third_party/pdf_cos/NOTICE.md). The upstream parser
+# decodes with no cap, so a ~100 KB file can inflate to ~100 MB+; guarding
+# outside the decoder kept being bypassed, so the cap lives inside it.
+dependency_overrides:
+  pdf_cos:
+    path: third_party/pdf_cos
 
 dev_dependencies:
   build_runner: ^2.14.1 # pinned below 2.15 — newer requires meta ^1.18.3, which
