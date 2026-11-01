@@ -5,4 +5,13 @@
     <!-- design-tokens.json color.dark.background: the app is dark-only, so the
          launch screen matches it instead of flashing white. -->
     <color name="splash_background">#0E1220</color>
+    <!-- Home-screen widget (design-tokens.json color.dark): navy ground, surface
+         pill, outlineVariant hairline, star-gold accent. -->
+    <color name="widget_background">#0E1220</color>
+    <color name="widget_surface">#1F263D</color>
+    <color name="widget_outline">#3D4867</color>
+    <color name="widget_on_surface">#EDEFF8</color>
+    <color name="widget_on_surface_variant">#C7CEE0</color>
+    <color name="widget_star_gold">#EBBA47</color>
+    <color name="widget_ripple">#33EBBA47</color>
 </resources>
