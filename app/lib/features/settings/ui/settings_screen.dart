@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/update/shorebird_update_banner.dart' show updIosReady;
@@ -32,6 +33,8 @@ class SettingsScreen extends StatelessWidget {
           _StorageTile(),
           _SectionHeader('Data'),
           _ClearHistoryTile(),
+          _SectionHeader('Device'),
+          _DeviceGuardTile(),
           _SectionHeader('Safety'),
           _SafetyTile(),
           _CrashReportsTile(),
@@ -90,6 +93,26 @@ class _StorageTile extends ConsumerWidget {
       },
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push('/models'),
+    );
+  }
+}
+
+class _DeviceGuardTile extends ConsumerWidget {
+  const _DeviceGuardTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(deviceGuardEnabledProvider).value ?? true;
+    return SwitchListTile(
+      key: const ValueKey('device-guard-switch'),
+      secondary: const Icon(Icons.warning_amber),
+      title: const Text('Battery & heat guard'),
+      subtitle: const Text(
+        'Warns you, and stops a reply, when your phone is low on battery '
+        'or too hot.',
+      ),
+      value: enabled,
+      onChanged: (v) => ref.read(deviceGuardEnabledProvider.notifier).set(v),
     );
   }
 }

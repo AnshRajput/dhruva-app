@@ -111,7 +111,11 @@ final appRouter = GoRouter(
           // first turn auto-sends — a query param, like `characterId`, so
           // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
           final promptParam = state.uri.queryParameters['prompt'];
+          // Android widget "Talk" (IntentInbox route `talk`): open hands-free
+          // voice as soon as the new chat is ready.
+          final openVoice = state.uri.queryParameters['talk'] == '1';
           return ChatThreadScreen(
+            openVoiceOnStart: openVoice,
             args: ChatRouteArgs(
               initialModelId: state.extra as int?,
               characterId: characterIdParam == null

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RemoteViews: only LinearLayout/TextView/ImageView/ImageButton. Tapping
+     the star or gaps opens a new chat too (root click). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="4dp"
+    android:background="@drawable/widget_background">
+
+    <ImageView
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="6dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_widget_star"/>
+
+    <TextView
+        android:id="@+id/widget_ask"
+        android:layout_width="0dp"
+        android:layout_height="48dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_ask"
+        android:textColor="@color/widget_on_surface_variant"
+        android:textSize="15sp"
+        android:contentDescription="@string/widget_cd_ask"
+        android:background="@drawable/widget_pill"/>
+
+    <ImageButton
+        android:id="@+id/widget_workflows"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="6dp"
+        android:padding="12dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_widget_workflows"
+        android:contentDescription="@string/widget_cd_workflows"
+        android:background="@drawable/widget_button"/>
+
+    <ImageButton
+        android:id="@+id/widget_talk"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="4dp"
+        android:padding="12dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_widget_mic"
+        android:contentDescription="@string/widget_cd_talk"
+        android:background="@drawable/widget_button"/>
+</LinearLayout>

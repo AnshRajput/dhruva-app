@@ -3,6 +3,7 @@
 // the real repository/db, and the credit row launches the portfolio URL
 // through url_launcher's platform interface.
 
+import 'package:dhruva/core/device_health/device_health_provider.dart';
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
@@ -16,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:url_launcher_platform_interface/link.dart';
 import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+import '../../../support/device_health_fakes.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -68,6 +71,36 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('battery & heat guard switch defaults ON and persists a toggle', (
+    tester,
+  ) async {
+    final store = MemoryGuardStore();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+          deviceGuardStoreProvider.overrideWith((ref) async => store),
+        ],
+        child: MaterialApp(theme: AppTheme.dark, home: const SettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    const key = ValueKey('device-guard-switch');
+    expect(find.text('Battery & heat guard'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(find.byKey(key)).value, isTrue);
+
+    await tester.tap(find.byKey(key));
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.byKey(key)).value, isFalse);
+    expect(store.enabled, isFalse);
+
+    await tester.tap(find.byKey(key));
+    await tester.pumpAndSettle();
+    expect(store.enabled, isTrue);
+  });
 
   testWidgets('storage summary renders installed count and size', (
     tester,
@@ -155,6 +188,9 @@ void main() {
     'About row links to the dedicated About page, showing the version '
     'inline as a preview',
     (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await pump(tester);
 
       expect(find.text('About Dhruva AI'), findsOneWidget);
