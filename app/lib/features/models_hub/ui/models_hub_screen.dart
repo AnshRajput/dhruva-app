@@ -311,7 +311,7 @@ class _InstalledBody extends ConsumerWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.bolt),
+                  icon: const Icon(Icons.graphic_eq),
                   label: const Text('Test all speeds'),
                   onPressed: ref.watch(speedTestControllerProvider).active
                       ? null

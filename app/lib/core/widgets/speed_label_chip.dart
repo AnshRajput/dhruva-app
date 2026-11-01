@@ -32,7 +32,7 @@ class SpeedLabelChip extends StatelessWidget {
         SpeedLabel.fast.message,
         tokens.success.withValues(alpha: 0.24),
         tokens.success,
-        Icons.bolt,
+        Icons.check_circle,
       ),
       SpeedLabel.usable => (
         SpeedLabel.usable.message,

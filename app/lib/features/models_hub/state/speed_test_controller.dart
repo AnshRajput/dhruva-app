@@ -122,7 +122,12 @@ class SpeedTestController extends Notifier<SpeedTestState> {
             m.localPath,
             onPhase: (phase) => state = state.copyWith(phase: phase),
           );
-          await ref.read(speedResultsProvider.notifier).save(key, result);
+          try {
+            await ref.read(speedResultsProvider.notifier).save(key, result);
+          } catch (_) {
+            // Disk full / storage unavailable: don't abort the queue silently.
+            _fail(key, "Measured, but couldn't save the result.");
+          }
         } on SpeedTestCancelled {
           break;
         } on SpeedTestTooShort {
