@@ -73,6 +73,17 @@ class Composer extends ConsumerStatefulWidget {
   /// Plain-language reason the last attach failed, or null.
   final String? documentError;
 
+  /// Shown inside the composer surface above the input row (Ask's "Search in"
+  /// chips).
+  final Widget? header;
+
+  /// Text the field starts with (a prefilled `/ask/new?q=...`); never sent
+  /// until the user taps send.
+  final String? initialText;
+
+  /// Called whenever the field's text changes (Auto source preview).
+  final ValueChanged<String>? onChanged;
+
   const Composer({
     super.key,
     required this.isGenerating,
@@ -82,6 +93,9 @@ class Composer extends ConsumerStatefulWidget {
     this.documents = const [],
     this.extractingDocName,
     this.documentError,
+    this.header,
+    this.initialText,
+    this.onChanged,
     this.isMultimodal = false,
     required this.onSend,
     this.beforeSend,
@@ -101,9 +115,16 @@ class _ComposerState extends ConsumerState<Composer> {
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialText;
+    if (initial != null && initial.isNotEmpty) {
+      _controller.text = initial;
+      _controller.selection = TextSelection.collapsed(offset: initial.length);
+      _hasText = initial.trim().isNotEmpty;
+    }
     _controller.addListener(() {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      widget.onChanged?.call(_controller.text);
     });
   }
 
@@ -299,6 +320,7 @@ class _ComposerState extends ConsumerState<Composer> {
                 onRemove: widget.onRemoveDocument,
                 onDismissError: widget.onDismissDocumentError,
               ),
+              if (widget.header != null) widget.header!,
               if (_attachedImage != null) ...[
                 _AttachedImageChip(
                   imageBytes: _attachedImage!,
