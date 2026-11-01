@@ -21,7 +21,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   /// shows, not a crash). Not covered by `flutter test` (needs the plugin's
   /// native side); the config values it applies are asserted in
   /// `download_notifications_test.dart`.
-  Future<void> configureNotifications() async {
+  Future<void> configureNotifications({bool finishAlerts = true}) async {
     // Run model downloads in an Android foreground service so they SURVIVE the
     // app being backgrounded, navigated away from, or the notification tray
     // being opened. Without this, Android's battery optimizer kills the
@@ -32,7 +32,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
     await _downloader.configure(
       globalConfig: [(bg.Config.runInForeground, bg.Config.always)],
     );
-    final c = dhruvaDownloadNotificationConfig;
+    final c = downloadNotificationConfig(finishAlerts: finishAlerts);
     _downloader.configureNotification(
       running: c.running,
       complete: c.complete,

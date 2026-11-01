@@ -36,6 +36,7 @@ import '../../voice/voice_model_installer.dart';
 import '../../voice/voice_player.dart';
 import '../../voice/voice_service.dart';
 import '../device_info/device_info_service.dart';
+import '../settings/bool_pref.dart';
 
 /// The on-device inference engine. `LlamaEngineService` in production;
 /// override with `FakeEngineService` in tests/widget previews.
@@ -100,8 +101,20 @@ final documentPickerProvider = Provider<DocumentPicker>((ref) {
 /// Reads a picked document into chunks off the root isolate. Override with a
 /// synchronous fake in widget tests (an `Isolate.run` can't complete under
 /// `testWidgets`' fake clock).
+///
+/// The watchdog's memory limit scales with the device's RAM
+/// ([extractionRssLimitFor]); an unreadable RAM figure keeps the ceiling.
 final documentExtractorProvider = Provider<DocumentExtractor>((ref) {
-  return extractDocumentFile;
+  return (path, name) async {
+    var limit = maxExtractionRssGrowth;
+    try {
+      final mem = await ref.read(deviceInfoServiceProvider).getMemoryInfo();
+      limit = extractionRssLimitFor(mem.totalBytes);
+    } on Object {
+      // Keep the ceiling.
+    }
+    return extractDocumentFile(path, name, rssGrowthLimit: limit);
+  };
 });
 
 /// Resolves + extracts downloaded voice-model bundles under `models/voice/`.
@@ -160,7 +173,14 @@ final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
   final backend = BackgroundDownloaderBackend();
   // D4: register the OS notification (progress bar + POST_NOTIFICATIONS
   // request) once, before any enqueue. Mobile-only; harmless on desktop.
-  await backend.configureNotifications();
+  final alerts = ref.read(downloadNotificationsProvider);
+  await backend.configureNotifications(finishAlerts: alerts.value ?? true);
+  // Settings > Notifications: re-apply when the switch changes (no manager
+  // rebuild, so no in-flight download is touched).
+  ref.listen(downloadNotificationsProvider, (_, next) {
+    final v = next.value;
+    if (v != null) unawaited(backend.configureNotifications(finishAlerts: v));
+  });
   final manager = DownloadManager(
     backend: backend,
     db: ref.watch(appDatabaseProvider),

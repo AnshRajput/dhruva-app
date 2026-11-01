@@ -7,7 +7,10 @@ import 'core/crash/crash_log.dart';
 import 'core/di/speed_providers.dart';
 import 'core/identity/app_identity.dart';
 import 'core/intents/intent_inbox.dart';
+import 'core/privacy/screen_privacy.dart';
+import 'core/profile/user_profile.dart';
 import 'core/router/app_router.dart';
+import 'core/settings/bool_pref.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/appearance_providers.dart';
 import 'features/onboarding/state/onboarding_controller.dart';
@@ -48,6 +51,20 @@ Future<void> main() async {
   } catch (_) {
     // Unreadable prefs fall back to following the system.
   }
+  try {
+    // Warm the "About the user" prompt block so the first send has it.
+    await container.read(userContextProvider.future);
+  } catch (_) {
+    // Prompts just go without it.
+  }
+  try {
+    // "Hide content in app switcher" must be in force before the first frame
+    // is ever snapshotted; DhruvaApp keeps it in sync after that.
+    final hidden = await container.read(hideInAppSwitcherProvider.future);
+    await container.read(screenPrivacyProvider).setHidden(hidden);
+  } catch (_) {
+    // Unreadable prefs fall back to off.
+  }
 
   runApp(
     UncontrolledProviderScope(container: container, child: const DhruvaApp()),
@@ -79,6 +96,14 @@ class DhruvaApp extends ConsumerWidget {
     // Saved choice (Settings > Appearance); until it loads (or if it can't),
     // follow the system.
     final themeMode = ref.watch(themeModeProvider).value ?? ThemeMode.system;
+    // Settings > Privacy: apply every toggle (Android FLAG_SECURE / iOS
+    // cover view); the saved value is applied in main() before the first frame.
+    ref.listen(hideInAppSwitcherProvider, (_, next) {
+      final hidden = next.value;
+      if (hidden != null) {
+        unawaited(ref.read(screenPrivacyProvider).setHidden(hidden));
+      }
+    });
     // Real theming from design-tokens.json (ADR-003). Follows the system
     // light/dark by default (the owner-approved daily-assistant direction);
     // Settings > Appearance can pin Light or Dark. Every screen reads

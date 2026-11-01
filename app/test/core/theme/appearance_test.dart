@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/core/theme/appearance_providers.dart';
-import 'package:dhruva/features/settings/ui/settings_screen.dart';
+import 'package:dhruva/features/settings/ui/appearance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,7 +103,11 @@ void main() {
       tester,
     ) async {
       final prefs = MemoryPrefsStore({'what_moved_dismissed': 'true'});
-      await pumpDhruvaApp(tester, location: '/settings', prefs: prefs);
+      await pumpDhruvaApp(
+        tester,
+        location: '/settings/appearance',
+        prefs: prefs,
+      );
 
       final control = find.byKey(const ValueKey('appearance-segments'));
       expect(control, findsOneWidget);
@@ -145,7 +149,7 @@ void main() {
             overrides: [prefsStoreProvider.overrideWith((ref) async => prefs)],
             child: MaterialApp(
               theme: AppTheme.dark.copyWith(platform: p),
-              home: const SettingsScreen(),
+              home: const AppearanceScreen(),
             ),
           ),
         );

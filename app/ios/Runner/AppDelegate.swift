@@ -8,6 +8,7 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     BackupExclusion.apply()
+    PrivacyChannel.installCover()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -15,6 +16,9 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceHealthChannel") {
       DeviceHealthChannel.register(with: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PrivacyChannel") {
+      PrivacyChannel.register(with: registrar.messenger())
     }
   }
 }
@@ -74,6 +78,49 @@ enum BackupExclusion {
         at: root, includingPropertiesForKeys: nil)) ?? []
       for var child in children {
         try? child.setResourceValues(values)
+      }
+    }
+  }
+}
+
+/// "Hide content in app switcher" (Settings > Privacy; Dart: core/privacy).
+/// Dart sends `setHideInSwitcher(Bool)`. While enabled, an opaque cover goes
+/// over the scene's window as it becomes inactive (that is when iOS takes the
+/// app-switcher snapshot) and comes off when it is active again. Uses scene
+/// notifications so it needs no override in the Flutter scene delegate.
+enum PrivacyChannel {
+  static var enabled = false
+  private static let coverTag = 0xD40A
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "app.dhruva/privacy", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "setHideInSwitcher" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      enabled = (call.arguments as? Bool) ?? false
+      result(nil)
+    }
+  }
+
+  static func installCover() {
+    let center = NotificationCenter.default
+    center.addObserver(forName: UIScene.willDeactivateNotification, object: nil, queue: .main) {
+      note in
+      guard enabled, let window = (note.object as? UIWindowScene)?.windows.first,
+        window.viewWithTag(coverTag) == nil
+      else { return }
+      let cover = UIView(frame: window.bounds)
+      cover.tag = coverTag
+      cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      cover.backgroundColor = .systemBackground
+      window.addSubview(cover)
+    }
+    center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) {
+      note in
+      (note.object as? UIWindowScene)?.windows.forEach {
+        $0.viewWithTag(coverTag)?.removeFromSuperview()
       }
     }
   }

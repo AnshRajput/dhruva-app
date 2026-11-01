@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Bundle
 import android.os.PowerManager
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -19,6 +21,23 @@ class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var initial: Map<String, String>? = null
 
+    companion object {
+        // "Hide content in app switcher" (Settings > Privacy). Process-wide so a
+        // recreated activity (rotation, theme change) keeps the flag; Dart
+        // re-sends it on every launch.
+        private var hideInSwitcher = false
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        applySecureFlag()
+    }
+
+    private fun applySecureFlag() {
+        if (hideInSwitcher) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         initial = extract(intent)
@@ -28,6 +47,18 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 if (call.method == "read") result.success(readDeviceHealth())
                 else result.notImplemented()
+            }
+        // FLAG_SECURE on/off. Also hides the window from screenshots and screen
+        // recording; the Settings row says so.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "app.dhruva/privacy")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "setHideInSwitcher") {
+                    hideInSwitcher = call.arguments as? Boolean ?: false
+                    runOnUiThread { applySecureFlag() }
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
             }
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dhruva/intents")
             .also { ch ->

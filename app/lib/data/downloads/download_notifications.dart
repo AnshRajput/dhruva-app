@@ -13,16 +13,32 @@ library;
 
 import 'package:background_downloader/background_downloader.dart' as bg;
 
-/// The one, global download-notification config. Progress bar on (Android);
+/// The global download-notification config. Progress bar on (Android);
 /// `tapOpensFile` off — GGUF/voice bundles aren't user-openable files.
-final dhruvaDownloadNotificationConfig = bg.TaskNotificationConfig(
+///
+/// [finishAlerts] (Settings > Notifications): when false the complete / error
+/// / paused notifications are dropped. The RUNNING notification stays either
+/// way: Android requires one for the foreground service that keeps model
+/// downloads alive while the app is in the background.
+bg.TaskNotificationConfig downloadNotificationConfig({
+  bool finishAlerts = true,
+}) => bg.TaskNotificationConfig(
   running: const bg.TaskNotification(
     '{filename}',
     'Downloading… {progress} · {networkSpeed} · {timeRemaining} left',
   ),
-  complete: const bg.TaskNotification('{filename}', 'Download complete'),
-  error: const bg.TaskNotification('{filename}', 'Download failed'),
-  paused: const bg.TaskNotification('{filename}', 'Paused'),
+  complete: finishAlerts
+      ? const bg.TaskNotification('{filename}', 'Download complete')
+      : null,
+  error: finishAlerts
+      ? const bg.TaskNotification('{filename}', 'Download failed')
+      : null,
+  paused: finishAlerts
+      ? const bg.TaskNotification('{filename}', 'Paused')
+      : null,
   progressBar: true,
   tapOpensFile: false,
 );
+
+/// The default (alerts on) config.
+final dhruvaDownloadNotificationConfig = downloadNotificationConfig();
