@@ -31,8 +31,8 @@ Locked by the owner on 2026-11-01:
 
 Today the app is a private chat box with good tools hidden behind icons. The live audit
 (`audit.md`) scored it **25/40** on Nielsen's heuristics. Walking a real day with a
-daily-assistant user found that in 18 steps she has to **leave the app 7 times, guess 7
-times, retype 5 times, and hits 6 things the app cannot do at all**. The app does not know
+daily-assistant user found that in 18 steps she has to **leave the app 5 times, guess 9
+times, retype 4 times, and hits 7 things the app cannot do at all** (re-counted from the audit's tags). The app does not know
 her day, her mail, her people or her files, so every useful task is a clipboard relay.
 
 Competitors (PocketPal, Private LLM, Enclave, Edge Gallery, Layla — see `references.md`)
@@ -80,7 +80,7 @@ about.
 ## Success looks like
 
 - A new user gets a useful Today brief in under 60 seconds (calendar needs no sign-in).
-- The audit's day walk drops from 7 leave / 7 guess / 5 retype / 6 none to near zero.
+- The audit's day walk drops from 5 leave / 9 guess / 4 retype / 7 none to near zero.
 - Heuristic score at least **34/40** on the re-audit (baseline 25).
 - People open it on most days (Play "returning users", the only signal we have; no
   analytics by design).
