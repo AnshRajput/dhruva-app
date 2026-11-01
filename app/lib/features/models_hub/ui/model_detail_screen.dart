@@ -16,6 +16,7 @@ import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/failures/failure_message.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -89,7 +90,7 @@ class _DetailBody extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   'This repo is gated on Hugging Face — it requires signing '
-                  "in and accepting the license there. Dhruva doesn't "
+                  "in and accepting the license there. ${AppIdentity.shortName} doesn't "
                   "support Hugging Face sign-in yet, so this repo's files "
                   "can't be downloaded from here.",
                   style: TextStyle(

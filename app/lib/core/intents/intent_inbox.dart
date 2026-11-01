@@ -32,11 +32,14 @@ class IntentInbox {
       text = text.substring(0, _maxSharedChars);
     }
     if (text.isNotEmpty) {
-      return '/workflows?text=${Uri.encodeQueryComponent(text)}';
+      return '/actions?text=${Uri.encodeQueryComponent(text)}';
     }
     return switch (payload['route']) {
       'new_chat' => '/chat/new',
-      'workflows' => '/workflows',
+      'workflows' => '/actions',
+      // Launcher shortcuts for the two new front doors.
+      'today' => '/today',
+      'ask' => '/ask',
       // Widget "Talk" button: a fresh chat that opens hands-free on arrival.
       'talk' => '/chat/new?talk=1',
       _ => null,

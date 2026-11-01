@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../identity/app_identity.dart';
 import '../theme/dhruva_theme_extension.dart';
 import 'crash_actions.dart';
 import 'crash_log.dart';
@@ -55,7 +56,7 @@ class CrashReportBanner extends ConsumerWidget {
               child: Semantics(
                 liveRegion: true,
                 child: Text(
-                  'Dhruva hit a problem last time. Send a crash report?',
+                  '${AppIdentity.shortName} hit a problem last time. Send a crash report?',
                   style: theme.textTheme.titleSmall,
                 ),
               ),

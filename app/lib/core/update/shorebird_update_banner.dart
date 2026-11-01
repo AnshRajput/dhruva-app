@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../identity/app_identity.dart';
 import '../theme/dhruva_theme_extension.dart';
 import 'shorebird_update_service.dart';
 
 /// Shared copy for the banner and the Settings row.
-const updIosReady = 'Update ready. Close and reopen Dhruva to finish.';
+const updIosReady =
+    'Update ready. Close and reopen ${AppIdentity.shortName} to finish.';
 
 /// Compact one-row code-push nudge for the Chats home. Renders nothing unless
 /// a patch is pending (always nothing on non-Shorebird builds), the user

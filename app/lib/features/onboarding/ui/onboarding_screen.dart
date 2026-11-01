@@ -16,6 +16,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/device_info/model_tier.dart';
+import '../../../core/identity/app_identity.dart';
+import '../../../core/settings/what_moved.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/models/starter_catalog.dart';
@@ -42,13 +44,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   _Step _step = _Step.welcome;
   StarterModel? _selected;
 
-  /// Mark onboarding seen (finish OR skip) and leave for chat. Persisting on
+  /// A new user has nothing that "moved": never show them the upgrade sheet.
+  Future<void> _markWhatMovedSeen() async {
+    try {
+      await ref.read(whatMovedPendingProvider.notifier).dismiss();
+    } on Object {
+      // Best effort: a failed flag write must never block leaving onboarding.
+    }
+  }
+
+  /// Mark onboarding seen (finish OR skip) and leave for Today. Persisting on
   /// BOTH paths is what makes it show exactly once — a user who skips with no
   /// model still never sees it again.
   Future<void> _finish() async {
     final store = await ref.read(onboardingStoreProvider.future);
     await store.markComplete();
-    if (mounted) context.go('/chat');
+    await _markWhatMovedSeen();
+    if (mounted) context.go('/today');
   }
 
   /// The ready-step exit: mark onboarding done, then land the user IN a chat
@@ -62,6 +74,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _startChat({String? prompt}) async {
     final store = await ref.read(onboardingStoreProvider.future);
     await store.markComplete();
+    await _markWhatMovedSeen();
     if (!mounted) return;
     final installedId = ref
         .read(onboardingDownloadControllerProvider)
@@ -72,7 +85,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ? '/chat/new'
         : '/chat/new?prompt=${Uri.encodeQueryComponent(trimmed)}';
     final router = GoRouter.of(context);
-    router.go('/chat');
+    router.go('/ask');
     unawaited(router.push(location, extra: installedId));
   }
 
@@ -207,7 +220,7 @@ class _WelcomeStep extends StatelessWidget {
           DhruvaStar(size: 96, color: theme.colorScheme.primary),
           SizedBox(height: tokens.spacing.lg),
           Text(
-            'Welcome to Dhruva',
+            'Welcome to ${AppIdentity.shortName}',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
@@ -309,7 +322,7 @@ class _PickStep extends ConsumerWidget {
           Text('Pick your first model', style: theme.textTheme.headlineSmall),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            'One tap downloads it — Dhruva picks the right size for your '
+            'One tap downloads it — ${AppIdentity.shortName} picks the right size for your '
             'phone. You can add more later.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,

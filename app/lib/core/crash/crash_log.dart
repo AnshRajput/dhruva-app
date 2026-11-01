@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../identity/app_identity.dart';
+
 const crashMaxRecords = 20;
 const crashMaxMessage = 500;
 const crashMaxStack = 8 * 1024;
@@ -69,13 +71,13 @@ class CrashRecord {
   /// Plain text for one record.
   String toText() =>
       '${timestamp.toIso8601String()}\n'
-      'Dhruva $appVersion (build $appBuild) · $platform $osVersion\n'
+      '${AppIdentity.shortName} $appVersion (build $appBuild) · $platform $osVersion\n'
       '$errorType: $message\n$stack';
 }
 
 /// Plain-text report: a short header saying exactly what is included.
 String formatCrashReport(List<CrashRecord> records) =>
-    'Dhruva AI crash report\n'
+    '${AppIdentity.productName} crash report\n'
     'Included: app version, phone OS, error type, error message and stack '
     'trace. No chats, prompts or files.\n'
     'Shared only because you chose to.\n\n'

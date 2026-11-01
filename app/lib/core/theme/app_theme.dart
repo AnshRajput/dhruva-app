@@ -152,6 +152,49 @@ abstract final class AppTheme {
           ),
         ),
       ),
+      // Rule 6 (Android, Material 3 Expressive): pill/stadium shapes come from
+      // the radius token `full`, never per-widget magic numbers. The nav
+      // indicator, chips, buttons (above), segmented control and FABs all
+      // share it. iOS chrome (translucent bars) lives in
+      // `core/widgets/platform_chrome.dart`, which branches on
+      // `Theme.of(context).platform`.
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: c.primaryContainer,
+        indicatorShape: const StadiumBorder(),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => textTheme.labelMedium?.copyWith(
+            color: states.contains(WidgetState.selected)
+                ? c.onSurface
+                : c.onSurfaceVariant,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? c.onPrimaryContainer
+                : c.onSurfaceVariant,
+          ),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radius.full),
+          ),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: const StadiumBorder(),
+        extendedPadding: EdgeInsetsDirectional.symmetric(
+          horizontal: const TokenSpacingScale().lg,
+        ),
+      ),
       dividerTheme: DividerThemeData(color: c.outlineVariant, thickness: 1),
       extensions: [DhruvaTokens.fromColors(c)],
     );

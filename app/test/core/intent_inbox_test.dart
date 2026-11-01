@@ -5,23 +5,28 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('shared text routes to workflows with encoded text', () {
+  test('today and ask shortcuts map to the shell tabs', () {
+    expect(IntentInbox.locationFor({'route': 'today'}), '/today');
+    expect(IntentInbox.locationFor({'route': 'ask'}), '/ask');
+  });
+
+  test('shared text routes to Actions with encoded text', () {
     expect(
       IntentInbox.locationFor({'text': ' hello & bye '}),
-      '/workflows?text=hello+%26+bye',
+      '/actions?text=hello+%26+bye',
     );
   });
 
   test('shortcut routes', () {
     expect(IntentInbox.locationFor({'route': 'new_chat'}), '/chat/new');
-    expect(IntentInbox.locationFor({'route': 'workflows'}), '/workflows');
+    expect(IntentInbox.locationFor({'route': 'workflows'}), '/actions');
     expect(IntentInbox.locationFor({'route': 'talk'}), '/chat/new?talk=1');
   });
 
   test('text wins over route; blank and unknown are ignored', () {
     expect(
       IntentInbox.locationFor({'text': 'x', 'route': 'new_chat'}),
-      startsWith('/workflows?text='),
+      startsWith('/actions?text='),
     );
     expect(IntentInbox.locationFor({'text': '  '}), isNull);
     expect(IntentInbox.locationFor({'route': 'nope'}), isNull);
@@ -37,7 +42,7 @@ void main() {
         );
     final seen = <String>[];
     await IntentInbox(navigate: seen.add, channel: channel).start();
-    expect(seen, ['/workflows']);
+    expect(seen, ['/actions']);
 
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage(
@@ -47,7 +52,7 @@ void main() {
           ),
           (_) {},
         );
-    expect(seen.last, '/workflows?text=hey');
+    expect(seen.last, '/actions?text=hey');
   });
 
   test('missing native channel is tolerated', () async {

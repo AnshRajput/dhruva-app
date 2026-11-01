@@ -11,10 +11,12 @@
 /// real misses.
 library;
 
+import '../identity/app_identity.dart';
+
 abstract final class SafetyGuard {
   /// Shown (as an assistant-styled reply) when a prompt or a streamed reply
   /// trips [blocks].
-  static const blockedNotice = "Dhruva can't help with that.";
+  static const blockedNotice = "${AppIdentity.shortName} can't help with that.";
 
   /// Prepended to the system turn of every generation.
   static const systemInstruction =

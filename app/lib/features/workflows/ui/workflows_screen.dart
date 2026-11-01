@@ -1,4 +1,4 @@
-/// Workflows (`/workflows`): one-tap text verbs (summarize, translate, rewrite,
+/// Actions (`/actions`, formerly Workflows): one-tap text verbs (summarize, translate, rewrite,
 /// ...) that small on-device models are good at. Pick one, supply text (type,
 /// paste, or open a file), and Run hands the rendered prompt to
 /// `/chat/new?prompt=`, which opens a chat and auto-sends it. `?text=` (from the
@@ -65,7 +65,7 @@ class _WorkflowsScreenState extends State<WorkflowsScreen> {
     final tokens = theme.extension<DhruvaTokens>()!;
     final shared = initialText?.trim() ?? '';
     return Scaffold(
-      appBar: AppBar(title: const Text('Workflows')),
+      appBar: AppBar(title: const Text('Actions')),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           tokens.spacing.md,
