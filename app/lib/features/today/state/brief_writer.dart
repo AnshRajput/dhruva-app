@@ -63,50 +63,54 @@ class EngineBriefWriter implements BriefWriter {
   Future<void> prepare() async {
     final engine = _ref.read(engineServiceProvider);
     if (engine.isLoaded) return;
-    final lease = _ref.read(engineLeaseProvider);
-    if (lease.speedTestRunning || lease.chatBusy) {
-      throw const BriefUnavailable(
-        'Your phone is busy with another task. Pull down to try again in a '
-        'moment.',
-      );
-    }
-    final storage = _ref.read(storageManagerProvider);
-    final models = await storage.listTextModels();
-    if (models.isEmpty) {
-      throw const BriefUnavailable('Download a model to write your brief.');
-    }
-    final model = models.first; // most recently used first
-    lease.chatEnter();
+    // Claimed before the first await (no gap for chat to slip into). Chat
+    // outranks this: on preempt the load is left to finish, but nothing else
+    // is done with the engine.
+    final hold = _claim(engine);
     try {
+      final storage = _ref.read(storageManagerProvider);
+      final models = await storage.listTextModels();
+      if (models.isEmpty) {
+        throw const BriefUnavailable('Download a model to write your brief.');
+      }
+      if (hold.preempted) throw _busy;
+      final model = models.first; // most recently used first
       await engine.load(
         model.localPath,
         params: EngineLoadParams(mmprojPath: model.mmprojPath),
       );
       await storage.touchLastUsed(model.id);
+      if (hold.preempted) throw _busy;
       _ref.read(loadedModelIdProvider.notifier).set(model.id);
     } on EngineFailure {
       throw const BriefUnavailable(
         "Your model didn't load. Open Settings > Models to try another one.",
       );
     } finally {
-      lease.chatLeave();
+      hold.release();
     }
+  }
+
+  static const _busy = BriefUnavailable(
+    'Your phone is busy with another task. Pull down to try again in a '
+    'moment.',
+  );
+
+  BackgroundHold _claim(EngineService engine) {
+    final hold = _ref
+        .read(engineLeaseProvider)
+        .tryEnterBackground(() => unawaited(engine.cancel()));
+    if (hold == null) throw _busy;
+    return hold;
   }
 
   @override
   Future<String> write({required String system, required String prompt}) async {
     final engine = _ref.read(engineServiceProvider);
-    final lease = _ref.read(engineLeaseProvider);
     if (!engine.isLoaded) {
       throw const BriefUnavailable('The model is not ready yet.');
     }
-    if (lease.speedTestRunning || lease.chatBusy) {
-      throw const BriefUnavailable(
-        'Your phone is busy with another task. Pull down to try again in a '
-        'moment.',
-      );
-    }
-    lease.chatEnter();
+    final hold = _claim(engine);
     final out = StringBuffer();
     try {
       await for (final e
@@ -122,8 +126,10 @@ class EngineBriefWriter implements BriefWriter {
               .timeout(_timeout)) {
         if (e is EngineToken) out.write(e.text);
       }
+      // Chat took the engine mid-write: the partial text is dropped.
+      if (hold.preempted) throw _busy;
     } on TimeoutException {
-      unawaited(engine.cancel());
+      if (!hold.preempted) unawaited(engine.cancel());
       throw const BriefUnavailable(
         'Writing took too long. Pull down to try again.',
       );
@@ -132,7 +138,7 @@ class EngineBriefWriter implements BriefWriter {
         "The model couldn't write your brief. Pull down to try again.",
       );
     } finally {
-      lease.chatLeave();
+      hold.release();
     }
     return out.toString();
   }

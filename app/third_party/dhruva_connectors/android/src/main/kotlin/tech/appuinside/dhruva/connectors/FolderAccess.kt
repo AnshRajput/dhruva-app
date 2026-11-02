@@ -109,7 +109,11 @@ internal object FolderAccess {
                         ),
                     )
                 }
-            }
+                // A null cursor is a provider that cannot answer right now (a
+                // cloud folder that is offline), not an empty folder: fail the
+                // listing so the caller never reads it as "everything was
+                // deleted".
+            } ?: throw FolderError("unreadable", "The folder could not be read right now.")
         }
         return out
     }

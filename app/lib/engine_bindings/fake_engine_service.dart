@@ -33,7 +33,12 @@ final class FakeEngineService implements EngineService {
   /// stream [visionTokens]. Models the vision-capable model in UI tests.
   final bool multimodal;
 
+  /// Delay inside [load] (models a multi-second native load) so tests can
+  /// overlap concurrent loads.
+  final Duration loadDelay;
+
   FakeEngineService({
+    this.loadDelay = Duration.zero,
     this.scriptedTokens = const ['Hello', ' ', 'world', '!'],
     this.visionTokens = const ['I ', 'see ', 'a ', 'red ', 'image', '.'],
     this.tokenDelay = const Duration(milliseconds: 10),
@@ -81,18 +86,39 @@ final class FakeEngineService implements EngineService {
   @override
   bool get isMultimodal => isLoaded && multimodal;
 
+  final _loadGate = LoadGate();
+
+  /// Test hook: most loads ever running at the same time (must stay 1).
+  int maxConcurrentLoads = 0;
+  int _runningLoads = 0;
+
   @override
   Future<void> load(
     String modelPath, {
     EngineLoadParams params = const EngineLoadParams(),
-  }) async {
+  }) => _loadGate.run(
+    LoadGate.keyFor(modelPath, params),
+    () => _load(modelPath, params),
+  );
+
+  Future<void> _load(String modelPath, EngineLoadParams params) async {
     lastLoadParams = params;
+    _runningLoads++;
+    if (_runningLoads > maxConcurrentLoads) maxConcurrentLoads = _runningLoads;
+    try {
+      await _loadBody();
+    } finally {
+      _runningLoads--;
+    }
+  }
+
+  Future<void> _loadBody() async {
     if (_disposed) {
       throw const EngineDisposedFailure('engine has been disposed');
     }
     if (loadFailure != null) throw loadFailure!;
     if (_loaded) await unload();
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(loadDelay);
     _loaded = true;
     loadCount++;
   }

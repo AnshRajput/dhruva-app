@@ -118,8 +118,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     ref.listen(connectorListProvider, (_, next) {
       final list = next.value;
       if (list == null) return;
+      // A one-off read failure (needs attention) is not a disconnect: the
+      // written brief survives it.
       bool on(String id) =>
-          list.any((e) => e.connector.id == id && e.status.isConnected);
+          list.any((e) => e.connector.id == id && e.status.holdsData);
       unawaited(
         ref
             .read(briefControllerProvider.notifier)

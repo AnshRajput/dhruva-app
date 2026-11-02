@@ -68,15 +68,19 @@ SourcesBlock buildSourcesBlock(
   return SourcesBlock('$header$body$footer', kept);
 }
 
+String _oneLine(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
+
 String _render(int n, ConnectorItem item) {
   final b = StringBuffer('[$n] ${item.kind.name}');
-  final title = escapeSourceText(item.title.trim());
+  // One line each: a title or name with a newline could otherwise forge a
+  // numbered source line ("x\n[7] mail | Boss | ...").
+  final title = escapeSourceText(_oneLine(item.title));
   if (title.isNotEmpty) b.write(' | $title');
   final when = itemWhenText(item);
   if (when != null) b.write(' | $when');
   final people = [
     for (final p in item.people)
-      escapeSourceText([?p.name, ?p.email].join(' ')),
+      escapeSourceText(_oneLine([?p.name, ?p.email].join(' '))),
   ].where((s) => s.isNotEmpty).take(6).join(', ');
   if (people.isNotEmpty) b.write(' | with $people');
   b.writeln();

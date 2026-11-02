@@ -33,6 +33,22 @@ void main() {
     expect(all.last.timestamp.isUtc, isTrue);
   });
 
+  test('a FormatException keeps its reason but never the data slice', () async {
+    final log = make();
+    await log.record(
+      const FormatException(
+        'Unexpected character',
+        'private chat: meet me at 9 behind the station',
+        8,
+      ),
+      null,
+    );
+    final r = (await log.readAll()).single;
+    expect(r.message, startsWith('FormatException: Unexpected character'));
+    expect(r.message, isNot(contains('behind the station')));
+    expect(r.message, isNot(contains('\n')));
+  });
+
   test('truncates message and stack', () async {
     final log = make();
     await log.record('x' * 5000, null);

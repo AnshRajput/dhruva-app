@@ -30,8 +30,9 @@ class ClearHistoryRow extends ConsumerWidget {
         title: const Text('Clear all chat history?'),
         content: const Text(
           'This permanently deletes every conversation and message on '
-          'this device. Downloaded models are NOT affected — they stay '
-          'installed.',
+          'this device, and any saved answers or to-dos in Library that '
+          'quote your calendar, contacts, notifications or files. Other '
+          'saved items and downloaded models are NOT affected.',
         ),
         actions: [
           TextButton(

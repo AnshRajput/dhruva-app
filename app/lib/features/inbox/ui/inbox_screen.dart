@@ -58,6 +58,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     });
   }
 
+  // H2: the summarizer works only while this screen is the visible one. The
+  // Inbox tab stays mounted (off screen, tickers off) once visited.
+  late final InboxSummarizer _summarizer = ref.read(inboxSummarizerProvider);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _summarizer.setVisible(this, TickerMode.valuesOf(context).enabled);
+  }
+
+  @override
+  void dispose() {
+    _summarizer.forget(this);
+    super.dispose();
+  }
+
   Future<void> _openItem(ConnectorItem item) async {
     // The detail (and a chat opened from it) needs the engine: stop writing
     // summaries until the user is back on the list.

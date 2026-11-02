@@ -599,7 +599,7 @@ class _ThreadScaffold extends ConsumerWidget {
           : () async {
               final added = await ref
                   .read(libraryStoreProvider)
-                  .addTodos(todos);
+                  .addTodos(todos, conversationId: state.conversationId);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

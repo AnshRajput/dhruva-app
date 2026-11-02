@@ -81,23 +81,18 @@
                 android:resource="@xml/shortcuts"/>
         </activity>
         <!-- Text-selection menu: "Ask Dhruva AI" shows up next to Copy/Paste in
-             every app. A dedicated standard-launch-mode activity (not the
-             singleTask MainActivity, which can never return a result to its
-             caller) so an editable field can get "Replace selected text" back
-             via setResult(EXTRA_PROCESS_TEXT). Shares MainActivity's code. -->
+             every app. A UI-less trampoline (NOT a Flutter activity: it must not
+             boot a second engine/app in this process). It forwards the text to
+             MainActivity and stays standard-launch-mode in the calling app's
+             task so an editable field can still get "Replace selected text"
+             back via setResult(EXTRA_PROCESS_TEXT). -->
         <activity
             android:name=".ProcessTextActivity"
             android:label="Ask Dhruva AI"
             android:exported="true"
             android:launchMode="standard"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+            android:excludeFromRecents="true"
+            android:theme="@style/TrampolineTheme">
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
