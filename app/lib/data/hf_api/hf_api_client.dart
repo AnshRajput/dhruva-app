@@ -5,6 +5,7 @@ import 'dart:io' show SocketException;
 import 'package:dio/dio.dart';
 
 import '../../core/failures/app_failure.dart';
+import '../../core/failures/failure_message.dart' show kNoConnectionMessage;
 import 'models/hf_model_summary.dart';
 import 'models/hf_repo_file.dart';
 import 'models/hf_search_result.dart';
@@ -294,7 +295,7 @@ final class HfApiClient {
           cause: e,
         );
       case DioExceptionType.connectionError:
-        return NetworkOfflineFailure('no network connection', cause: e);
+        return NetworkOfflineFailure(kNoConnectionMessage, cause: e);
       case DioExceptionType.badResponse:
         return _mapStatus(e.response?.statusCode ?? 0);
       case DioExceptionType.badCertificate:
@@ -303,7 +304,7 @@ final class HfApiClient {
         // A raw SocketException surfacing as `unknown` is still an offline
         // condition (e.g. thrown by a custom adapter or DNS failure).
         if (e.error is SocketException) {
-          return NetworkOfflineFailure('no network connection', cause: e);
+          return NetworkOfflineFailure(kNoConnectionMessage, cause: e);
         }
         return NetworkUnknownFailure(
           'request to huggingface.co failed',
