@@ -16,6 +16,7 @@ import 'package:dhruva/data/downloads/download_manager.dart';
 import 'package:dhruva/features/today/state/brief_writer.dart';
 import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/features/today/ui/day_timeline_screen.dart';
+import 'package:dhruva/features/today/ui/prep_screen.dart';
 import 'package:dhruva/features/today/ui/today_actions.dart';
 import 'package:dhruva/features/today/ui/today_screen.dart';
 import 'package:drift/native.dart';
@@ -173,6 +174,11 @@ Future<TodayHarness> pumpToday(
         builder: (context, state) => home ?? const TodayScreen(),
       ),
       GoRoute(path: '/day', builder: (_, _) => const DayTimelineScreen()),
+      GoRoute(
+        path: '/prep/:id',
+        builder: (_, state) =>
+            PrepScreen(eventId: int.parse(state.pathParameters['id']!)),
+      ),
       stub('/ask/new'),
       stub('/actions'),
       stub('/settings'),

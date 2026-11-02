@@ -14,13 +14,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
-import '../../../core/router/ask_route.dart';
-import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/brief_facts.dart';
 import '../state/today_data.dart';
 import 'today_sheets.dart';
-import 'today_widgets.dart';
 
 /// Opens the system calendar at a moment. Android: the calendar app's
 /// `content://com.android.calendar/time/<ms>` view; iOS: `calshow:`
@@ -102,26 +99,11 @@ Future<void> retryConnectorSync(BuildContext context, WidgetRef ref) async {
 Future<ConnectorStatus?> connectCalendar(WidgetRef ref) =>
     connectAndSync(ref, ConnectorIds.calendar);
 
-/// "Prep" for a meeting: Ask (the one `/ask/new` mechanism) opens with the
-/// question typed for the user, Calendar + Contacts + Files pinned and the
-/// event focused. The event's own text stays out of the
-/// prompt (it is untrusted); Ask quotes the event itself in the sources block.
+/// "Prep" for a meeting: the rule-built prep card (`/prep/:id`), made from
+/// what is on the phone with no model involved. The card's "Ask a follow-up"
+/// is the one way into Ask (`/ask/new`).
 void prepForEvent(BuildContext context, ConnectorItem event) {
-  final when = event.startsAt == null
-      ? 'next'
-      : formatClock(context, event.startsAt!);
-  final prompt =
-      'Prep me for my $when meeting: who is attending, what do I know about '
-      'them, and any related notes.';
-  unawaited(
-    context.push(
-      askNewLocation(
-        q: prompt,
-        sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
-        focus: [event.id],
-      ),
-    ),
-  );
+  unawaited(context.push('/prep/${event.id}'));
 }
 
 /// Opens what a cited phrase or fact points at.

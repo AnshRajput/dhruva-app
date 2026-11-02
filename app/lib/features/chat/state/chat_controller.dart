@@ -47,6 +47,7 @@ import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
+import 'answer_guard.dart';
 import 'ask_selection.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
@@ -477,6 +478,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// Connector items offered to the reply being generated (what the model
   /// saw, in citation order); empty when no connector source was searched.
   List<ConnectorItem> _activeItems = const [];
+
+  /// The grounded prompt sent for this turn, so a reply that merely echoes it
+  /// can be recognised ([isScaffoldEcho]); null when ungrounded.
+  String? _activePrompt;
 
   @override
   Future<ChatThreadState> build() async {
@@ -1442,6 +1447,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final samplingParams = current.samplingParams;
     _activeSources = const [];
     _activeItems = const [];
+    _activePrompt = null;
     try {
       // A continuation extends an already-grounded answer; never re-ground.
       final grounded = continued != null
@@ -1464,6 +1470,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           );
           _activeSources = grounded.docSources;
           _activeItems = grounded.items;
+          _activePrompt = grounded.prompt;
         }
       }
     } catch (e) {
@@ -1712,7 +1719,18 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
     final current = state.value;
     if (current == null) return;
-    final answer = _pushedContent;
+    var answer = _pushedContent;
+    // A reply that parrots the sources prompt is no answer: say so plainly and
+    // keep the source chips (the notice cites nothing, so the top items show).
+    final echoed =
+        _activePrompt != null &&
+        status == MessageStatus.complete &&
+        isScaffoldEcho(answer, prompt: _activePrompt);
+    if (echoed) {
+      answer = echoNotice;
+      _pushedContent = echoNotice;
+      unawaited(_repo.setStreamingContent(id, content: echoNotice));
+    }
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
         : citedSources(answer, _activeSources);
@@ -1727,6 +1745,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         if (m.id == id)
           m.copyWith(
             status: status,
+            content: answer,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
@@ -1814,6 +1833,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _resetStreamState() {
     _activeAssistantId = null;
     _activeSources = const [];
+    _activePrompt = null;
     _outputBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';

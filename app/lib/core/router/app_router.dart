@@ -53,6 +53,7 @@ import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/today/ui/day_timeline_screen.dart';
+import '../../features/today/ui/prep_screen.dart';
 import '../../features/today/ui/today_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
@@ -200,6 +201,12 @@ final appRouter = GoRouter(
             ? const InboxScreen(standalone: true)
             : InboxItemScreen(itemId: id);
       },
+    ),
+    // Rule-built meeting prep (no model): `/prep/<event item id>`.
+    GoRoute(
+      path: '/prep/:id',
+      builder: (context, state) =>
+          PrepScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? 0),
     ),
     GoRoute(
       path: '/day',

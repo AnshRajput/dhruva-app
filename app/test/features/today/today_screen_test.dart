@@ -714,17 +714,30 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('up-next-prep')));
       await settle(tester);
+      // Prep is the rule-built card: no model, no prompt in Ask.
+      expect(find.byKey(const ValueKey('prep-card')), findsOneWidget);
+      expect(find.text('Design sync'), findsOneWidget);
+      expect(find.text('Ravi'), findsOneWidget);
+      expect(find.text('Sana'), findsOneWidget);
+      expect(find.text('Google Meet'), findsOneWidget);
+      expect(h.visited, isEmpty);
+      expect(h.writer.prompts, isEmpty);
+
+      // Its only way into Ask is the explicit follow-up, on /ask/new.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('prep-follow-up')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const ValueKey('prep-follow-up')));
+      await settle(tester);
       final uri = Uri.parse(h.visited.single);
       expect(uri.path, '/ask/new');
-      expect(
-        uri.queryParameters['q'],
-        'Prep me for my 9:30 AM meeting: who is attending, what do I know '
-        'about them, and any related notes.',
-      );
       expect(uri.queryParameters['sources'], 'calendar,contacts,files');
       expect(int.tryParse(uri.queryParametersAll['focus']!.single), isNotNull);
-      // The event's own (untrusted) title never rides in the prompt.
-      expect(uri.queryParameters['q'], isNot(contains('Design sync')));
+      // The event's own (untrusted) title never rides in the typed prompt as
+      // an instruction: it is the user's plain question.
+      expect(uri.queryParameters['q'], startsWith('What should I raise'));
     });
 
     todayTest('tapping the event opens a read-only sheet with Open in '
