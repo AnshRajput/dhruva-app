@@ -20,6 +20,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications (morning brief) needs java.time on API 26.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -111,4 +113,6 @@ dependencies {
     // pure-Dart). Provenance + re-fetch: scripts/fetch-android-aar.sh.
     // Closes R10 — without this the APK ships with no inference .so.
     implementation(files("libs/llama-cpp-dart.aar"))
+    // Required by flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

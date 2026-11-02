@@ -2,11 +2,13 @@
 // singleton (shell, redirects, placeholder surfaces, appearance).
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/data/characters/character_repository.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/main.dart';
 import 'package:drift/drift.dart' show DatabaseConnection;
 import 'package:drift/native.dart';
@@ -18,6 +20,19 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'mock_hf_client.dart';
+
+/// Today's connector reads as empty and nothing is connected, so a test that
+/// shows Today needs no OS connectors and leaves no drift timer behind (a live
+/// query leaves a zero-length timer when disposed, which fails a widget test).
+/// The Today tests use the real store instead, see test/features/today.
+List<Override> todayStubOverrides() => [
+  connectorListProvider.overrideWith(
+    (ref) => Stream.value(const <ConnectorEntry>[]),
+  ),
+  todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
+  upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
+  notificationGroupsProvider.overrideWith((ref) => Stream.value(const [])),
+];
 
 /// An in-memory DB whose query streams close the moment the last listener
 /// goes. Library and Inbox watch drift streams; with drift's default (keep the
@@ -64,6 +79,10 @@ Future<AppDatabase> pumpDhruvaApp(
           (ref) async =>
               prefs ?? MemoryPrefsStore({'what_moved_dismissed': 'true'}),
         ),
+        // Drift live queries leave a zero-length timer when disposed, which
+        // fails a widget test; Today's streams read as empty here (the Today
+        // tests use the real store, see test/features/today).
+        ...todayStubOverrides(),
         hfApiClientProvider.overrideWithValue(
           mockHfClient(MockClient((r) async => http.Response('[]', 200))),
         ),

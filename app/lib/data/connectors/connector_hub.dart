@@ -66,6 +66,13 @@ final class ConnectorHub {
     }
   }
 
+  /// Runs after any connector's local data was wiped on revoke.
+  set onWiped(Future<void> Function()? callback) {
+    for (final c in [calendar, contacts, folder, notifications]) {
+      c.onWiped = callback;
+    }
+  }
+
   /// App resume: re-reads every OS grant (so access given or taken away in
   /// system settings shows up at once), finishes a first-time connect the user
   /// just completed in system settings (calendar, contacts), reads right away

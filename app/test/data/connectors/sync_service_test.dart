@@ -234,4 +234,15 @@ void main() {
       expect(await runConnectorSync(kit.hub), isTrue);
     });
   });
+
+  test('app-open sync always drains the local notification queue, while '
+      'calendar keeps its ten-minute throttle', () async {
+    kit.notifications.granted = true;
+    await kit.hub.notifications.connect();
+    await kit.hub.calendar.connect();
+    await kit.hub.sync.refresh();
+
+    now = now.add(const Duration(seconds: 30));
+    expect((await kit.hub.sync.syncOnOpen()).outcomes.keys, ['notifications']);
+  });
 }

@@ -288,6 +288,19 @@ void main() {
   });
 
   group('revoke', () {
+    test('tells the app so derived copies (the brief cache) can go', () async {
+      var wiped = 0;
+      kit.hub.onWiped = () async => wiped++;
+      await kit.hub.calendar.connect();
+      await kit.hub.calendar.revoke();
+      expect(wiped, 1);
+      // A hook that throws must not block the revoke.
+      kit.hub.onWiped = () async => throw StateError('disk full');
+      await kit.hub.calendar.connect();
+      await kit.hub.calendar.revoke();
+      expect(kit.hub.calendar.currentStatus.state, ConnectorState.notConnected);
+    });
+
     test('wipes events + content ledger, keeps a revoke row, back to not '
         'connected', () async {
       await kit.hub.calendar.connect();

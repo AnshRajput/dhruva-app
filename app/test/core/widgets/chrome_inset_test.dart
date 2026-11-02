@@ -29,7 +29,7 @@ void main() {
     tester,
   ) async {
     await pumpIos(tester, '/today');
-    final greeting = find.textContaining(RegExp(r'^Good '));
+    final greeting = find.textContaining(RegExp(r'^(Good |Hello)'));
     expect(greeting, findsOneWidget);
     expect(
       tester.getTopLeft(greeting).dy,
@@ -62,7 +62,7 @@ void main() {
     tester,
   ) async {
     await pumpDhruvaApp(tester, surface: const Size(800, 700));
-    final greeting = find.textContaining(RegExp(r'^Good '));
+    final greeting = find.textContaining(RegExp(r'^(Good |Hello)'));
     expect(
       tester.getTopLeft(greeting).dy,
       greaterThanOrEqualTo(barBottom(tester)),

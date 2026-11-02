@@ -17,6 +17,7 @@ import '../../data/connectors/connector_store.dart';
 import '../../data/connectors/notification_connector.dart';
 import '../../data/connectors/search_index.dart';
 import '../../data/connectors/system_sources.dart';
+import '../settings/prefs_store.dart';
 import 'providers.dart';
 
 /// One row of the connector list: the connector and its latest status.
@@ -32,11 +33,22 @@ final connectorStoreProvider = Provider<ConnectorStore>((ref) {
 });
 
 /// The four connectors + sync service over the real OS sources.
-final connectorHubProvider = FutureProvider<ConnectorHub>((ref) async {
-  final hub = await ConnectorHub.system(ref.watch(appDatabaseProvider));
-  ref.onDispose(() => unawaited(hub.dispose()));
-  return hub;
-});
+final connectorHubProvider = FutureProvider<ConnectorHub>(
+  (ref) async {
+    final hub = await ConnectorHub.system(ref.watch(appDatabaseProvider));
+    // Revoking a source deletes its data; the written brief quotes it, so the
+    // cached brief goes too (even if Today is not on screen to notice).
+    hub.onWiped = () async => (await ref.read(
+      prefsStoreProvider.future,
+    )).write(briefCachePrefsKey, '');
+    ref.onDispose(() => unawaited(hub.dispose()));
+    return hub;
+  },
+  // A hub that cannot start must surface as an error (the list then reads as
+  // "no connectors" and Today says so), not retry forever behind a loading
+  // state that never ends.
+  retry: (_, _) => null,
+);
 
 /// Keyword search over everything the connectors stored. The engine (FTS5, or
 /// the BM25 fallback when SQLite lacks it) is chosen once, here.

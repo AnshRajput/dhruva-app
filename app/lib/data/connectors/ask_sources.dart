@@ -10,7 +10,10 @@ library;
 import 'dart:convert';
 
 import 'connector.dart';
+import 'local_time.dart';
 import 'sources_block.dart';
+
+export 'local_time.dart' show itemWhenText, shortDate, shortTime, whenText;
 
 /// The "Search in" chips. [docs] means the documents attached to the chat.
 enum AskSource { mail, calendar, contacts, files, docs }
@@ -242,34 +245,6 @@ const askInstructionWithDocs =
     'Answer the question using only the sources and document excerpts below. '
     'Cite sources like [1] and document pages like [p.3]. If the answer is '
     'not in them, say so plainly; do not guess or use outside knowledge.';
-
-const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-/// "Mon 2 Nov".
-String shortDate(DateTime d) {
-  final l = d.toLocal();
-  return '${_weekdays[l.weekday - 1]} ${l.day} ${_months[l.month - 1]}';
-}
-
-/// "9:30" (24-hour, local).
-String shortTime(DateTime d) {
-  final l = d.toLocal();
-  return '${l.hour}:${l.minute.toString().padLeft(2, '0')}';
-}
 
 /// The user turn that replaces the plain question when sources are searched.
 /// [docPrompt] (the doc-chat grounded prompt) rides along when documents are

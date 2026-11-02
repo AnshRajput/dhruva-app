@@ -29,6 +29,12 @@
          folder picker). Each is requested only when the user taps Connect. -->
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <!-- Morning brief (Settings > Notifications, off by default): local
+         notifications scheduled on the phone, no network. Inexact alarms, so no
+         exact-alarm permission. BOOT_COMPLETED lets the plugin put the next
+         mornings back after a reboot; opening the app tops them up too. The
+         notification text is a constant and never carries the user's data. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Backup lockdown (daily-assistant spec B1): chats, the model index and,
          later, connector data must never leave the phone via Google backup or
          a device-to-device transfer. allowBackup/fullBackupContent cover
@@ -141,6 +147,22 @@
                 <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
         </service>
+        <!-- flutter_local_notifications: fires the scheduled morning brief and
+             re-schedules it after a reboot. Not exported: only the plugin's own
+             alarms and the system's boot broadcast reach them. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false"/>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- background_downloader runs its download via a WorkManager worker that
              promotes itself to a foreground service (Config.runInForeground). On
              API 34+, WorkManager's SystemForegroundService starts foreground with
