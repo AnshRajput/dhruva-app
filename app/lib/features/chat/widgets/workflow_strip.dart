@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/edge_fade.dart';
 
 class WorkflowStrip extends StatelessWidget {
   const WorkflowStrip({super.key});
@@ -34,39 +35,42 @@ class WorkflowStrip extends StatelessWidget {
             tokens.spacing.md,
             tokens.spacing.xs,
           ),
+          // Sentence case like every other section header (this one was the
+          // only uppercase tracked label in the app).
           child: Text(
-            'QUICK ACTIONS',
-            style: theme.textTheme.labelSmall?.copyWith(
+            'Quick actions',
+            style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
             ),
           ),
         ),
         SizedBox(
           height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-            children: [
-              for (final (id, icon, label) in _quick) ...[
-                ActionChip(
-                  avatar: Icon(
-                    icon,
-                    size: 16,
-                    color: theme.colorScheme.primary,
+          // The fade says the row scrolls (the last chips used to clip).
+          child: EdgeFade(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+              children: [
+                for (final (id, icon, label) in _quick) ...[
+                  ActionChip(
+                    avatar: Icon(
+                      icon,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    label: Text(label),
+                    onPressed: () => context.push('/actions?id=$id'),
                   ),
-                  label: Text(label),
-                  onPressed: () => context.push('/actions?id=$id'),
+                  SizedBox(width: tokens.spacing.xs),
+                ],
+                ActionChip(
+                  label: const Text('All'),
+                  avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  onPressed: () => context.push('/actions'),
                 ),
-                SizedBox(width: tokens.spacing.xs),
               ],
-              ActionChip(
-                label: const Text('All'),
-                avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
-                onPressed: () => context.push('/actions'),
-              ),
-            ],
+            ),
           ),
         ),
       ],
