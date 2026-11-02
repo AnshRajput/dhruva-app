@@ -92,6 +92,19 @@ bool isActionEcho(String reply, String systemPrompt, {String userText = ''}) {
   return false;
 }
 
+final _sourcesBody = RegExp(r'<sources>.*?</sources>', dotAll: true);
+final _excerptsBody = RegExp(
+  r'(^|\n)Excerpts:.*?(?=\nQuestion:|$)',
+  dotAll: true,
+);
+
+/// [prompt] minus its quoted data (the `<sources>` block body, the document
+/// `Excerpts:` section). A correct answer quotes its source, so overlap with
+/// the data is an answer, not an echo; only the app's own wording counts.
+/// Raw rows and the tags themselves are still caught by the rules above.
+String scaffoldOnly(String prompt) =>
+    prompt.replaceAll(_sourcesBody, ' ').replaceAll(_excerptsBody, ' ');
+
 /// True when [reply] is the grounded prompt (or its sources) echoed back.
 /// [prompt] is the grounded prompt that was sent; with it, a reply made mostly
 /// of its text (over half of the reply's four-word runs) is also an echo.
@@ -115,7 +128,7 @@ bool isScaffoldEcho(String reply, {String? prompt}) {
     final w = _tokens(t);
     if (w.length >= 12) {
       final mine = _shingles(w, 4);
-      final theirs = _shingles(_tokens(prompt), 4);
+      final theirs = _shingles(_tokens(scaffoldOnly(prompt)), 4);
       if (mine.isNotEmpty) {
         final shared = mine.where(theirs.contains).length;
         if (shared / mine.length > 0.5) return true;

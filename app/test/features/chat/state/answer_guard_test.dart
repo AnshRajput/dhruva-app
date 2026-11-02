@@ -28,17 +28,49 @@ void main() {
     expect(isScaffoldEcho('See\n[2] notification | Ravi | 9:00'), isTrue);
   });
 
-  test('mostly the same words as the sources block', () {
-    const dump =
+  test('mostly the same words as the app instructions', () {
+    final echo = '$askInstruction Question Prep me';
+    expect(isScaffoldEcho('Okay. $echo', prompt: prompt), isTrue);
+  });
+
+  test('quoting the sources is an answer, not an echo', () {
+    // The source's own facts restated without row markers: verbose at worst,
+    // never the app's instructions. Wiping it would lose a true answer.
+    const restated =
         'Budget review Mon 2 Nov 15:30-16:00 with Ravi Menon Asha Rao '
         'Quarterly budget review with finance and the marketing leads in '
         'room four';
-    expect(isScaffoldEcho(dump, prompt: prompt), isTrue);
+    expect(isScaffoldEcho(restated, prompt: prompt), isFalse);
+  });
+
+  test('a short document answered from its one line is kept (on-device '
+      'repro: zebra-memo.pdf, Qwen 0.5B)', () {
+    const docPrompt =
+        'Answer the question using only the document excerpts below. If the '
+        'answer is not in the excerpts, say that the document does not say; '
+        'do not guess or use outside knowledge. After each fact, cite its '
+        'page like [p.3].\n\nExcerpts:\n[p.1]\nlaunch date is March 14 and the '
+        'budget is 52 thousand dollars. Owner is Meera.\n\nQuestion: What is '
+        'the launch date and the budget\nAnswer:';
+    const answer =
+        'The launch date is March 14 and the budget is 52 thousand dollars '
+        '[p.1].';
+    expect(isScaffoldEcho(answer, prompt: docPrompt), isFalse);
+    // Parroting the document instruction is still caught.
     expect(
-      isScaffoldEcho(dump),
-      isFalse,
-      reason: 'needs the prompt to compare',
+      isScaffoldEcho(
+        'Answer the question using only the document excerpts below. If the '
+        'answer is not in the excerpts, say that the document does not say',
+        prompt: docPrompt,
+      ),
+      isTrue,
     );
+  });
+
+  test('scaffoldOnly drops quoted data but keeps the instructions', () {
+    final s = scaffoldOnly(prompt);
+    expect(s, isNot(contains('Ravi Menon')));
+    expect(s, contains('Question: Prep me'));
   });
 
   test('a real answer, even one that cites, is not an echo', () {
