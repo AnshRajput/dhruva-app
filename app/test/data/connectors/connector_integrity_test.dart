@@ -6,7 +6,6 @@ import 'dart:async';
 
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
-import 'package:dhruva/data/connectors/folder_connector.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';

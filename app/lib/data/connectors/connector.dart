@@ -82,6 +82,13 @@ final class ConnectorStatus {
   bool get isConnected =>
       state == ConnectorState.connected || state == ConnectorState.syncing;
 
+  /// The source is still opted in and its stored data is still wanted: it is
+  /// connected, or a read failed for now ("Could not read your calendar").
+  /// Derived copies of that data (the written brief) are kept through such a
+  /// blip and dropped only when access is really gone (not connected, or the
+  /// OS permission was switched off).
+  bool get holdsData => isConnected || state == ConnectorState.needsAttention;
+
   ConnectorStatus copyWith({
     ConnectorState? state,
     String? detail,

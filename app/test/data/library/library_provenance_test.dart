@@ -5,7 +5,6 @@ import 'dart:io';
 
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
-import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_store.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/data/library/library_store.dart';
@@ -101,8 +100,8 @@ void main() {
             );
             for (final t in ['dup', 'dup', 'one']) {
               raw.execute(
-                "INSERT INTO saved_answers (content, created_at) VALUES "
-                "('$t', 1)",
+                'INSERT INTO saved_answers (content, created_at) VALUES (?, 1)',
+                [t],
               );
             }
             raw.execute("INSERT INTO todos (task, created_at) VALUES ('t', 1)");

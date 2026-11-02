@@ -102,10 +102,14 @@ final connectorListProvider = StreamProvider<List<ConnectorEntry>>((
         ConnectorEntry(c, c.currentStatus),
   ];
   final controller = StreamController<List<ConnectorEntry>>();
+  // No snapshot until every status has been re-read from the OS: a half
+  // refreshed list (one connector still at its initial "not connected") would
+  // read as a disconnect and wipe derived data such as the written brief.
+  var ready = false;
   final subs = [
     for (final c in hub.all)
       c.status.listen((_) {
-        if (!controller.isClosed) controller.add(snapshot());
+        if (ready && !controller.isClosed) controller.add(snapshot());
       }),
   ];
   ref.onDispose(() {
@@ -115,6 +119,7 @@ final connectorListProvider = StreamProvider<List<ConnectorEntry>>((
     unawaited(controller.close());
   });
   await Future.wait(hub.all.map((c) => c.refreshStatus()));
+  ready = true;
   if (!controller.isClosed) controller.add(snapshot());
   yield* controller.stream;
 });
