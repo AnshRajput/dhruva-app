@@ -64,6 +64,12 @@ Future<void> _pump(WidgetTester tester, Widget child) {
   );
 }
 
+/// Opens the reply row's overflow menu.
+Future<void> _openMore(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('reply-more')));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   // The copy-button test exercises `Clipboard.setData`, which has no
   // built-in mock in `flutter_test` (it's a real engine channel call) —
@@ -407,12 +413,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Save to Library'), findsOneWidget);
+      // Save lives in the overflow menu, not as a fourth icon in the row.
+      expect(find.byKey(const ValueKey('save-reply')), findsNothing);
+      await _openMore(tester);
+      expect(find.text('Save to Library'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('save-reply')));
       await tester.pumpAndSettle();
       expect(saved, 1);
-      expect(find.byTooltip('Saved to Library'), findsOneWidget);
-      // A second tap does nothing.
+      await _openMore(tester);
+      expect(find.text('Saved to Library'), findsOneWidget);
+      // A second tap does nothing (the item is disabled).
       await tester.tap(find.byKey(const ValueKey('save-reply')));
       await tester.pumpAndSettle();
       expect(saved, 1);
@@ -429,6 +439,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openMore(tester);
       expect(find.byKey(const ValueKey('save-reply')), findsNothing);
       expect(find.byKey(const ValueKey('add-todos')), findsNothing);
     });
@@ -449,11 +460,61 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Add 2 to your to-dos'), findsOneWidget);
+      await _openMore(tester);
+      expect(find.text('Add 2 to your to-dos'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('add-todos')));
       await tester.pumpAndSettle();
       expect(added, 1);
-      expect(find.byTooltip('Added to to-dos'), findsOneWidget);
+      await _openMore(tester);
+      expect(find.text('Added to to-dos'), findsOneWidget);
+    });
+  });
+
+  group('reply action row', () {
+    testWidgets('Copy and Regenerate are visible; the rest is in a menu, on '
+        'one line', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pump(
+        tester,
+        MessageBubble(
+          message: MessageInfo(
+            id: 1,
+            conversationId: 1,
+            role: MessageRole.assistant,
+            content: 'A reply',
+            status: MessageStatus.complete,
+            createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
+            tokCount: 120,
+            genMs: 9000,
+          ),
+          onRegenerate: () {},
+          onReport: () {},
+          onSave: () async {},
+          todoCount: 2,
+          onAddTodos: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Copy text'), findsOneWidget);
+      expect(find.byTooltip('Regenerate response'), findsOneWidget);
+      // Speaker, save, to-dos and report are not icons in the row.
+      expect(find.byTooltip('Read aloud'), findsNothing);
+      expect(find.byTooltip('Report this reply'), findsNothing);
+      expect(find.byIcon(Icons.flag_outlined), findsNothing);
+      // One line: copy, regenerate and the menu share the text's baseline row.
+      final copy = tester.getCenter(find.byTooltip('Copy text')).dy;
+      expect(tester.getCenter(find.byTooltip('Regenerate response')).dy, copy);
+      expect(
+        tester.getCenter(find.byKey(const ValueKey('reply-more'))).dy,
+        copy,
+      );
+
+      await _openMore(tester);
+      expect(find.text('Read aloud'), findsOneWidget);
+      expect(find.text('Save to Library'), findsOneWidget);
+      expect(find.text('Add 2 to your to-dos'), findsOneWidget);
+      expect(find.text('Report this reply'), findsOneWidget);
     });
   });
 }

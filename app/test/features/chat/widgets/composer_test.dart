@@ -48,7 +48,6 @@ void main() {
     bool isMultimodal = false,
     required void Function(String text, Uint8List? imageBytes) onSend,
     VoidCallback? onCancel,
-    VoidCallback? onOpenSettings,
     Future<bool> Function()? beforeSend,
   }) {
     final router = GoRouter(
@@ -63,7 +62,6 @@ void main() {
               onSend: onSend,
               beforeSend: beforeSend,
               onCancel: onCancel ?? () {},
-              onOpenSettings: onOpenSettings ?? () {},
             ),
           ),
         ),
@@ -109,14 +107,17 @@ void main() {
     },
   );
 
-  testWidgets('shows the AI-can-be-wrong disclaimer under the input', (
+  testWidgets('the composer carries no trust copy and no settings button', (
     tester,
   ) async {
     await pumpComposer(tester, isGenerating: false, onSend: (_, _) {});
-    expect(
-      find.text('AI can be wrong. Everything runs on your phone.'),
-      findsOneWidget,
-    );
+    // The one trust line lives in the empty state, not under every message.
+    expect(find.textContaining('AI can be wrong'), findsNothing);
+    expect(find.text('Runs 100% on your device'), findsNothing);
+    expect(find.byIcon(Icons.tune), findsNothing);
+    // Send, plus the mic (not an IconButton); attach joins them when a
+    // document or a vision model is in play: never more than four controls.
+    expect(find.byType(IconButton), findsOneWidget);
   });
 
   testWidgets('tapping send fires onSend and clears the field', (tester) async {
@@ -154,19 +155,6 @@ void main() {
     expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.stop_rounded));
     expect(cancelled, isTrue);
-  });
-
-  testWidgets('sliders icon opens settings', (tester) async {
-    var opened = false;
-    await pumpComposer(
-      tester,
-      isGenerating: false,
-      onSend: (_, _) {},
-      onOpenSettings: () => opened = true,
-    );
-
-    await tester.tap(find.byIcon(Icons.tune));
-    expect(opened, isTrue);
   });
 
   // `endHold` chains several stream-close hops (mic controller close ->

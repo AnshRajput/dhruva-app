@@ -114,4 +114,15 @@ void main() {
     await tester.tap(find.text('Try again'));
     expect(tapped, ChatRecoveryAction.retry);
   });
+
+  test('a busy model names its cause', () {
+    String say(String? d) =>
+        chatErrorContentFor('EngineStateFailure', detail: d).message;
+    expect(say('a speed test is running'), contains('speed test'));
+    expect(say('a generation is already in flight'), contains('another task'));
+    expect(say('a generation is already in flight'), isNot(contains('speed')));
+    expect(say('model is loading'), contains('still loading'));
+    expect(say(null), 'The model is busy for a moment. Try again.');
+    expect(say(''), isNot(contains('speed')));
+  });
 }

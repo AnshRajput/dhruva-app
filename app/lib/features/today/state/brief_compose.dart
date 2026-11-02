@@ -58,7 +58,8 @@ String _people(List<String> names) {
     return '${names.sublist(0, names.length - 1).join(', ')} and '
         '${names.last}';
   }
-  return '${names.take(3).join(', ')} and ${names.length - 3} others';
+  final rest = names.length - 3;
+  return '${names.take(3).join(', ')} and $rest ${_plural(rest, 'other', 'others')}';
 }
 
 String _plural(int n, String one, String many) => n == 1 ? one : many;

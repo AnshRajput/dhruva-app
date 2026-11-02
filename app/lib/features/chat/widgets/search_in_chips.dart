@@ -1,5 +1,7 @@
-/// The "Search in" row above the Ask composer (comp `ask.png`): Auto · Mail ·
-/// Calendar · Contacts · Files · Docs.
+/// Ask's sources control. The composer shows ONE chip ([SourcesChip], "Sources:
+/// Auto"); tapping it opens a sheet with the toggles ([SearchInChips]): Auto ·
+/// Mail · Calendar · Contacts · Files · Docs. The selection state itself is the
+/// canonical `askSelectionProvider` (the same one `/ask/new` pins into).
 ///
 /// * Auto (default): rules pick sources from what is being typed; the ones it
 ///   picked show outlined so the choice is visible BEFORE sending.
@@ -27,6 +29,103 @@ IconData askSourceIcon(AskSource s) => switch (s) {
   AskSource.docs => Icons.description_outlined,
 };
 
+/// What the one composer chip says: "Sources: Auto", the pinned sources, or
+/// "Sources: None" (just the model). A thread that is ABOUT an item says so.
+String sourcesChipLabel({
+  required AskSourceSelection selection,
+  required Set<AskSource> resolved,
+  List<String> focusTitles = const [],
+}) {
+  if (focusTitles.isNotEmpty) {
+    final more = focusTitles.length > 1 ? ' +${focusTitles.length - 1}' : '';
+    return 'About: ${focusTitles.first}$more';
+  }
+  if (selection.auto) return 'Sources: Auto';
+  final names = [
+    for (final s in AskSource.values)
+      if (resolved.contains(s)) s.label,
+  ];
+  if (names.isEmpty) return 'Sources: None';
+  if (names.length <= 2) return 'Sources: ${names.join(', ')}';
+  return 'Sources: ${names.first} +${names.length - 1}';
+}
+
+/// The single, never-clipped chip above the Ask composer's input. Opens the
+/// sources sheet.
+class SourcesChip extends StatelessWidget {
+  const SourcesChip({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final scheme = theme.colorScheme;
+    return Semantics(
+      button: true,
+      label: '$label. Opens the list of sources to search.',
+      excludeSemantics: true,
+      child: PressableScale(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            widthFactor: 1,
+            child: Container(
+              height: 36,
+              padding: EdgeInsets.only(
+                left: tokens.spacing.md,
+                right: tokens.spacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(tokens.radius.full),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width - 2 * 48,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome_outlined,
+                      size: 16,
+                      color: scheme.primary,
+                    ),
+                    SizedBox(width: tokens.spacing.xs),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.expand_more,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The toggles inside the sources sheet: Auto, then one chip per source,
+/// wrapping onto more lines instead of scrolling or clipping.
 class SearchInChips extends StatelessWidget {
   const SearchInChips({
     super.key,
@@ -55,73 +154,53 @@ class SearchInChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      key: const ValueKey('search-in-chips'),
+      runSpacing: 4,
       children: [
-        Padding(
-          padding: EdgeInsets.only(left: tokens.spacing.xs),
-          child: Text(
-            'Search in',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        for (var i = 0; i < focusTitles.length; i++)
+          _SourceChip(
+            chipKey: ValueKey('search-in-focus-$i'),
+            icon: Icons.description_outlined,
+            label: focusTitles[i],
+            trailing: 'About',
+            state: _ChipState.filled,
+            semantics: 'About ${focusTitles[i]}. Always searched.',
           ),
+        _SourceChip(
+          chipKey: const ValueKey('search-in-auto'),
+          icon: Icons.auto_awesome_outlined,
+          label: 'Auto',
+          state: selection.auto ? _ChipState.filled : _ChipState.idle,
+          semantics: selection.auto
+              ? 'Auto, on. Picks sources from your question.'
+              : 'Auto, off. Tap to let the app pick sources.',
+          onTap: onAuto,
         ),
-        SizedBox(
-          height: 48,
-          child: ListView(
-            key: const ValueKey('search-in-chips'),
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (var i = 0; i < focusTitles.length; i++)
-                _SourceChip(
-                  chipKey: ValueKey('search-in-focus-$i'),
-                  icon: Icons.description_outlined,
-                  label: focusTitles[i],
-                  trailing: 'About',
-                  state: _ChipState.filled,
-                  semantics: 'About ${focusTitles[i]}. Always searched.',
-                ),
-              _SourceChip(
-                chipKey: const ValueKey('search-in-auto'),
-                icon: Icons.auto_awesome_outlined,
-                label: 'Auto',
-                state: selection.auto ? _ChipState.filled : _ChipState.idle,
-                semantics: selection.auto
-                    ? 'Auto, on. Picks sources from your question.'
-                    : 'Auto, off. Tap to let the app pick sources.',
-                onTap: onAuto,
-              ),
-              for (final c in chips)
-                _SourceChip(
-                  chipKey: ValueKey('search-in-${c.source.name}'),
-                  icon: askSourceIcon(c.source),
-                  label: c.source.label,
-                  trailing: c.availability == AskChipAvailability.needsConnect
-                      ? 'Connect'
-                      : null,
-                  state: c.availability == AskChipAvailability.needsConnect
-                      ? _ChipState.connect
-                      : !resolved.contains(c.source)
-                      ? _ChipState.idle
-                      : selection.auto
-                      ? _ChipState.outlined
-                      : _ChipState.filled,
-                  semantics: c.availability == AskChipAvailability.needsConnect
-                      ? '${c.source.label}, not connected. Opens its '
-                            'connector.'
-                      : resolved.contains(c.source)
-                      ? '${c.source.label}, searched'
-                      : '${c.source.label}, not searched',
-                  onTap: () => c.availability == AskChipAvailability.ready
-                      ? onToggle(c.source)
-                      : onConnect(c.source),
-                ),
-            ],
+        for (final c in chips)
+          _SourceChip(
+            chipKey: ValueKey('search-in-${c.source.name}'),
+            icon: askSourceIcon(c.source),
+            label: c.source.label,
+            trailing: c.availability == AskChipAvailability.needsConnect
+                ? 'Connect'
+                : null,
+            state: c.availability == AskChipAvailability.needsConnect
+                ? _ChipState.connect
+                : !resolved.contains(c.source)
+                ? _ChipState.idle
+                : selection.auto
+                ? _ChipState.outlined
+                : _ChipState.filled,
+            semantics: c.availability == AskChipAvailability.needsConnect
+                ? '${c.source.label}, not connected. Opens its connector.'
+                : resolved.contains(c.source)
+                ? '${c.source.label}, searched'
+                : '${c.source.label}, not searched',
+            onTap: () => c.availability == AskChipAvailability.ready
+                ? onToggle(c.source)
+                : onConnect(c.source),
           ),
-        ),
       ],
     );
   }

@@ -187,6 +187,18 @@ class SuggestedPrompts extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          SizedBox(height: tokens.spacing.sm),
+          // The ONE trust line (the composer carries none): where the answers
+          // run, and that they can be wrong.
+          Center(child: TrustMark(style: theme.textTheme.bodySmall)),
+          Text(
+            'AI can be wrong. Check anything important.',
+            key: const ValueKey('ai-can-be-wrong'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           SizedBox(height: tokens.spacing.lg),
           for (final starter in prompts) ...[
             _StarterCard(starter: starter, onTap: () => onSelect(starter.text)),

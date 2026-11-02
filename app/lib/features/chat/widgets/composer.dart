@@ -40,7 +40,6 @@ import '../../voice/state/voice_input_controller.dart';
 import '../../voice/widgets/mic_button.dart';
 import '../state/image_downscale.dart';
 import '../state/vision_presets.dart';
-import 'brand_motif.dart';
 
 class Composer extends ConsumerStatefulWidget {
   final bool isGenerating;
@@ -56,7 +55,6 @@ class Composer extends ConsumerStatefulWidget {
   /// (battery guard's "confirm before starting"). Null = always send.
   final Future<bool> Function()? beforeSend;
   final VoidCallback onCancel;
-  final VoidCallback onOpenSettings;
 
   /// Opens the document picker; null hides document attach (the pre-docs
   /// behavior every existing caller keeps).
@@ -104,7 +102,6 @@ class Composer extends ConsumerStatefulWidget {
     required this.onSend,
     this.beforeSend,
     required this.onCancel,
-    required this.onOpenSettings,
   });
 
   @override
@@ -315,8 +312,6 @@ class _ComposerState extends ConsumerState<Composer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Center(child: TrustMark()),
-              SizedBox(height: tokens.spacing.sm),
               _DocumentArea(
                 documents: widget.documents,
                 extractingName: widget.extractingDocName,
@@ -337,11 +332,6 @@ class _ComposerState extends ConsumerState<Composer> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(
-                    tooltip: 'Chat settings',
-                    icon: const Icon(Icons.tune),
-                    onPressed: widget.onOpenSettings,
-                  ),
                   if (widget.isMultimodal || widget.onAttachDocument != null)
                     IconButton(
                       tooltip: !widget.isMultimodal
@@ -395,12 +385,6 @@ class _ComposerState extends ConsumerState<Composer> {
                     onCancel: widget.onCancel,
                   ),
                 ],
-              ),
-              Text(
-                'AI can be wrong. Everything runs on your phone.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
               ),
             ],
           ),

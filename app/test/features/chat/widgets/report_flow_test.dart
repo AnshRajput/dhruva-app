@@ -98,7 +98,9 @@ void main() {
     await tester.pumpWidget(harness());
     expect(find.text('something awful'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Report this reply'));
+    await tester.tap(find.byKey(const ValueKey('reply-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('reply-report')));
     await tester.pumpAndSettle();
     expect(
       find.text('Reports stay on your phone unless you choose to email them.'),
@@ -137,7 +139,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(harness());
-    await tester.tap(find.byTooltip('Report this reply'));
+    await tester.tap(find.byKey(const ValueKey('reply-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('reply-report')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Harmful or dangerous'));
     await tester.pump();

@@ -282,16 +282,28 @@ class _ThreadScaffold extends ConsumerWidget {
               tooltip: 'Talk hands-free',
               onPressed: () => _openHandsFree(context, ref),
             ),
+          // Chat settings lives here, not in the composer: the composer keeps
+          // attach, mic and send (and the one sources chip) only.
           PopupMenuButton<String>(
-            onSelected: (value) => _export(context, ref, value == 'markdown'),
-            itemBuilder: (context) => const [
+            onSelected: (value) => value == 'settings'
+                ? showSamplingSettingsSheet(context, args)
+                : _export(context, ref, value == 'markdown'),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Text('Chat settings'),
+              ),
               PopupMenuItem(
                 value: 'markdown',
-                child: Text('Export as Markdown'),
+                enabled: state.conversationId != null,
+                child: const Text('Export as Markdown'),
               ),
-              PopupMenuItem(value: 'json', child: Text('Export as JSON')),
+              PopupMenuItem(
+                value: 'json',
+                enabled: state.conversationId != null,
+                child: const Text('Export as JSON'),
+              ),
             ],
-            enabled: state.conversationId != null,
           ),
         ],
       ),
@@ -379,6 +391,7 @@ class _ThreadScaffold extends ConsumerWidget {
                             content: chatErrorContentFor(
                               state.modelLoadError!.runtimeType.toString(),
                               modelSizeBytes: state.model?.sizeBytes,
+                              detail: state.modelLoadError!.message,
                             ),
                             onAction: (action) =>
                                 _handleModelLoadError(context, ref, action),
@@ -473,7 +486,6 @@ class _ThreadScaffold extends ConsumerWidget {
                 controller.sendMessage(text, imageBytes: imageBytes);
               },
               onCancel: controller.cancel,
-              onOpenSettings: () => showSamplingSettingsSheet(context, args),
             ),
         ],
       ),
@@ -519,6 +531,7 @@ class _ThreadScaffold extends ConsumerWidget {
         content: chatErrorContentFor(
           message.errorKind,
           modelSizeBytes: state.model?.sizeBytes,
+          detail: controller.errorDetailsFor(message.id),
         ),
         onAction: (action) =>
             _handleMessageError(context, ref, message, action),
@@ -930,9 +943,53 @@ class _ThreadScaffold extends ConsumerWidget {
   }
 }
 
-/// The "Search in" row inside the composer: reads the thread's selection, the
-/// connectors' live state and the contact names, and shows what Auto would
-/// search for the text typed so far.
+/// What the sources chip and its sheet both read: the thread's selection, the
+/// connectors' live state and the contact names, and what Auto would search for
+/// the text typed so far.
+({
+  AskSourceSelection selection,
+  Set<AskSource> resolved,
+  List<({AskSource source, AskChipAvailability availability})> chips,
+  List<String> focusTitles,
+  AskSelectionNotifier notifier,
+})
+_searchInData(WidgetRef ref, ChatRouteArgs args, bool hasDocuments) {
+  final picked = ref.watch(askSelectionProvider(args));
+  final connectors = ref.watch(askConnectorsProvider);
+  final names = ref.watch(askContactNamesProvider).value ?? const <String>[];
+  final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
+  final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
+  // One chip per file, however many sections it was split into.
+  final focusTitles = <String>[
+    for (final t in {
+      for (final i in focus)
+        i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
+    })
+      t,
+  ];
+  final ready = {
+    for (final c in chips)
+      if (c.availability == AskChipAvailability.ready) c.source,
+  };
+  final resolved = picked.selection
+      .resolve(
+        question: picked.draft,
+        contactNames: names,
+        hasDocuments: hasDocuments,
+      )
+      .intersection(ready);
+  return (
+    selection: picked.selection,
+    resolved: resolved,
+    chips: chips,
+    focusTitles: focusTitles,
+    notifier: ref.read(askSelectionProvider(args).notifier),
+  );
+}
+
+/// The ONE sources chip inside the composer ("Sources: Auto"). It opens
+/// [_SearchInSheet], which holds the toggles; the selection state is the same
+/// canonical one `/ask/new` pins into.
 class _SearchInRow extends ConsumerWidget {
   final ChatRouteArgs args;
   final bool hasDocuments;
@@ -940,40 +997,84 @@ class _SearchInRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final picked = ref.watch(askSelectionProvider(args));
-    final connectors = ref.watch(askConnectorsProvider);
-    final names = ref.watch(askContactNamesProvider).value ?? const [];
-    final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
-    final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
-    // One chip per file, however many sections it was split into.
-    final focusTitles = <String>[
-      for (final t in {
-        for (final i in focus)
-          i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
-      })
-        t,
-    ];
-    if (chips.isEmpty && focusTitles.isEmpty) return const SizedBox.shrink();
-    final ready = {
-      for (final c in chips)
-        if (c.availability == AskChipAvailability.ready) c.source,
-    };
-    final resolved = picked.selection
-        .resolve(
-          question: picked.draft,
-          contactNames: names,
-          hasDocuments: hasDocuments,
-        )
-        .intersection(ready);
-    final notifier = ref.read(askSelectionProvider(args).notifier);
-    return SearchInChips(
-      selection: picked.selection,
-      focusTitles: focusTitles,
-      resolved: resolved,
-      chips: chips,
-      onAuto: notifier.chooseAuto,
-      onToggle: (s) => notifier.toggle(s, currentlyResolved: resolved),
-      onConnect: (s) => context.push(connectRouteFor(s)),
+    final d = _searchInData(ref, args, hasDocuments);
+    if (d.chips.isEmpty && d.focusTitles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SourcesChip(
+        key: const ValueKey('sources-chip'),
+        label: sourcesChipLabel(
+          selection: d.selection,
+          resolved: d.resolved,
+          focusTitles: d.focusTitles,
+        ),
+        onTap: () => unawaited(
+          showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            useSafeArea: true,
+            builder: (_) =>
+                _SearchInSheet(args: args, hasDocuments: hasDocuments),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The sources sheet: "Search in" with Auto and one toggle per source.
+class _SearchInSheet extends ConsumerWidget {
+  final ChatRouteArgs args;
+  final bool hasDocuments;
+  const _SearchInSheet({required this.args, required this.hasDocuments});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final d = _searchInData(ref, args, hasDocuments);
+    return SingleChildScrollView(
+      key: const ValueKey('sources-sheet'),
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.lg,
+        0,
+        tokens.spacing.lg,
+        tokens.spacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            header: true,
+            child: Text('Search in', style: theme.textTheme.titleLarge),
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            'Auto picks from your question. Tap sources to choose them '
+            'yourself.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          SearchInChips(
+            selection: d.selection,
+            focusTitles: d.focusTitles,
+            resolved: d.resolved,
+            chips: d.chips,
+            onAuto: d.notifier.chooseAuto,
+            onToggle: (s) =>
+                d.notifier.toggle(s, currentlyResolved: d.resolved),
+            onConnect: (s) {
+              Navigator.of(context).pop();
+              unawaited(context.push(connectRouteFor(s)));
+            },
+          ),
+        ],
+      ),
     );
   }
 }

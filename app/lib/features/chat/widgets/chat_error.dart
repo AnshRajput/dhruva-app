@@ -52,9 +52,34 @@ String _sizeLabel(int bytes) {
   return '${(bytes / (1024 * 1024)).round()} MB';
 }
 
+/// Why the model could not take a turn right now, in words that name the
+/// cause. [detail] is the failure's own text (`EngineStateFailure.message`):
+/// "a speed test is running", "a generation is already in flight", or a load
+/// that has not finished. Anything else gets the plain generic line.
+String busyMessageFor(String? detail) {
+  final d = (detail ?? '').toLowerCase();
+  if (d.contains('speed test')) {
+    return 'A speed test is using the model. It will be free in a moment. '
+        'Try again then.';
+  }
+  if (d.contains('in flight') || d.contains('generation')) {
+    return 'The model is still finishing another task, such as an earlier '
+        'reply, a summary or your brief. Try again in a moment.';
+  }
+  if (d.contains('load')) {
+    return 'The model is still loading. Try again in a moment.';
+  }
+  return 'The model is busy for a moment. Try again.';
+}
+
 /// [modelSizeBytes] (the installed file's real size) fills in the
-/// "Re-download (379 MB)" label; omitted, the label has no size.
-ChatErrorContent chatErrorContentFor(String? errorKind, {int? modelSizeBytes}) {
+/// "Re-download (379 MB)" label; omitted, the label has no size. [detail] is
+/// the failure's own text, used to say WHY a busy model is busy.
+ChatErrorContent chatErrorContentFor(
+  String? errorKind, {
+  int? modelSizeBytes,
+  String? detail,
+}) {
   switch (errorKind) {
     // D2: three distinct load failures, one recovery order: Try again, then
     // Use a smaller model, then (only when the file is the suspect) the
@@ -100,10 +125,8 @@ ChatErrorContent chatErrorContentFor(String? errorKind, {int? modelSizeBytes}) {
         primaryLabel: 'Reload model',
       );
     case 'EngineStateFailure':
-      return const ChatErrorContent(
-        message:
-            'The model is busy with something else, like a speed test. Try '
-            'again in a moment.',
+      return ChatErrorContent(
+        message: busyMessageFor(detail),
         primaryAction: ChatRecoveryAction.retry,
         primaryLabel: 'Retry',
       );
