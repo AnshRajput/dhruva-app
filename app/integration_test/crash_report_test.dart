@@ -5,6 +5,7 @@
 // Run: flutter test integration_test/crash_report_test.dart -d <id>
 import 'package:dhruva/core/crash/crash_log.dart';
 import 'package:dhruva/core/router/app_router.dart';
+import 'package:dhruva/core/settings/what_moved.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/main.dart';
 import 'package:flutter/material.dart';
@@ -44,11 +45,14 @@ void main() {
     );
     addTearDown(container.dispose);
     await (await container.read(onboardingStoreProvider.future)).markComplete();
+    // A real user has closed the one-time "What moved" sheet by now; left
+    // open, its barrier swallows the banner tap.
+    await container.read(whatMovedPendingProvider.notifier).dismiss();
 
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: const DhruvaApp()),
     );
-    appRouter.go('/chat');
+    appRouter.go('/today');
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('crash-banner')), findsOneWidget);
 
