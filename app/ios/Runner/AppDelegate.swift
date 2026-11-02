@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -8,6 +9,8 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     BackupExclusion.apply()
+    // flutter_local_notifications (morning brief): show/handle taps in the app.
+    UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     PrivacyChannel.installCover()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

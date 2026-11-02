@@ -18,7 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import '../../support/app_harness.dart' show streamSafeTestDb;
+import '../../support/app_harness.dart'
+    show streamSafeTestDb, todayStubOverrides;
 import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -47,6 +48,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...todayStubOverrides(),
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
           hfApiClientProvider.overrideWithValue(

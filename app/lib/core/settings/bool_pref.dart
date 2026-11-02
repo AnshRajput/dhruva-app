@@ -43,9 +43,9 @@ final widgetShowNextEventProvider = AsyncNotifierProvider<BoolPref, bool>(
   () => BoolPref('widget_show_next_event', defaultValue: true),
 );
 
-/// Settings > Notifications: the morning brief. Default OFF. Stored only;
-/// the scheduler arrives with Today's brief (Wave 3), and the switch stays
-/// hidden in the UI until it does.
+/// Settings > Notifications: the morning brief. Default OFF. Turning it on
+/// asks for the notification permission and schedules the daily notification
+/// (`core/notifications/morning_brief.dart`).
 final morningBriefEnabledProvider = AsyncNotifierProvider<BoolPref, bool>(
   () => BoolPref('morning_brief_enabled', defaultValue: false),
 );
@@ -57,8 +57,7 @@ final downloadNotificationsProvider = AsyncNotifierProvider<BoolPref, bool>(
 );
 
 /// Settings > Notifications: when the morning brief should arrive, as minutes
-/// after local midnight (default 07:30). Stored only until the scheduler
-/// lands with Today's brief (Wave 3); no UI shows it yet.
+/// after local midnight (default 07:30).
 class MorningBriefTimeNotifier extends AsyncNotifier<int> {
   static const key = 'morning_brief_minutes';
   static const defaultMinutes = 7 * 60 + 30;

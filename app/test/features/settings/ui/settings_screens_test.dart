@@ -326,19 +326,6 @@ void main() {
   });
 
   group('Notifications', () {
-    testWidgets('morning brief shows no switch until the scheduler exists', (
-      tester,
-    ) async {
-      await pump(tester, const NotificationsScreen());
-      expect(
-        find.byKey(const ValueKey('morning-brief-coming')),
-        findsOneWidget,
-      );
-      expect(find.textContaining("Arrives with Today's brief"), findsOneWidget);
-      // The only switch on the screen is download alerts.
-      expect(find.byType(SwitchListTile), findsOneWidget);
-    });
-
     testWidgets('download alerts default on and persist when turned off', (
       tester,
     ) async {

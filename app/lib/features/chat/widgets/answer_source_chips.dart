@@ -230,23 +230,8 @@ class SourceDetailSheet extends StatelessWidget {
       padding: EdgeInsets.only(top: tokens.spacing.xs),
       child: Text(text, style: muted),
     );
-    final when = it.startsAt ?? it.sentAt;
-    final out = <Widget>[];
-    if (when != null) {
-      final endMs = it.flags['end'];
-      final end = endMs is int
-          ? DateTime.fromMillisecondsSinceEpoch(endMs)
-          : null;
-      final allDay = it.flags['allDay'] == true;
-      out.add(
-        line(
-          allDay
-              ? '${shortDate(when)}, all day'
-              : '${shortDate(when)}, ${shortTime(when)}'
-                    '${end != null ? ' to ${shortTime(end)}' : ''}',
-        ),
-      );
-    }
+    final when = itemWhenText(it);
+    final out = <Widget>[if (when != null) line(when)];
     final location = it.flags['location'];
     if (location is String && location.trim().isNotEmpty) {
       out.add(line(location.trim()));

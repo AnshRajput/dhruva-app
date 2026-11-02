@@ -1,37 +1,45 @@
 /// Today (`/today`): the daily-assistant home, direction A ("calm brief") from
 /// the approved comps, with B's timeline behind "See day".
 ///
-/// Wave 1 ships the STRUCTURE with honest placeholders: greeting + date, a
-/// brief card that explains it appears once the calendar is connected, the
-/// quick-actions row wired to Actions, an "Up next" block, and a "Set up your
-/// inbox" card (the Inbox tab is hidden until a source exists). Every empty
-/// state has a working next action. Real data lands in Wave 3.
+/// Real data from the Wave 2A connectors: a greeting with the name from About
+/// me, the date and a one-line day summary, the brief (written by rules from
+/// the day's facts, every phrase citing the fact it rests on), Up next, Needs you, and
+/// on Android the notification digest. Pull to refresh re-syncs. The optional
+/// "Rewrite in my words" only ever runs while the app is open, on a tap.
 ///
 /// All navigation from here pushes FULL-SCREEN routes only (`/settings`,
-/// `/actions`, `/day`, `/inbox/connect`, ...), never a shell-branch route.
+/// `/actions`, `/day`, `/ask/new`, ...), never a shell-branch route.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/crash/crash_banner.dart';
+import '../../../core/di/connector_actions.dart';
+import '../../../core/di/connector_providers.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/router/inbox_availability.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/update/shorebird_update_banner.dart';
 import '../../../core/update/shorebird_update_service.dart';
 import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
-import '../../../core/widgets/pressable_scale.dart';
+import '../../../core/widgets/route_transition_guard.dart';
+import '../../../data/connectors/connector.dart';
+import '../state/brief_controller.dart';
+import '../state/brief_facts.dart';
 import '../state/day_text.dart';
+import '../state/today_data.dart';
+import 'brief_card.dart';
+import 'notification_sections.dart';
+import 'quick_actions.dart';
+import 'up_next_section.dart';
 
-/// Max characters of clipboard text carried in the router URL (mirrors the
-/// share-sheet bound in `IntentInbox`; Actions trims to the model context).
-const _maxClipboardChars = 16000;
-
-class TodayScreen extends StatelessWidget {
+class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key, this.statusPill, this.now});
 
   /// Optional download status pill, injected by the composition root so
@@ -42,98 +50,211 @@ class TodayScreen extends StatelessWidget {
   final DateTime? now;
 
   @override
+  ConsumerState<TodayScreen> createState() => _TodayScreenState();
+}
+
+class _TodayScreenState extends ConsumerState<TodayScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onOpen());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // Back from system settings, say: re-read what the OS now allows first, so
+    // a Calendar grant turns the card into the real day.
+    unawaited(
+      resumeConnectors(ref).then((_) => _syncOnResume()).whenComplete(_onOpen),
+    );
+  }
+
+  /// Notifications that arrived while the app was away join the brief now.
+  Future<void> _syncOnResume() async {
+    try {
+      final hub = await ref.read(connectorHubProvider.future);
+      await hub.sync.syncOnOpen();
+    } on Object {
+      // Each connector shows its own failure on its card.
+    }
+  }
+
+  /// Drops a cached rewrite that no longer matches the day (BriefController).
+  void _onOpen() {
+    if (!mounted) return;
+    // Foreground only: data arriving while the app is in the background never
+    // starts a model.
+    final life = WidgetsBinding.instance.lifecycleState;
+    if (life != null && life != AppLifecycleState.resumed) return;
+    unawaited(ref.read(briefControllerProvider.notifier).onOpen());
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final hub = await ref.read(connectorHubProvider.future);
+      await hub.sync.refresh();
+    } on Object {
+      // Each connector shows its own failure on its card.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final today = now ?? DateTime.now();
+    final DateTime today = widget.now ?? ref.watch(nowProvider);
     final scheme = theme.colorScheme;
+    final name = ref.watch(todayNameProvider);
+    final summary = ref.watch(daySummaryProvider);
 
-    return ChromeScaffold(
-      appBar: AdaptiveAppBar(
-        automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DhruvaStar(size: 16, color: scheme.primary),
-            SizedBox(width: tokens.spacing.sm),
-            Text(AppIdentity.wordmark, style: theme.textTheme.titleLarge),
+    // Disconnecting a source removes whatever was written from it.
+    ref.listen(connectorListProvider, (_, next) {
+      final list = next.value;
+      if (list == null) return;
+      bool on(String id) =>
+          list.any((e) => e.connector.id == id && e.status.isConnected);
+      unawaited(
+        ref
+            .read(briefControllerProvider.notifier)
+            .forgetDisconnected(
+              calendarConnected: on(ConnectorIds.calendar),
+              notificationsConnected: on(ConnectorIds.notifications),
+            ),
+      );
+    });
+    // The sources change under a shown rewrite (a meeting appears after the
+    // first sync): the controller drops it. The rule-written brief itself just
+    // recomputes.
+    ref.listen(briefFactsProvider, (prev, next) {
+      if (next.isNotEmpty && !sameFactSources(prev ?? const [], next)) {
+        _onOpen();
+      }
+    });
+
+    final warming = ref.watch(
+      briefControllerProvider.select((s) => s.value?.warming ?? false),
+    );
+    final inboxAvailable = ref.watch(inboxAvailableProvider);
+    final loaded = ref.watch(connectorsLoadedProvider);
+    final waiting = needsYou(
+      ref.watch(unreadNotificationGroupsProvider),
+      today,
+    );
+
+    // Arriving from onboarding's "Continue to Today": taps that are still
+    // landing on the old button must not hit Today's cards while it slides in.
+    return RouteTransitionGuard(
+      child: ChromeScaffold(
+        appBar: AdaptiveAppBar(
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DhruvaStar(size: 16, color: scheme.primary),
+              SizedBox(width: tokens.spacing.sm),
+              Text(AppIdentity.wordmark, style: theme.textTheme.titleLarge),
+            ],
+          ),
+          actions: [
+            IconButton(
+              key: const ValueKey('today-settings'),
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.push('/settings'),
+            ),
+            SizedBox(width: tokens.spacing.xs),
           ],
         ),
-        actions: [
-          IconButton(
-            key: const ValueKey('today-settings'),
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push('/settings'),
-          ),
-          SizedBox(width: tokens.spacing.xs),
-        ],
-      ),
-      bodyBuilder: (context, inset) => ListView(
-        padding: EdgeInsets.only(
-          top: inset.top + tokens.spacing.xs,
-          bottom: inset.bottom + tokens.spacing.xl2,
-        ),
-        children: [
-          // Update / crash nudges used to sit on the Chats home; Today is home now.
-          const _SystemBanners(),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(greetingFor(today), style: theme.textTheme.headlineMedium),
-                SizedBox(height: tokens.spacing.xs),
-                Text(
-                  formatDayLine(today),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                if (statusPill != null) ...[
-                  SizedBox(height: tokens.spacing.sm),
-                  Align(alignment: Alignment.centerLeft, child: statusPill),
-                ],
-                SizedBox(height: tokens.spacing.base),
-                const _BriefCard(),
-                SizedBox(height: tokens.spacing.base),
-                const _QuickActionsRow(),
-                SizedBox(height: tokens.spacing.lg),
-                _SectionHeader(
-                  title: 'Up next',
-                  actionLabel: 'See day',
-                  actionKey: const ValueKey('today-see-day'),
-                  onAction: () => context.push('/day'),
-                ),
-                SizedBox(height: tokens.spacing.sm),
-                NextStepCard(
-                  icon: Icons.event_outlined,
-                  title: 'Nothing scheduled yet',
-                  body:
-                      'Connect your calendar to see your next meetings here. It '
-                      'needs no sign-in and never leaves this phone.',
-                  actionLabel: 'See connectors',
-                  actionKey: const ValueKey('today-connect-calendar'),
-                  onAction: () => context.push('/settings/connectors'),
-                ),
-                SizedBox(height: tokens.spacing.lg),
-                const _SectionHeader(title: 'Needs you'),
-                SizedBox(height: tokens.spacing.sm),
-                NextStepCard(
-                  icon: Icons.inbox_outlined,
-                  title: 'Set up your inbox',
-                  body:
-                      'Mail and notifications that need a reply, in one calm list '
-                      'with a drafted answer you edit and send yourself.',
-                  actionLabel: 'Set up inbox',
-                  actionKey: const ValueKey('today-setup-inbox'),
-                  // Full-screen route, NOT the shell's /inbox branch.
-                  onAction: () => context.push('/inbox/connect'),
-                ),
-              ],
+        bodyBuilder: (context, inset) => RefreshIndicator(
+          onRefresh: _refresh,
+          edgeOffset: inset.top,
+          child: ListView(
+            key: const ValueKey('today-list'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(
+              top: inset.top + tokens.spacing.xs,
+              bottom: inset.bottom + tokens.spacing.xl2,
             ),
+            children: [
+              // Update / crash nudges used to sit on the Chats home; Today is home now.
+              const _SystemBanners(),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      greetingWithName(today, name),
+                      key: const ValueKey('today-greeting'),
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    SizedBox(height: tokens.spacing.xs),
+                    Text(
+                      summary.isEmpty
+                          ? formatDayLine(today)
+                          : '${formatDayLine(today)} · $summary',
+                      key: const ValueKey('today-date-line'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (widget.statusPill != null || warming) ...[
+                      SizedBox(height: tokens.spacing.sm),
+                      Wrap(
+                        spacing: tokens.spacing.sm,
+                        children: [
+                          if (widget.statusPill != null) widget.statusPill!,
+                          if (warming)
+                            const Chip(
+                              key: ValueKey('model-warming-pill'),
+                              avatar: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                              label: Text('Warming up your model'),
+                            ),
+                        ],
+                      ),
+                    ],
+                    SizedBox(height: tokens.spacing.base),
+                    const BriefCard(),
+                    SizedBox(height: tokens.spacing.base),
+                    const QuickActionsRow(),
+                    const UpNextSection(),
+                    const NeedsYouSection(),
+                    const DigestCard(),
+                    if (loaded && !inboxAvailable && waiting.isEmpty) ...[
+                      SizedBox(height: tokens.spacing.lg),
+                      NextStepCard(
+                        icon: Icons.inbox_outlined,
+                        title: 'Set up your inbox',
+                        body:
+                            'Messages that need a reply, in one calm list with a '
+                            'drafted answer you edit and send yourself.',
+                        actionLabel: 'Set up inbox',
+                        actionKey: const ValueKey('today-setup-inbox'),
+                        // Full-screen route, NOT the shell's /inbox branch.
+                        onAction: () => context.push('/inbox/connect'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -150,211 +271,6 @@ class _SystemBanners extends ConsumerWidget {
     ref.watch(shorebirdUpdateProvider);
     return const Column(
       children: [ShorebirdUpdateBanner(), CrashReportBanner()],
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    this.actionLabel,
-    this.onAction,
-    this.actionKey,
-  });
-
-  final String title;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-  final Key? actionKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        Expanded(child: Text(title, style: theme.textTheme.titleLarge)),
-        if (actionLabel != null)
-          TextButton(
-            key: actionKey,
-            onPressed: onAction,
-            child: Text(actionLabel!),
-          ),
-      ],
-    );
-  }
-}
-
-/// Brief placeholder. In Wave 3 this becomes the on-device written brief with
-/// tappable, cited phrases; until then it says exactly when it will appear.
-class _BriefCard extends StatelessWidget {
-  const _BriefCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    final scheme = theme.colorScheme;
-    return DecoratedBox(
-      key: const ValueKey('today-brief'),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(tokens.radius.xl),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(tokens.spacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                DhruvaStar(size: 12, color: scheme.primary),
-                SizedBox(width: tokens.spacing.sm),
-                Text(
-                  'Your brief',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: scheme.primary,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: tokens.spacing.md),
-            Text(
-              'Your brief appears here once you connect your calendar.',
-              style: theme.textTheme.titleLarge,
-            ),
-            SizedBox(height: tokens.spacing.sm),
-            Row(
-              children: [
-                Icon(Icons.lock_outline, size: 14, color: tokens.success),
-                SizedBox(width: tokens.spacing.xs),
-                Expanded(
-                  child: Text(
-                    'Written on this phone from your day. Nothing is uploaded.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: tokens.spacing.base),
-            FilledButton(
-              key: const ValueKey('today-brief-connect'),
-              onPressed: () => context.push('/settings/connectors'),
-              child: const Text('See connectors'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Horizontal one-tap row wired to Actions (the old Workflows). Each chip
-/// opens `/actions?id=<workflow>`, the same route the share sheet lands on.
-class _QuickActionsRow extends StatelessWidget {
-  const _QuickActionsRow();
-
-  static const _actions = <(String, IconData, String)>[
-    ('summarize', Icons.content_paste_rounded, 'Summarize clipboard'),
-    ('draft_reply', Icons.edit_outlined, 'Draft reply'),
-    ('todos', Icons.checklist_rounded, 'Extract to-dos'),
-  ];
-
-  Future<void> _open(BuildContext context, String id) async {
-    if (id != 'summarize') {
-      await context.push('/actions?id=$id');
-      return;
-    }
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    var text = data?.text?.trim() ?? '';
-    if (!context.mounted) return;
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Clipboard is empty. Copy some text, or paste it in.'),
-        ),
-      );
-      await context.push('/actions?id=summarize');
-      return;
-    }
-    if (text.length > _maxClipboardChars) {
-      text = text.substring(0, _maxClipboardChars);
-    }
-    await context.push(
-      '/actions?id=summarize&text=${Uri.encodeQueryComponent(text)}',
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return SizedBox(
-      height: 48,
-      child: ListView(
-        key: const ValueKey('today-quick-actions'),
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final (id, icon, label) in _actions) ...[
-            PressableScale(
-              onTap: () => _open(context, id),
-              semanticLabel: label,
-              child: _Pill(
-                icon: icon,
-                label: label,
-                keyValue: 'today-action-$id',
-              ),
-            ),
-            SizedBox(width: tokens.spacing.sm),
-          ],
-          PressableScale(
-            onTap: () => context.push('/actions'),
-            semanticLabel: 'All actions',
-            child: const _Pill(
-              icon: Icons.arrow_forward_rounded,
-              label: 'All actions',
-              keyValue: 'today-action-all',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({
-    required this.icon,
-    required this.label,
-    required this.keyValue,
-  });
-
-  final IconData icon;
-  final String label;
-  final String keyValue;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return DecoratedBox(
-      key: ValueKey(keyValue),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(tokens.radius.full),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: theme.colorScheme.primary),
-            SizedBox(width: tokens.spacing.sm),
-            Text(label, style: theme.textTheme.labelLarge),
-          ],
-        ),
-      ),
     );
   }
 }

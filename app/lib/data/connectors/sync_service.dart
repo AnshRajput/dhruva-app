@@ -13,6 +13,11 @@ import 'connector.dart';
 /// App-open syncs skip a connector that synced less than this long ago.
 const syncOnOpenMinInterval = Duration(minutes: 10);
 
+/// Notifications are a local file queue (no network, no quota), so opening or
+/// returning to Today drains it almost every time: what buzzed a minute ago is
+/// in the brief now, not ten minutes from now.
+const notificationsOnOpenMinInterval = Duration(minutes: 1);
+
 /// How one connector's run ended.
 final class SyncOutcome {
   final SyncResult? result;
@@ -76,9 +81,10 @@ class SyncService {
         continue;
       }
       final last = status.lastSyncAt;
-      if (skipRecent &&
-          last != null &&
-          _clock().difference(last) < syncOnOpenMinInterval) {
+      final minGap = id == ConnectorIds.notifications
+          ? notificationsOnOpenMinInterval
+          : syncOnOpenMinInterval;
+      if (skipRecent && last != null && _clock().difference(last) < minGap) {
         continue;
       }
       try {
