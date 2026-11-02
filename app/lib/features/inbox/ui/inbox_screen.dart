@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/ask_providers.dart' show askContactNamesProvider;
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/format/when.dart';
@@ -28,6 +29,7 @@ import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/inbox_grouping.dart';
+import '../state/inbox_rules.dart';
 import '../state/inbox_summarizer.dart';
 
 class InboxScreen extends ConsumerStatefulWidget {
@@ -252,7 +254,7 @@ final class _Row extends _Entry {
   final ConnectorItem item;
 }
 
-class _InboxList extends StatelessWidget {
+class _InboxList extends ConsumerWidget {
   const _InboxList({
     required this.items,
     required this.filter,
@@ -267,12 +269,23 @@ class _InboxList extends StatelessWidget {
   final Widget? banner;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
     final filters = appFilters(items);
     // A filter whose app has no notifications left falls back to All.
     final active = filters.any((f) => f.package == filter) ? filter : null;
-    final sections = groupInbox(items, DateTime.now(), filterPackage: active);
+    // Messages from people asking something rise above Today / Earlier.
+    final known = {
+      for (final n
+          in ref.watch(askContactNamesProvider).value ?? const <String>[])
+        n.toLowerCase(),
+    };
+    final sections = groupInbox(
+      items,
+      DateTime.now(),
+      filterPackage: active,
+      needsReplyIds: needsReplyIds(items, knownContacts: known),
+    );
     final entries = <_Entry>[
       for (final s in sections) ...[
         _Header(s.title, s.items.length),
@@ -318,6 +331,8 @@ class _InboxList extends StatelessWidget {
               _Row(:final item) => InboxRowTile(
                 key: ValueKey('inbox-row-${item.id}'),
                 item: item,
+                // One app for every row: its chip says nothing.
+                showAppChip: filters.length > 1,
                 onTap: () => onOpen(item),
               ),
             },
@@ -414,9 +429,17 @@ class _SectionHeader extends StatelessWidget {
 /// One notification. While it is built (on screen) it asks the summarizer for
 /// its one-line summary; when it goes away it withdraws the request.
 class InboxRowTile extends ConsumerStatefulWidget {
-  const InboxRowTile({super.key, required this.item, required this.onTap});
+  const InboxRowTile({
+    super.key,
+    required this.item,
+    required this.onTap,
+    this.showAppChip = true,
+  });
   final ConnectorItem item;
   final VoidCallback onTap;
+
+  /// False when every row comes from the same app.
+  final bool showAppChip;
 
   @override
   ConsumerState<InboxRowTile> createState() => _InboxRowTileState();
@@ -453,10 +476,11 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
       scheme.tertiaryContainer,
     ];
     final tint = tints[item.packageName.hashCode.abs() % tints.length];
-    final summary = item.summary;
-    final line = (summary != null && summary.isNotEmpty)
-        ? summary
-        : item.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    // A model summary that narrates the notification is dropped for the
+    // message's own first line; the avatar and name are the sender's.
+    final line = rowLineOf(item);
+    final sender = senderOf(item);
+    final chipVisible = widget.showAppChip && hasPersonSender(item);
     final when = shortWhen(
       item.when,
       DateTime.now(),
@@ -476,7 +500,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
                 radius: 22,
                 backgroundColor: tint,
                 child: Text(
-                  avatarLetters(item.appLabel),
+                  avatarLetters(sender),
                   style: theme.textTheme.labelLarge,
                 ),
               ),
@@ -491,7 +515,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
                   final narrow = box.maxWidth < 300;
                   final chip = LabelChip(item.appLabel);
                   final title = Text(
-                    item.title,
+                    sender,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
@@ -503,7 +527,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (narrow)
+                      if (narrow || !chipVisible)
                         title
                       else
                         Row(
@@ -525,7 +549,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
                           ),
                         ),
                       ],
-                      if (narrow) ...[
+                      if (narrow && chipVisible) ...[
                         SizedBox(height: tokens.spacing.xs),
                         chip,
                       ],

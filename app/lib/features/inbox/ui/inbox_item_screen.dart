@@ -18,6 +18,7 @@ import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../state/inbox_grouping.dart';
+import '../state/inbox_rules.dart';
 
 class InboxItemScreen extends ConsumerWidget {
   const InboxItemScreen({super.key, required this.itemId});
@@ -96,7 +97,7 @@ class InboxItemScreen extends ConsumerWidget {
         final when = MaterialLocalizations.of(
           context,
         ).formatTimeOfDay(TimeOfDay.fromDateTime(item.when));
-        final summary = item.summary;
+        final summary = usableSummary(item);
         return ListView(
           padding: EdgeInsets.all(tokens.spacing.base),
           children: [
@@ -167,6 +168,26 @@ class InboxItemScreen extends ConsumerWidget {
                     onPressed: () =>
                         context.push(askNewLocation(focus: [item.id])),
                     child: const Text('Ask about this'),
+                  ),
+                // Draft reply opens the Draft a reply action pre-filled with
+                // this message and its source app; the result is an editable
+                // draft the user sends from the source app.
+                if (item.flags[otpFlag] != true && item.body.trim().isNotEmpty)
+                  OutlinedButton(
+                    key: const ValueKey('inbox-draft-reply'),
+                    onPressed: () => context.push(
+                      Uri(
+                        path: '/actions',
+                        queryParameters: {
+                          'id': 'draft_reply',
+                          'text': '${senderOf(item)}: ${item.body.trim()}',
+                          if (item.packageName.isNotEmpty)
+                            'pkg': item.packageName,
+                          'app': item.appLabel,
+                        },
+                      ).toString(),
+                    ),
+                    child: const Text('Draft reply'),
                   ),
                 OutlinedButton(
                   key: const ValueKey('inbox-open-app'),

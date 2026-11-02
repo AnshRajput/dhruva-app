@@ -335,13 +335,23 @@ class SystemContactsSource implements ContactsSource {
 
   @override
   Future<DeviceContact?> byEmail(String email) async {
+    // flutter_contacts 2.1.0 turns an email filter with ZERO matches into an
+    // empty id list, which its query builder reads as "no filter", so
+    // getAll() returns the first contact in the address book. Never trust the
+    // filter alone: re-check the address, or a stranger in a meeting is shown
+    // as someone the user knows.
     final found = await fc.FlutterContacts.getAll(
       filter: fc.ContactFilter.email(email),
-      properties: {fc.ContactProperty.name, fc.ContactProperty.photoThumbnail},
+      properties: {
+        fc.ContactProperty.name,
+        fc.ContactProperty.photoThumbnail,
+        fc.ContactProperty.email,
+      },
       limit: 1,
     );
     if (found.isEmpty) return null;
     final c = found.first;
+    if (!contactHasEmail(c.emails.map((e) => e.address), email)) return null;
     final name = c.displayName;
     if (name == null || name.trim().isEmpty) return null;
     return DeviceContact(id: c.id, name: name, thumbnail: c.photo?.thumbnail);
@@ -465,3 +475,13 @@ ChargingProbe chargingProbe(ConnectorsChannel channel) => () async {
     return false;
   }
 };
+
+/// True when [addresses] contains [email], ignoring case and surrounding
+/// spaces. Guards [SystemContactsSource.byEmail] against flutter_contacts
+/// returning an unrelated contact for a filter that matched nothing.
+@visibleForTesting
+bool contactHasEmail(Iterable<String> addresses, String email) {
+  final want = email.trim().toLowerCase();
+  if (want.isEmpty) return false;
+  return addresses.any((a) => a.trim().toLowerCase() == want);
+}

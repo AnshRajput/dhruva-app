@@ -788,17 +788,30 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('up-next-prep')));
       await settle(tester);
+      // Prep is the rule-built card: no model, no prompt in Ask.
+      expect(find.byKey(const ValueKey('prep-card')), findsOneWidget);
+      expect(find.text('Design sync'), findsOneWidget);
+      expect(find.text('Ravi'), findsOneWidget);
+      expect(find.text('Sana'), findsOneWidget);
+      expect(find.text('Google Meet'), findsOneWidget);
+      expect(h.visited, isEmpty);
+      expect(h.writer.prompts, isEmpty);
+
+      // Its only way into Ask is the explicit follow-up, on /ask/new.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('prep-follow-up')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const ValueKey('prep-follow-up')));
+      await settle(tester);
       final uri = Uri.parse(h.visited.single);
       expect(uri.path, '/ask/new');
-      expect(
-        uri.queryParameters['q'],
-        'Prep me for my 9:30 AM meeting: who is attending, what do I know '
-        'about them, and any related notes.',
-      );
       expect(uri.queryParameters['sources'], 'calendar,contacts,files');
       expect(int.tryParse(uri.queryParametersAll['focus']!.single), isNotNull);
-      // The event's own (untrusted) title never rides in the prompt.
-      expect(uri.queryParameters['q'], isNot(contains('Design sync')));
+      // The event's own (untrusted) title never rides in the typed prompt as
+      // an instruction: it is the user's plain question.
+      expect(uri.queryParameters['q'], startsWith('What should I raise'));
     });
 
     todayTest('tapping the event opens a read-only sheet with Open in '
@@ -845,6 +858,48 @@ void main() {
             .names,
         ['Ravi Menon', 'Sana', 'Dev'],
       );
+    });
+
+    todayTest('Prep without Contacts connected never says "Not in your '
+        'contacts", and offers to connect them', (tester) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('up-next-prep')));
+      await settle(tester);
+      expect(find.text('ravi@x.test'), findsOneWidget);
+      expect(find.textContaining('Not in your contacts'), findsNothing);
+      expect(find.textContaining('In your contacts'), findsNothing);
+      expect(find.text("Connect contacts to see who's who"), findsOneWidget);
+      // The canonical connect path: grant, then the names fill in.
+      await tester.tap(find.byKey(const ValueKey('prep-connect-contacts')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('prep-connect-contacts')), findsNothing);
+      expect(find.text('Not in your contacts · ravi@x.test'), findsOneWidget);
+    });
+
+    todayTest('Prep with Contacts connected says who is in your contacts', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) async {
+          h.kit.contacts.byAddress['ravi@x.test'] = const DeviceContact(
+            id: 'c1',
+            name: 'Ravi Menon',
+          );
+          await h.kit.hub.contacts.connect();
+          await _seedDay(h);
+        },
+      );
+      await tester.tap(find.byKey(const ValueKey('up-next-prep')));
+      await settle(tester);
+      expect(find.text('In your contacts · ravi@x.test'), findsOneWidget);
+      expect(find.text('Not in your contacts · sana@x.test'), findsOneWidget);
+      expect(find.byKey(const ValueKey('prep-connect-contacts')), findsNothing);
     });
 
     todayTest('a calendar with nothing coming up says so, with an action', (

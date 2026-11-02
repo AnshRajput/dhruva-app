@@ -48,6 +48,7 @@ import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
+import 'answer_guard.dart';
 import 'ask_selection.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
@@ -72,6 +73,15 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
+  /// The system prompt of an Action chat (`core/actions/action_prompt.dart`):
+  /// the verb's instruction, kept out of the user's bubble. New drafts only.
+  final String? actionSystemPrompt;
+
+  /// The app a message came from (Inbox -> Draft reply), so the drafted reply
+  /// can offer "Open in" the source app. Package id and display name.
+  final String? sourcePackage;
+  final String? sourceApp;
+
   /// Text to PREFILL the composer with (not sent): `/ask/new?q=...`, e.g.
   /// Today's "Prep me for `<event>`". Only meaningful for a new draft.
   final String? initialDraft;
@@ -92,6 +102,9 @@ final class ChatRouteArgs {
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
+    this.actionSystemPrompt,
+    this.sourcePackage,
+    this.sourceApp,
     this.initialDraft,
     this.initialSources = const {},
     this.focusItemIds = const [],
@@ -104,6 +117,9 @@ final class ChatRouteArgs {
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
       other.initialPrompt == initialPrompt &&
+      other.actionSystemPrompt == actionSystemPrompt &&
+      other.sourcePackage == sourcePackage &&
+      other.sourceApp == sourceApp &&
       other.initialDraft == initialDraft &&
       other.initialSources.length == initialSources.length &&
       other.initialSources.containsAll(initialSources) &&
@@ -115,6 +131,9 @@ final class ChatRouteArgs {
     initialModelId,
     characterId,
     initialPrompt,
+    actionSystemPrompt,
+    sourcePackage,
+    sourceApp,
     initialDraft,
     Object.hashAllUnordered(initialSources),
     Object.hashAll(focusItemIds),
@@ -479,6 +498,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// saw, in citation order); empty when no connector source was searched.
   List<ConnectorItem> _activeItems = const [];
 
+  /// The grounded prompt sent for this turn, so a reply that merely echoes it
+  /// can be recognised ([isScaffoldEcho]); null when ungrounded.
+  String? _activePrompt;
+
+  /// The reply parroted the grounded prompt: the thread shows [echoNotice]
+  /// instead, live and at completion, whatever the stop reason.
+  bool _echoBlocked = false;
+
   @override
   Future<ChatThreadState> build() async {
     _lease = ref.read(engineLeaseProvider);
@@ -508,7 +535,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       final model = args.initialModelId == null
           ? (await storage.listInstalledModels()).firstOrNull
           : await storage.getInstalledModel(args.initialModelId!);
-      return ChatThreadState(modelId: model?.id, model: model);
+      return ChatThreadState(
+        modelId: model?.id,
+        model: model,
+        // An Action chat: the instruction is the system layer, the user's own
+        // text the first turn.
+        systemPrompt: args.actionSystemPrompt ?? '',
+      );
     }
 
     final convo = await _repo.getConversation(conversationId);
@@ -1421,6 +1454,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _seedRaw = continued == null ? '' : _seedFor(continued);
     _rawBuffer = '';
     _outputBlocked = false;
+    _echoBlocked = false;
     _pushedContent = continued?.content ?? '';
     _pushedReasoning = continued?.reasoningContent ?? '';
     _reasoningStartedAt = null;
@@ -1454,6 +1488,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final samplingParams = current.samplingParams;
     _activeSources = const [];
     _activeItems = const [];
+    _activePrompt = null;
     try {
       // A continuation extends an already-grounded answer; never re-ground.
       final grounded = continued != null
@@ -1476,6 +1511,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           );
           _activeSources = grounded.docSources;
           _activeItems = grounded.items;
+          _activePrompt = grounded.prompt;
         }
       }
     } catch (e) {
@@ -1552,6 +1588,21 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       _seedRaw = '';
       _rawBuffer = SafetyGuard.blockedNotice;
       split = splitThinkContent(_rawBuffer);
+    }
+
+    // Scaffold echo (the model repeats the sources prompt/rows): swap the
+    // stream for the plain notice as soon as it is recognisable, and stop
+    // generating the rest of the dump.
+    if (!_outputBlocked &&
+        !_echoBlocked &&
+        _activePrompt != null &&
+        isScaffoldEcho(split.content, prompt: _activePrompt)) {
+      _echoBlocked = true;
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_echoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent(echoNotice);
     }
 
     if (_reasoningStartedAt == null &&
@@ -1707,7 +1758,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _flush(isFinal: true);
     final id = _activeAssistantId;
     if (id == null) return;
-    final status = _outputBlocked
+    // `_flush(isFinal)` above already swapped an echoed reply for the notice,
+    // so it counts as a finished (not stopped/truncated) answer.
+    final status = _outputBlocked || _echoBlocked
         ? MessageStatus.complete
         : switch (event.reason) {
             EngineStopReason.cancelled => MessageStatus.cancelled,
@@ -1724,6 +1777,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
     final current = state.value;
     if (current == null) return;
+    // A reply that parrots the sources prompt is no answer: it is already the
+    // plain notice here; the source chips stay (the notice cites nothing, so
+    // the top items show).
     final answer = _pushedContent;
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
@@ -1739,6 +1795,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         if (m.id == id)
           m.copyWith(
             status: status,
+            content: answer,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
@@ -1826,7 +1883,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _resetStreamState() {
     _activeAssistantId = null;
     _activeSources = const [];
+    _activePrompt = null;
     _outputBlocked = false;
+    _echoBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';

@@ -58,7 +58,6 @@ void main() {
               onCancelDocumentRead: onCancelDocumentRead,
               onSend: (_, _) {},
               onCancel: () {},
-              onOpenSettings: () {},
             ),
           ),
         ),

@@ -12,6 +12,7 @@ import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../../../core/format/when.dart';
@@ -20,7 +21,7 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart' show ItemSource;
 import '../../vision/widgets/image_lightbox.dart';
-import '../../voice/widgets/tts_button.dart';
+import '../../voice/state/voice_playback_controller.dart';
 import '../state/message_info_x.dart';
 import 'answer_source_chips.dart';
 import 'reasoning_block.dart';
@@ -43,6 +44,10 @@ class MessageBubble extends StatelessWidget {
 
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
+
+  /// "Action: Draft a reply": the label over a user message that started an
+  /// Action chat (the instruction itself is in the system layer).
+  final String? actionLabel;
 
   /// Opens the report flow for this (assistant) reply. Null hides the
   /// action (e.g. previews/tests that don't wire it).
@@ -69,6 +74,7 @@ class MessageBubble extends StatelessWidget {
     this.attachedImage,
     this.onRegenerate,
     this.onEdit,
+    this.actionLabel,
     this.onReport,
     this.onSave,
     this.todoCount = 0,
@@ -120,6 +126,17 @@ class MessageBubble extends StatelessWidget {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isUser && actionLabel != null)
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.xs),
+                child: Text(
+                  actionLabel!,
+                  key: const ValueKey('action-label'),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
             Container(
               padding: EdgeInsets.all(tokens.spacing.md),
               decoration: BoxDecoration(
@@ -287,7 +304,10 @@ class _SystemBanner extends StatelessWidget {
   }
 }
 
-class _MetadataRow extends StatefulWidget {
+/// Under a reply: when it was written and how fast, then Copy and Regenerate
+/// (the two things almost everyone wants), then one overflow menu holding Read
+/// aloud, Save to Library, Add to to-dos and Report. One line, never wrapping.
+class _MetadataRow extends ConsumerStatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
   final VoidCallback? onReport;
@@ -305,10 +325,10 @@ class _MetadataRow extends StatefulWidget {
   });
 
   @override
-  State<_MetadataRow> createState() => _MetadataRowState();
+  ConsumerState<_MetadataRow> createState() => _MetadataRowState();
 }
 
-class _MetadataRowState extends State<_MetadataRow> {
+class _MetadataRowState extends ConsumerState<_MetadataRow> {
   bool _copied = false;
   bool _saved = false;
   bool _todosAdded = false;
@@ -343,104 +363,140 @@ class _MetadataRowState extends State<_MetadataRow> {
         message.tokCount != null && message.genMs != null && message.genMs! > 0
         ? (message.tokCount! / (message.genMs! / 1000)).toStringAsFixed(1)
         : null;
-    // A Wrap, not a Row: with Save, to-dos, report and regenerate beside the
-    // time and speed, a narrow phone would overflow by a few pixels.
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(
-          '${timeAgo(message.createdAt)}'
-          '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
-          style: style,
-        ),
-        if (message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          TtsButton(messageId: message.id, text: message.content),
-        ],
-        // WS3: copy is a universal quick action on every assistant reply
-        // with content — discoverable next to regenerate, not gated to the
-        // vision "Extract text" preset it started life as (Loop 7).
-        if (message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          IconButton(
-            onPressed: _copy,
-            tooltip: _copied ? 'Copied' : 'Copy text',
-            icon: AnimatedSwitcher(
+    // Read aloud keeps its one-shot error snackbar (it moved into the menu
+    // with the speaker button).
+    ref.listen(voicePlaybackControllerProvider, (previous, next) {
+      if (next.lastErrorMessageId == message.id &&
+          next.lastErrorMessageForId != null &&
+          next.lastErrorMessageForId != previous?.lastErrorMessageForId) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next.lastErrorMessageForId!)));
+      }
+    });
+    final playback = ref.watch(voicePlaybackControllerProvider);
+    final playing = playback.isPlaying(message.id);
+    final speaking = playback.isSynthesizing(message.id);
+    final hasText = message.content.isNotEmpty;
+    final canSave = widget.onSave != null && hasText;
+    final canTodos = widget.onAddTodos != null && widget.todoCount > 0;
+    final canReport = widget.onReport != null && hasText;
+    final hasMenu = hasText || canSave || canTodos || canReport;
+
+    Widget action({
+      required VoidCallback? onPressed,
+      required String tooltip,
+      required IconData icon,
+      Color? iconColor,
+      bool animateSwap = false,
+    }) => IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: animateSwap
+          // Copy -> check: a short cross-fade so the confirmation reads.
+          ? AnimatedSwitcher(
               duration:
                   tokens.motion.instant + const Duration(milliseconds: 20),
               child: Icon(
-                _copied ? Icons.check : Icons.copy,
-                key: ValueKey(_copied),
+                icon,
+                key: ValueKey(icon),
                 size: 16,
-                color: _copied ? tokens.success : color,
+                color: iconColor ?? color,
               ),
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
+            )
+          : Icon(icon, size: 16, color: iconColor ?? color),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      visualDensity: VisualDensity.compact,
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            '${timeAgo(message.createdAt)}'
+            '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
+        if (hasText) ...[
+          SizedBox(width: tokens.spacing.xs),
+          action(
+            onPressed: _copy,
+            tooltip: _copied ? 'Copied' : 'Copy text',
+            icon: _copied ? Icons.check : Icons.copy,
+            iconColor: _copied ? tokens.success : null,
+            animateSwap: true,
           ),
         ],
-        if (widget.onSave != null && message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          IconButton(
-            key: const ValueKey('save-reply'),
-            onPressed: _saved ? null : _save,
-            tooltip: _saved ? 'Saved to Library' : 'Save to Library',
-            icon: Icon(
-              _saved ? Icons.check : Icons.bookmark_border_rounded,
-              size: 16,
-              color: _saved ? tokens.success : color,
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-        if (widget.onAddTodos != null && widget.todoCount > 0) ...[
-          SizedBox(width: tokens.spacing.xs),
-          IconButton(
-            key: const ValueKey('add-todos'),
-            onPressed: _todosAdded ? null : _addTodos,
-            tooltip: _todosAdded
-                ? 'Added to to-dos'
-                : 'Add ${widget.todoCount} to your to-dos',
-            icon: Icon(
-              _todosAdded ? Icons.check : Icons.checklist_rounded,
-              size: 16,
-              color: _todosAdded ? tokens.success : color,
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-        if (widget.onReport != null && message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          // Play AI-Generated Content policy: in-app report on every reply.
-          IconButton(
-            onPressed: widget.onReport,
-            tooltip: 'Report this reply',
-            icon: Icon(Icons.flag_outlined, size: 16, color: color),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-        if (onRegenerate != null) ...[
-          SizedBox(width: tokens.spacing.xs),
-          // Designer BLOCKING #2: a bare InkWell+Icon here was a ~16px hit
-          // area with no tooltip/semantic label. IconButton gives both for
-          // free (native widget, ladder rung 4) plus an explicit >=44px
-          // tappable box without inflating the icon's visual size.
-          IconButton(
+        if (onRegenerate != null)
+          action(
             onPressed: onRegenerate,
             tooltip: 'Regenerate response',
-            icon: Icon(Icons.refresh, size: 16, color: color),
+            icon: Icons.refresh,
+          ),
+        if (hasMenu)
+          PopupMenuButton<String>(
+            key: const ValueKey('reply-more'),
+            tooltip: 'More actions',
+            icon: Icon(Icons.more_vert, size: 16, color: color),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
+            onSelected: (v) {
+              switch (v) {
+                case 'speak':
+                  unawaited(
+                    ref
+                        .read(voicePlaybackControllerProvider.notifier)
+                        .toggle(message.id, message.content),
+                  );
+                case 'save':
+                  unawaited(_save());
+                case 'todos':
+                  unawaited(_addTodos());
+                case 'report':
+                  widget.onReport?.call();
+              }
+            },
+            itemBuilder: (context) => [
+              if (hasText)
+                PopupMenuItem(
+                  key: const ValueKey('reply-speak'),
+                  value: 'speak',
+                  enabled: !speaking,
+                  child: Text(playing ? 'Stop reading' : 'Read aloud'),
+                ),
+              if (canSave)
+                PopupMenuItem(
+                  key: const ValueKey('save-reply'),
+                  value: 'save',
+                  enabled: !_saved,
+                  child: Text(_saved ? 'Saved to Library' : 'Save to Library'),
+                ),
+              if (canTodos)
+                PopupMenuItem(
+                  key: const ValueKey('add-todos'),
+                  value: 'todos',
+                  enabled: !_todosAdded,
+                  child: Text(
+                    _todosAdded
+                        ? 'Added to to-dos'
+                        : 'Add ${widget.todoCount} to your to-dos',
+                  ),
+                ),
+              if (canReport)
+                // Play AI-Generated Content policy: in-app report on every
+                // reply, one tap away in the menu.
+                const PopupMenuItem(
+                  key: ValueKey('reply-report'),
+                  value: 'report',
+                  child: Text('Report this reply'),
+                ),
+            ],
           ),
-        ],
       ],
     );
   }

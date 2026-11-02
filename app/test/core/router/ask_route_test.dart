@@ -100,6 +100,10 @@ void main() {
 
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller!.text, 'Prep me for Budget review');
+    // One chip names the pinned sources; the toggles are in its sheet.
+    expect(find.text('Sources: Calendar +2'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('sources-chip')));
+    await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Calendar, searched'), findsOneWidget);
     expect(find.bySemanticsLabel('Contacts, searched'), findsOneWidget);
     expect(find.bySemanticsLabel('Files, searched'), findsOneWidget);

@@ -158,6 +158,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('No model installed yet'), findsNothing);
+    // Nothing is wrong: a neutral chip, not the red "Pick a model".
+    expect(find.text('Model downloading'), findsOneWidget);
+    expect(find.text('Pick a model'), findsNothing);
     expect(find.text('Downloading your model · 40%'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('model-downloading-prompt')),

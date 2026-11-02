@@ -52,6 +52,7 @@ import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
 import '../../features/today/ui/day_timeline_screen.dart';
+import '../../features/today/ui/prep_screen.dart';
 import '../../features/today/ui/today_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
@@ -196,6 +197,12 @@ final appRouter = GoRouter(
             : InboxItemScreen(itemId: id);
       },
     ),
+    // Rule-built meeting prep (no model): `/prep/<event item id>`.
+    GoRoute(
+      path: '/prep/:id',
+      builder: (context, state) =>
+          PrepScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? 0),
+    ),
     GoRoute(
       path: '/day',
       builder: (context, state) => const DayTimelineScreen(),
@@ -254,6 +261,10 @@ final appRouter = GoRouter(
           // first turn auto-sends — a query param, like `characterId`, so
           // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
           final promptParam = state.uri.queryParameters['prompt'];
+          // Actions: the instruction rides in the system prompt (`asys`), the
+          // user's text is `prompt`; `pkg` / `app` name the message's source
+          // app so a drafted reply can offer "Open in <app>".
+          final actionSystem = state.uri.queryParameters['asys'];
           // Android widget "Talk" (IntentInbox route `talk`): open hands-free
           // voice as soon as the new chat is ready.
           final openVoice = state.uri.queryParameters['talk'] == '1';
@@ -265,6 +276,9 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
+              actionSystemPrompt: actionSystem,
+              sourcePackage: state.uri.queryParameters['pkg'],
+              sourceApp: state.uri.queryParameters['app'],
             ),
           );
         }
@@ -283,6 +297,8 @@ final appRouter = GoRouter(
       builder: (context, state) => WorkflowsScreen(
         initialText: state.uri.queryParameters['text'],
         initialWorkflowId: state.uri.queryParameters['id'],
+        sourcePackage: state.uri.queryParameters['pkg'],
+        sourceApp: state.uri.queryParameters['app'],
       ),
     ),
     GoRoute(

@@ -105,11 +105,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// The composer holds ONE chip; its toggles live in the sheet it opens.
+  Future<void> openSources(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('sources-chip')));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('Mail is hidden; unconnected sources offer Connect', (
     tester,
   ) async {
     final modelId = await insertModel();
     await pump(tester, ChatRouteArgs(initialModelId: modelId));
+    // One chip in the composer, no row of toggles.
+    expect(find.text('Sources: Auto'), findsOneWidget);
+    expect(find.byKey(const ValueKey('search-in-auto')), findsNothing);
+    await openSources(tester);
     expect(find.text('Search in'), findsOneWidget);
     expect(find.byKey(const ValueKey('search-in-auto')), findsOneWidget);
     expect(find.byKey(const ValueKey('search-in-calendar')), findsOneWidget);
@@ -137,6 +147,7 @@ void main() {
     final modelId = await insertModel();
     final routed = <String>[];
     await pump(tester, ChatRouteArgs(initialModelId: modelId), routed: routed);
+    await openSources(tester);
     await tester.tap(find.byKey(const ValueKey('search-in-contacts')));
     await tester.pumpAndSettle();
     expect(find.text('connectors-screen'), findsOneWidget);
@@ -149,6 +160,7 @@ void main() {
     final handle = tester.ensureSemantics();
     final modelId = await insertModel();
     await pump(tester, ChatRouteArgs(initialModelId: modelId));
+    await openSources(tester);
     expect(find.bySemanticsLabel('Calendar, not searched'), findsOneWidget);
 
     await tester.enterText(
@@ -194,6 +206,8 @@ void main() {
     expect(field.controller!.text, 'Prep me for Budget review');
     // Not sent: no message yet.
     expect(engine.generateCount, 0);
+    expect(find.text('Sources: Calendar, Contacts'), findsOneWidget);
+    await openSources(tester);
     expect(find.bySemanticsLabel(RegExp(r'^Auto, off')), findsOneWidget);
     expect(find.bySemanticsLabel('Calendar, searched'), findsOneWidget);
     expect(find.bySemanticsLabel('Contacts, searched'), findsOneWidget);
@@ -230,6 +244,8 @@ void main() {
         ConnectorIds.folder: true,
       },
     );
+    expect(find.text('About: budget.md'), findsOneWidget);
+    await openSources(tester);
     expect(find.byKey(const ValueKey('search-in-focus-0')), findsOneWidget);
     expect(find.text('budget.md'), findsOneWidget);
     expect(

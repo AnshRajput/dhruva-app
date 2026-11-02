@@ -36,8 +36,8 @@ class NoModelInstalledView extends StatelessWidget {
                 ),
                 SizedBox(height: tokens.spacing.sm),
                 Text(
-                  'Pick a model from Hugging Face to start chatting — fully '
-                  'offline once it\'s on your device.',
+                  'Get a model to start chatting. It downloads once, then '
+                  'everything works offline.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -52,14 +52,6 @@ class NoModelInstalledView extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.sm),
-                Text(
-                  'Your AI. Your phone. Nobody else\'s business.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontStyle: FontStyle.italic,
                   ),
                 ),
                 SizedBox(height: tokens.spacing.lg),
@@ -184,6 +176,18 @@ class SuggestedPrompts extends StatelessWidget {
             'internet.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          // The ONE trust line (the composer carries none): where the answers
+          // run, and that they can be wrong.
+          Center(child: TrustMark(style: theme.textTheme.bodySmall)),
+          Text(
+            'AI can be wrong. Check anything important.',
+            key: const ValueKey('ai-can-be-wrong'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),

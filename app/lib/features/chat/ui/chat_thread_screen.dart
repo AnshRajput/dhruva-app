@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/actions/action_prompt.dart';
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/ask_providers.dart';
@@ -19,10 +20,12 @@ import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart';
 import '../../../data/library/todo_parser.dart';
+import '../state/answer_guard.dart';
 import '../state/ask_selection.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
@@ -32,6 +35,7 @@ import '../state/message_info_x.dart';
 import '../widgets/answer_source_chips.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
+import '../widgets/draft_reply_sheet.dart';
 import '../widgets/empty_states.dart';
 import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
@@ -63,6 +67,22 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final _scrollCtrl = ScrollController();
   var _pinnedToBottom = true;
   var _requestedLoad = false;
+
+  /// Draft reply: the sheet opens by itself once per finished reply, and not
+  /// while it is already open (it rewrites through this same thread).
+  final _draftShownFor = <int>{};
+  var _draftSheetOpen = false;
+
+  void _openDraftSheet() {
+    if (_draftSheetOpen || !mounted) return;
+    _draftSheetOpen = true;
+    unawaited(
+      showDraftReplySheet(
+        context,
+        widget.args,
+      ).whenComplete(() => _draftSheetOpen = false),
+    );
+  }
 
   @override
   void initState() {
@@ -124,6 +144,25 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       if (nextLen != prevLen || (next.value?.isGenerating ?? false)) {
         _maybeAutoScroll();
       }
+      // A Draft reply just finished: its result is an editable draft, not a
+      // chat bubble to copy from.
+      final was = previous?.value;
+      final now = next.value;
+      if (was != null &&
+          now != null &&
+          was.isGenerating &&
+          !now.isGenerating &&
+          isDraftReplyChat(now.systemPrompt)) {
+        final reply = latestReply(now);
+        if (reply != null &&
+            reply.status == MessageStatus.complete &&
+            reply.content.trim().isNotEmpty &&
+            _draftShownFor.add(reply.id)) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _openDraftSheet(),
+          );
+        }
+      }
     });
 
     return asyncState.when(
@@ -160,6 +199,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           scrollCtrl: _scrollCtrl,
           pinnedToBottom: _pinnedToBottom,
           onScrollToBottom: _scrollToBottom,
+          onEditDraft: _openDraftSheet,
         );
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
@@ -181,6 +221,7 @@ class _ThreadScaffold extends ConsumerWidget {
   final ScrollController scrollCtrl;
   final bool pinnedToBottom;
   final VoidCallback onScrollToBottom;
+  final VoidCallback onEditDraft;
 
   const _ThreadScaffold({
     required this.args,
@@ -189,6 +230,7 @@ class _ThreadScaffold extends ConsumerWidget {
     required this.scrollCtrl,
     required this.pinnedToBottom,
     required this.onScrollToBottom,
+    required this.onEditDraft,
   });
 
   @override
@@ -222,6 +264,7 @@ class _ThreadScaffold extends ConsumerWidget {
               child: ModelChip(
                 model: state.model,
                 loading: state.modelLoading,
+                downloading: download != null,
                 onTap: () => _pickModel(context),
               ),
             ),
@@ -242,16 +285,28 @@ class _ThreadScaffold extends ConsumerWidget {
               tooltip: 'Talk hands-free',
               onPressed: () => _openHandsFree(context, ref),
             ),
+          // Chat settings lives here, not in the composer: the composer keeps
+          // attach, mic and send (and the one sources chip) only.
           PopupMenuButton<String>(
-            onSelected: (value) => _export(context, ref, value == 'markdown'),
-            itemBuilder: (context) => const [
+            onSelected: (value) => value == 'settings'
+                ? showSamplingSettingsSheet(context, args)
+                : _export(context, ref, value == 'markdown'),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Text('Chat settings'),
+              ),
               PopupMenuItem(
                 value: 'markdown',
-                child: Text('Export as Markdown'),
+                enabled: state.conversationId != null,
+                child: const Text('Export as Markdown'),
               ),
-              PopupMenuItem(value: 'json', child: Text('Export as JSON')),
+              PopupMenuItem(
+                value: 'json',
+                enabled: state.conversationId != null,
+                child: const Text('Export as JSON'),
+              ),
             ],
-            enabled: state.conversationId != null,
           ),
         ],
       ),
@@ -339,6 +394,7 @@ class _ThreadScaffold extends ConsumerWidget {
                             content: chatErrorContentFor(
                               state.modelLoadError!.runtimeType.toString(),
                               modelSizeBytes: state.model?.sizeBytes,
+                              detail: state.modelLoadError!.message,
                             ),
                             onAction: (action) =>
                                 _handleModelLoadError(context, ref, action),
@@ -444,7 +500,6 @@ class _ThreadScaffold extends ConsumerWidget {
                 controller.sendMessage(text, imageBytes: imageBytes);
               },
               onCancel: controller.cancel,
-              onOpenSettings: () => showSamplingSettingsSheet(context, args),
             ),
         ],
       ),
@@ -482,7 +537,18 @@ class _ThreadScaffold extends ConsumerWidget {
     int index, {
     bool canReplaceSelection = false,
   }) {
-    final message = visible[index];
+    var message = visible[index];
+    // Render-time scaffold guard: a reply that parrots the sources prompt
+    // (saved before the guard, or reopened) shows the plain notice, not the
+    // app's own instructions or a raw dump.
+    if (message.role == MessageRole.assistant &&
+        message.status != MessageStatus.error &&
+        isScaffoldEcho(message.content)) {
+      message = message.copyWith(
+        content: echoNotice,
+        status: MessageStatus.complete,
+      );
+    }
     if (message.role == MessageRole.assistant &&
         message.status == MessageStatus.error &&
         message.content.trim().isEmpty) {
@@ -490,6 +556,7 @@ class _ThreadScaffold extends ConsumerWidget {
         content: chatErrorContentFor(
           message.errorKind,
           modelSizeBytes: state.model?.sizeBytes,
+          detail: controller.errorDetailsFor(message.id),
         ),
         onAction: (action) =>
             _handleMessageError(context, ref, message, action),
@@ -512,8 +579,17 @@ class _ThreadScaffold extends ConsumerWidget {
     final todos = finishedReply
         ? parseTodos(message.content)
         : const <String>[];
+    // An Action chat labels the user's first message ("Action: Draft a
+    // reply"); the instruction itself lives in the system layer.
+    final actionTitle = actionTitleOf(state.systemPrompt);
+    final isFirstUser =
+        message.role == MessageRole.user &&
+        visible.indexWhere((m) => m.role == MessageRole.user) == index;
     final bubble = MessageBubble(
       message: message,
+      actionLabel: isFirstUser && actionTitle != null
+          ? 'Action: $actionTitle'
+          : null,
       onSave: finishedReply
           ? () async {
               await ref
@@ -579,6 +655,30 @@ class _ThreadScaffold extends ConsumerWidget {
     );
     if (message.role != MessageRole.assistant || isStreamingMessage) {
       return bubble;
+    }
+    // Draft reply: the newest finished reply reopens as an editable draft.
+    if (isDraftReplyChat(state.systemPrompt) &&
+        canAct &&
+        index == visible.length - 1 &&
+        message.status == MessageStatus.complete &&
+        message.content.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: Theme.of(context).extension<DhruvaTokens>()!.spacing.sm,
+            ),
+            child: FilledButton.icon(
+              key: const ValueKey('edit-draft'),
+              onPressed: onEditDraft,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit draft'),
+            ),
+          ),
+        ],
+      );
     }
     // "Replace selected text": only on the newest finished reply, only when
     // the selection menu came from an editable field, only on the user's tap.
@@ -868,9 +968,53 @@ class _ThreadScaffold extends ConsumerWidget {
   }
 }
 
-/// The "Search in" row inside the composer: reads the thread's selection, the
-/// connectors' live state and the contact names, and shows what Auto would
-/// search for the text typed so far.
+/// What the sources chip and its sheet both read: the thread's selection, the
+/// connectors' live state and the contact names, and what Auto would search for
+/// the text typed so far.
+({
+  AskSourceSelection selection,
+  Set<AskSource> resolved,
+  List<({AskSource source, AskChipAvailability availability})> chips,
+  List<String> focusTitles,
+  AskSelectionNotifier notifier,
+})
+_searchInData(WidgetRef ref, ChatRouteArgs args, bool hasDocuments) {
+  final picked = ref.watch(askSelectionProvider(args));
+  final connectors = ref.watch(askConnectorsProvider);
+  final names = ref.watch(askContactNamesProvider).value ?? const <String>[];
+  final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
+  final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
+  // One chip per file, however many sections it was split into.
+  final focusTitles = <String>[
+    for (final t in {
+      for (final i in focus)
+        i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
+    })
+      t,
+  ];
+  final ready = {
+    for (final c in chips)
+      if (c.availability == AskChipAvailability.ready) c.source,
+  };
+  final resolved = picked.selection
+      .resolve(
+        question: picked.draft,
+        contactNames: names,
+        hasDocuments: hasDocuments,
+      )
+      .intersection(ready);
+  return (
+    selection: picked.selection,
+    resolved: resolved,
+    chips: chips,
+    focusTitles: focusTitles,
+    notifier: ref.read(askSelectionProvider(args).notifier),
+  );
+}
+
+/// The ONE sources chip inside the composer ("Sources: Auto"). It opens
+/// [_SearchInSheet], which holds the toggles; the selection state is the same
+/// canonical one `/ask/new` pins into.
 class _SearchInRow extends ConsumerWidget {
   final ChatRouteArgs args;
   final bool hasDocuments;
@@ -878,40 +1022,84 @@ class _SearchInRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final picked = ref.watch(askSelectionProvider(args));
-    final connectors = ref.watch(askConnectorsProvider);
-    final names = ref.watch(askContactNamesProvider).value ?? const [];
-    final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
-    final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
-    // One chip per file, however many sections it was split into.
-    final focusTitles = <String>[
-      for (final t in {
-        for (final i in focus)
-          i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
-      })
-        t,
-    ];
-    if (chips.isEmpty && focusTitles.isEmpty) return const SizedBox.shrink();
-    final ready = {
-      for (final c in chips)
-        if (c.availability == AskChipAvailability.ready) c.source,
-    };
-    final resolved = picked.selection
-        .resolve(
-          question: picked.draft,
-          contactNames: names,
-          hasDocuments: hasDocuments,
-        )
-        .intersection(ready);
-    final notifier = ref.read(askSelectionProvider(args).notifier);
-    return SearchInChips(
-      selection: picked.selection,
-      focusTitles: focusTitles,
-      resolved: resolved,
-      chips: chips,
-      onAuto: notifier.chooseAuto,
-      onToggle: (s) => notifier.toggle(s, currentlyResolved: resolved),
-      onConnect: (s) => context.push(connectRouteFor(s)),
+    final d = _searchInData(ref, args, hasDocuments);
+    if (d.chips.isEmpty && d.focusTitles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SourcesChip(
+        key: const ValueKey('sources-chip'),
+        label: sourcesChipLabel(
+          selection: d.selection,
+          resolved: d.resolved,
+          focusTitles: d.focusTitles,
+        ),
+        onTap: () => unawaited(
+          showDhruvaSheet<void>(
+            context: context,
+            showDragHandle: true,
+            useSafeArea: true,
+            builder: (_) =>
+                _SearchInSheet(args: args, hasDocuments: hasDocuments),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The sources sheet: "Search in" with Auto and one toggle per source.
+class _SearchInSheet extends ConsumerWidget {
+  final ChatRouteArgs args;
+  final bool hasDocuments;
+  const _SearchInSheet({required this.args, required this.hasDocuments});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final d = _searchInData(ref, args, hasDocuments);
+    return SingleChildScrollView(
+      key: const ValueKey('sources-sheet'),
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.lg,
+        0,
+        tokens.spacing.lg,
+        tokens.spacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            header: true,
+            child: Text('Search in', style: theme.textTheme.titleLarge),
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            'Auto picks from your question. Tap sources to choose them '
+            'yourself.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          SearchInChips(
+            selection: d.selection,
+            focusTitles: d.focusTitles,
+            resolved: d.resolved,
+            chips: d.chips,
+            onAuto: d.notifier.chooseAuto,
+            onToggle: (s) =>
+                d.notifier.toggle(s, currentlyResolved: d.resolved),
+            onConnect: (s) {
+              Navigator.of(context).pop();
+              unawaited(context.push(connectRouteFor(s)));
+            },
+          ),
+        ],
+      ),
     );
   }
 }

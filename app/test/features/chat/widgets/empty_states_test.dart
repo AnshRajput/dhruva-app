@@ -19,12 +19,11 @@ void main() {
 
     expect(find.text('No model installed yet'), findsOneWidget);
     expect(find.text('Browse models'), findsOneWidget);
-    // Value made explicit + brand tagline (VIDEO_FIXES #6).
+    // Value made explicit (VIDEO_FIXES #6); the old tagline and the
+    // Hugging Face jargon are gone.
     expect(find.textContaining('runs entirely on your phone'), findsOneWidget);
-    expect(
-      find.text("Your AI. Your phone. Nobody else's business."),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Nobody else'), findsNothing);
+    expect(find.textContaining('Hugging Face'), findsNothing);
     await tester.tap(find.text('Browse models'));
     expect(tapped, isTrue);
   });
