@@ -4,7 +4,6 @@
 //
 // Needs a real GGUF reachable from the simulator process:
 //   --dart-define=SHOT_MODEL=/abs/path/model.gguf
-import 'dart:io';
 
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
@@ -16,6 +15,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+
+import 'dart_copy_channel.dart';
 
 const _model = String.fromEnvironment('SHOT_MODEL');
 
@@ -30,13 +31,16 @@ void main() {
 
   testWidgets('store screenshots', (tester) async {
     expect(_model, isNotEmpty, reason: 'pass --dart-define=SHOT_MODEL=...');
-    final container = ProviderContainer();
+    final model = PathCopyChannel(_model);
+    final container = ProviderContainer(
+      overrides: [modelFileChannelProvider.overrideWithValue(model)],
+    );
     addTearDown(container.dispose);
     await (await container.read(onboardingStoreProvider.future)).markComplete();
     await container.read(storageControllerProvider.future);
     await container
         .read(storageControllerProvider.notifier)
-        .importLocal(File(_model));
+        .importLocal(model.picked);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(container: container, child: const DhruvaApp()),

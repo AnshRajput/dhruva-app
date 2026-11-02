@@ -6,20 +6,16 @@
 /// `core/router/app_shell.dart`).
 library;
 
-import 'dart:io';
-
 // Deliberate, documented exception to ADR-002's "no plugin imports in
 // features/": file picking is a pure UI/platform concern with no business
 // logic — the picked `XFile`'s path is handed straight to
 // `StorageController.importLocal`, which is the only place that touches
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
 // concern, out of scope").
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
@@ -483,18 +479,17 @@ class _InstalledBody extends ConsumerWidget {
   }
 
   Future<void> _importFile(BuildContext context, WidgetRef ref) async {
-    const typeGroup = XTypeGroup(label: 'GGUF', extensions: ['gguf']);
-    final picked = await openFile(acceptedTypeGroups: [typeGroup]);
-    if (picked == null) return;
     final notifier = ref.read(storageControllerProvider.notifier);
-    if (await notifier.importExists(p.basename(picked.path))) {
+    final picked = await notifier.pickModelFile();
+    if (picked == null) return;
+    if (await notifier.importExists(picked.name)) {
       if (!context.mounted) return;
       final replace = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Model already imported'),
           content: Text(
-            '${p.basename(picked.path)} is already on this device. Replace '
+            '${picked.name} is already on this device. Replace '
             'it with the selected file?',
           ),
           actions: [
@@ -511,7 +506,7 @@ class _InstalledBody extends ConsumerWidget {
       );
       if (replace != true) return;
     }
-    await notifier.importLocal(File(picked.path));
+    await notifier.importLocal(picked);
   }
 }
 
