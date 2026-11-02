@@ -64,6 +64,9 @@ class Composer extends ConsumerStatefulWidget {
   final void Function(int documentId)? onRemoveDocument;
   final VoidCallback? onDismissDocumentError;
 
+  /// "Cancel" on the Reading chip; null shows the chip without one.
+  final VoidCallback? onCancelDocumentRead;
+
   /// Documents already attached to this conversation.
   final List<DocumentInfo> documents;
 
@@ -90,6 +93,7 @@ class Composer extends ConsumerStatefulWidget {
     this.onAttachDocument,
     this.onRemoveDocument,
     this.onDismissDocumentError,
+    this.onCancelDocumentRead,
     this.documents = const [],
     this.extractingDocName,
     this.documentError,
@@ -319,6 +323,7 @@ class _ComposerState extends ConsumerState<Composer> {
                 error: widget.documentError,
                 onRemove: widget.onRemoveDocument,
                 onDismissError: widget.onDismissDocumentError,
+                onCancelReading: widget.onCancelDocumentRead,
               ),
               if (widget.header != null) widget.header!,
               if (_attachedImage != null) ...[
@@ -413,6 +418,7 @@ class _DocumentArea extends StatelessWidget {
   final String? error;
   final void Function(int documentId)? onRemove;
   final VoidCallback? onDismissError;
+  final VoidCallback? onCancelReading;
 
   const _DocumentArea({
     required this.documents,
@@ -420,6 +426,7 @@ class _DocumentArea extends StatelessWidget {
     required this.error,
     required this.onRemove,
     required this.onDismissError,
+    required this.onCancelReading,
   });
 
   @override
@@ -459,6 +466,8 @@ class _DocumentArea extends StatelessWidget {
                         title: extractingName!,
                         subtitle: 'Reading document…',
                         busy: true,
+                        onRemove: onCancelReading,
+                        removeTooltip: 'Cancel reading $extractingName',
                       ),
                     if (error != null)
                       _DocumentErrorChip(
@@ -482,12 +491,16 @@ class _DocumentChip extends StatelessWidget {
   final bool busy;
   final VoidCallback? onRemove;
 
+  /// Tooltip / spoken label of the close button; defaults to "Remove title".
+  final String? removeTooltip;
+
   const _DocumentChip({
     super.key,
     required this.title,
     required this.subtitle,
     this.busy = false,
     this.onRemove,
+    this.removeTooltip,
   });
 
   @override
@@ -566,7 +579,7 @@ class _DocumentChip extends StatelessWidget {
               if (onRemove != null)
                 IconButton(
                   onPressed: onRemove,
-                  tooltip: 'Remove $title',
+                  tooltip: removeTooltip ?? 'Remove $title',
                   iconSize: 18,
                   constraints: const BoxConstraints(
                     minWidth: 48,
