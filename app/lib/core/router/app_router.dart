@@ -266,6 +266,10 @@ final appRouter = GoRouter(
           // first turn auto-sends — a query param, like `characterId`, so
           // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
           final promptParam = state.uri.queryParameters['prompt'];
+          // Actions: the instruction rides in the system prompt (`asys`), the
+          // user's text is `prompt`; `pkg` / `app` name the message's source
+          // app so a drafted reply can offer "Open in <app>".
+          final actionSystem = state.uri.queryParameters['asys'];
           // Android widget "Talk" (IntentInbox route `talk`): open hands-free
           // voice as soon as the new chat is ready.
           final openVoice = state.uri.queryParameters['talk'] == '1';
@@ -277,6 +281,9 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
+              actionSystemPrompt: actionSystem,
+              sourcePackage: state.uri.queryParameters['pkg'],
+              sourceApp: state.uri.queryParameters['app'],
             ),
           );
         }
@@ -295,6 +302,8 @@ final appRouter = GoRouter(
       builder: (context, state) => WorkflowsScreen(
         initialText: state.uri.queryParameters['text'],
         initialWorkflowId: state.uri.queryParameters['id'],
+        sourcePackage: state.uri.queryParameters['pkg'],
+        sourceApp: state.uri.queryParameters['app'],
       ),
     ),
     GoRoute(

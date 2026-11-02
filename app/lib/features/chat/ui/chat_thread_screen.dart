@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/actions/action_prompt.dart';
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/ask_providers.dart';
@@ -32,6 +33,7 @@ import '../state/message_info_x.dart';
 import '../widgets/answer_source_chips.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
+import '../widgets/draft_reply_sheet.dart';
 import '../widgets/empty_states.dart';
 import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
@@ -63,6 +65,22 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final _scrollCtrl = ScrollController();
   var _pinnedToBottom = true;
   var _requestedLoad = false;
+
+  /// Draft reply: the sheet opens by itself once per finished reply, and not
+  /// while it is already open (it rewrites through this same thread).
+  final _draftShownFor = <int>{};
+  var _draftSheetOpen = false;
+
+  void _openDraftSheet() {
+    if (_draftSheetOpen || !mounted) return;
+    _draftSheetOpen = true;
+    unawaited(
+      showDraftReplySheet(
+        context,
+        widget.args,
+      ).whenComplete(() => _draftSheetOpen = false),
+    );
+  }
 
   @override
   void initState() {
@@ -124,6 +142,25 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       if (nextLen != prevLen || (next.value?.isGenerating ?? false)) {
         _maybeAutoScroll();
       }
+      // A Draft reply just finished: its result is an editable draft, not a
+      // chat bubble to copy from.
+      final was = previous?.value;
+      final now = next.value;
+      if (was != null &&
+          now != null &&
+          was.isGenerating &&
+          !now.isGenerating &&
+          isDraftReplyChat(now.systemPrompt)) {
+        final reply = latestReply(now);
+        if (reply != null &&
+            reply.status == MessageStatus.complete &&
+            reply.content.trim().isNotEmpty &&
+            _draftShownFor.add(reply.id)) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _openDraftSheet(),
+          );
+        }
+      }
     });
 
     return asyncState.when(
@@ -160,6 +197,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           scrollCtrl: _scrollCtrl,
           pinnedToBottom: _pinnedToBottom,
           onScrollToBottom: _scrollToBottom,
+          onEditDraft: _openDraftSheet,
         );
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
@@ -181,6 +219,7 @@ class _ThreadScaffold extends ConsumerWidget {
   final ScrollController scrollCtrl;
   final bool pinnedToBottom;
   final VoidCallback onScrollToBottom;
+  final VoidCallback onEditDraft;
 
   const _ThreadScaffold({
     required this.args,
@@ -189,6 +228,7 @@ class _ThreadScaffold extends ConsumerWidget {
     required this.scrollCtrl,
     required this.pinnedToBottom,
     required this.onScrollToBottom,
+    required this.onEditDraft,
   });
 
   @override
@@ -501,8 +541,17 @@ class _ThreadScaffold extends ConsumerWidget {
     final todos = finishedReply
         ? parseTodos(message.content)
         : const <String>[];
+    // An Action chat labels the user's first message ("Action: Draft a
+    // reply"); the instruction itself lives in the system layer.
+    final actionTitle = actionTitleOf(state.systemPrompt);
+    final isFirstUser =
+        message.role == MessageRole.user &&
+        visible.indexWhere((m) => m.role == MessageRole.user) == index;
     final bubble = MessageBubble(
       message: message,
+      actionLabel: isFirstUser && actionTitle != null
+          ? 'Action: $actionTitle'
+          : null,
       onSave: finishedReply
           ? () async {
               await ref
@@ -568,6 +617,30 @@ class _ThreadScaffold extends ConsumerWidget {
     );
     if (message.role != MessageRole.assistant || isStreamingMessage) {
       return bubble;
+    }
+    // Draft reply: the newest finished reply reopens as an editable draft.
+    if (isDraftReplyChat(state.systemPrompt) &&
+        canAct &&
+        index == visible.length - 1 &&
+        message.status == MessageStatus.complete &&
+        message.content.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: Theme.of(context).extension<DhruvaTokens>()!.spacing.sm,
+            ),
+            child: FilledButton.icon(
+              key: const ValueKey('edit-draft'),
+              onPressed: onEditDraft,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit draft'),
+            ),
+          ),
+        ],
+      );
     }
     // "Replace selected text": only on the newest finished reply, only when
     // the selection menu came from an editable field, only on the user's tap.

@@ -72,6 +72,15 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
+  /// The system prompt of an Action chat (`core/actions/action_prompt.dart`):
+  /// the verb's instruction, kept out of the user's bubble. New drafts only.
+  final String? actionSystemPrompt;
+
+  /// The app a message came from (Inbox -> Draft reply), so the drafted reply
+  /// can offer "Open in" the source app. Package id and display name.
+  final String? sourcePackage;
+  final String? sourceApp;
+
   /// Text to PREFILL the composer with (not sent): `/ask/new?q=...`, e.g.
   /// Today's "Prep me for `<event>`". Only meaningful for a new draft.
   final String? initialDraft;
@@ -92,6 +101,9 @@ final class ChatRouteArgs {
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
+    this.actionSystemPrompt,
+    this.sourcePackage,
+    this.sourceApp,
     this.initialDraft,
     this.initialSources = const {},
     this.focusItemIds = const [],
@@ -104,6 +116,9 @@ final class ChatRouteArgs {
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
       other.initialPrompt == initialPrompt &&
+      other.actionSystemPrompt == actionSystemPrompt &&
+      other.sourcePackage == sourcePackage &&
+      other.sourceApp == sourceApp &&
       other.initialDraft == initialDraft &&
       other.initialSources.length == initialSources.length &&
       other.initialSources.containsAll(initialSources) &&
@@ -115,6 +130,9 @@ final class ChatRouteArgs {
     initialModelId,
     characterId,
     initialPrompt,
+    actionSystemPrompt,
+    sourcePackage,
+    sourceApp,
     initialDraft,
     Object.hashAllUnordered(initialSources),
     Object.hashAll(focusItemIds),
@@ -512,7 +530,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       final model = args.initialModelId == null
           ? (await storage.listInstalledModels()).firstOrNull
           : await storage.getInstalledModel(args.initialModelId!);
-      return ChatThreadState(modelId: model?.id, model: model);
+      return ChatThreadState(
+        modelId: model?.id,
+        model: model,
+        // An Action chat: the instruction is the system layer, the user's own
+        // text the first turn.
+        systemPrompt: args.actionSystemPrompt ?? '',
+      );
     }
 
     final convo = await _repo.getConversation(conversationId);

@@ -169,6 +169,26 @@ class InboxItemScreen extends ConsumerWidget {
                         context.push(askNewLocation(focus: [item.id])),
                     child: const Text('Ask about this'),
                   ),
+                // Draft reply opens the Draft a reply action pre-filled with
+                // this message and its source app; the result is an editable
+                // draft the user sends from the source app.
+                if (item.flags[otpFlag] != true && item.body.trim().isNotEmpty)
+                  OutlinedButton(
+                    key: const ValueKey('inbox-draft-reply'),
+                    onPressed: () => context.push(
+                      Uri(
+                        path: '/actions',
+                        queryParameters: {
+                          'id': 'draft_reply',
+                          'text': '${senderOf(item)}: ${item.body.trim()}',
+                          if (item.packageName.isNotEmpty)
+                            'pkg': item.packageName,
+                          'app': item.appLabel,
+                        },
+                      ).toString(),
+                    ),
+                    child: const Text('Draft reply'),
+                  ),
                 OutlinedButton(
                   key: const ValueKey('inbox-open-app'),
                   onPressed: item.packageName.isEmpty

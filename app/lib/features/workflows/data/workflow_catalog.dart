@@ -8,6 +8,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/actions/action_prompt.dart';
+
 /// One choice set (e.g. target language) substituted into `{option}`.
 class WorkflowOption {
   final String label;
@@ -30,6 +32,12 @@ class Workflow {
   /// Input field hint, e.g. "Paste the report here".
   final String inputHint;
 
+  /// Fewest words of input this verb makes sense on (0 = any), and what to
+  /// tell the user when they have less. A one-line message gives a garbled
+  /// quiz, so the sheet says so instead of running.
+  final int minWords;
+  final String shortInputHint;
+
   const Workflow({
     required this.id,
     required this.icon,
@@ -38,6 +46,8 @@ class Workflow {
     required this.template,
     this.option,
     this.inputHint = 'Paste or type your text',
+    this.minWords = 0,
+    this.shortInputHint = '',
   });
 }
 
@@ -67,6 +77,8 @@ const workflowCatalog = <Workflow>[
     icon: Icons.format_list_bulleted_rounded,
     title: 'Key points',
     description: 'Pull out the main points as bullets.',
+    minWords: 8,
+    shortInputHint: 'Too short for key points. Try Rewrite or Fix grammar.',
     template:
         'List the key points of the text below as a bulleted list of at most '
         '7 bullets. One short line per bullet. No intro, no outro.\n\n'
@@ -122,12 +134,7 @@ const workflowCatalog = <Workflow>[
     title: 'Draft a reply',
     description: 'Paste a message, get a reply ready to send.',
     inputHint: 'Paste the message you received',
-    option: WorkflowOption('Tone', [
-      'Friendly',
-      'Formal',
-      'Short',
-      'Apologetic',
-    ]),
+    option: WorkflowOption('Tone', ['Warm', 'Short', 'Formal']),
     template:
         'Write a {option} reply to the message below. Keep it brief and '
         'ready to send. Output only the reply.\n\nMessage:\n{input}',
@@ -147,6 +154,8 @@ const workflowCatalog = <Workflow>[
     icon: Icons.menu_book_outlined,
     title: 'Study notes',
     description: 'Headings, bullets and key terms to revise from.',
+    minWords: 12,
+    shortInputHint: 'Too short for study notes. Paste a paragraph or more.',
     template:
         'Turn the text below into concise study notes. Use short headings, '
         'bullets under each, and end with a "Key terms" list of up to 5 '
@@ -157,6 +166,8 @@ const workflowCatalog = <Workflow>[
     icon: Icons.quiz_outlined,
     title: 'Quiz me',
     description: 'Five questions from your material, with answers.',
+    minWords: 12,
+    shortInputHint: 'Too short for a quiz. Try Summarize, or paste more text.',
     template:
         'Write 5 quiz questions based on the text below. Number them. '
         'After the questions, add an "Answers" section with a short answer '
@@ -169,8 +180,8 @@ const workflowCatalog = <Workflow>[
     description: 'Three caption options with hashtags.',
     inputHint: 'Describe the post or photo',
     template:
-        'Write 3 short, catchy social media captions for the post described '
-        'below. Add 3 relevant hashtags to each. Number the options.\n\n'
+        'Write 3 short, catchy social media captions for the post the '
+        'user describes. Add 3 relevant hashtags to each. Number the options.\n\n'
         'Post:\n{input}',
   ),
   Workflow(
@@ -201,3 +212,34 @@ String renderWorkflowPrompt(Workflow workflow, String input, [String? option]) {
       .replaceAll('{option}', chosen)
       .replaceFirst('{input}', text);
 }
+
+/// The part of [workflow]'s template before the input: what the model is told
+/// to do, without the user's text. Rides in the chat's SYSTEM prompt (see
+/// `core/actions/action_prompt.dart`) so the thread never shows it as the
+/// user's own message; the user's text alone is the user turn.
+String workflowInstruction(Workflow workflow, [String? option]) {
+  final chosen = option ?? workflow.option?.defaultChoice ?? '';
+  if (workflow.id == 'draft_reply') return draftReplyInstruction(chosen);
+  var t = workflow.template.replaceAll('{option}', chosen);
+  final at = t.indexOf('{input}');
+  if (at >= 0) t = t.substring(0, at);
+  // "...the text below in 3 sentences." loses "below"; the next sentence says
+  // where the text is. Drops the "Text:" label that led into the input.
+  t = t
+      .replaceFirst(RegExp(r'\n*[A-Za-z ]+:\s*$'), '')
+      .replaceAll(' below', '')
+      .trim();
+  return "$t\nThe user's next message is the text to work on.";
+}
+
+/// Words in [input], for the minimum-length guard.
+int wordCount(String input) =>
+    input.trim().isEmpty ? 0 : input.trim().split(RegExp(r'\s+')).length;
+
+/// The warning to show instead of running [workflow] on [input], or null.
+String? tooShortFor(Workflow workflow, String input) =>
+    workflow.minWords > 0 &&
+        input.trim().isNotEmpty &&
+        wordCount(input) < workflow.minWords
+    ? workflow.shortInputHint
+    : null;

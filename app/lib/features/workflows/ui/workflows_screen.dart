@@ -1,8 +1,12 @@
 /// Actions (`/actions`, formerly Workflows): one-tap text verbs (summarize, translate, rewrite,
 /// ...) that small on-device models are good at. Pick one, supply text (type,
 /// paste, or open a file), and Run hands the rendered prompt to
-/// `/chat/new?prompt=`, which opens a chat and auto-sends it. `?text=` (from the
-/// Android share sheet / text-selection menu) prefills the input.
+/// `/chat/new`, which opens a chat and auto-sends the user's text. The verb's
+/// instruction rides in the chat's system prompt (`asys`), so the thread shows
+/// the user's own words under an "Action: ..." label, never the template.
+/// `?text=` (from the Android share sheet / text-selection menu / Inbox) prefills
+/// the input; `?pkg=` / `?app=` name the app a message came from, so a drafted
+/// reply can offer "Open in" the source app.
 library;
 
 import 'dart:async';
@@ -12,8 +16,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/actions/action_prompt.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../data/workflow_catalog.dart';
+
+/// What the sheet hands back on Run: the verb, the user's text and the option.
+typedef WorkflowRun = ({Workflow workflow, String text, String option});
+
+/// `/chat/new` for [run]: the user's text is the prompt, the instruction the
+/// system layer.
+String workflowChatLocation(
+  WorkflowRun run, {
+  String? sourcePackage,
+  String? sourceApp,
+}) {
+  final text = run.text.trim();
+  final capped = text.length > workflowInputLimit
+      ? text.substring(0, workflowInputLimit)
+      : text;
+  return Uri(
+    path: '/chat/new',
+    queryParameters: {
+      'prompt': capped,
+      'asys': actionSystemPrompt(
+        title: run.workflow.title,
+        instruction: workflowInstruction(run.workflow, run.option),
+      ),
+      if (sourcePackage != null && sourcePackage.isNotEmpty)
+        'pkg': sourcePackage,
+      if (sourceApp != null && sourceApp.isNotEmpty) 'app': sourceApp,
+    },
+  ).toString();
+}
 
 class WorkflowsScreen extends StatefulWidget {
   /// Text to prefill into whichever workflow the user picks.
@@ -22,7 +56,17 @@ class WorkflowsScreen extends StatefulWidget {
   /// Opens this workflow's sheet right away (`?id=` from the chat quick strip).
   final String? initialWorkflowId;
 
-  const WorkflowsScreen({super.key, this.initialText, this.initialWorkflowId});
+  /// The app the text came from (an Inbox notification), if any.
+  final String? sourcePackage;
+  final String? sourceApp;
+
+  const WorkflowsScreen({
+    super.key,
+    this.initialText,
+    this.initialWorkflowId,
+    this.sourcePackage,
+    this.sourceApp,
+  });
 
   @override
   State<WorkflowsScreen> createState() => _WorkflowsScreenState();
@@ -45,16 +89,22 @@ class _WorkflowsScreenState extends State<WorkflowsScreen> {
   }
 
   Future<void> _open(BuildContext context, Workflow workflow) async {
-    final prompt = await showModalBottomSheet<String>(
+    final run = await showModalBottomSheet<WorkflowRun>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) =>
           WorkflowSheet(workflow: workflow, initialText: initialText ?? ''),
     );
-    if (prompt != null && context.mounted) {
+    if (run != null && context.mounted) {
       unawaited(
-        context.push('/chat/new?prompt=${Uri.encodeComponent(prompt)}'),
+        context.push(
+          workflowChatLocation(
+            run,
+            sourcePackage: widget.sourcePackage,
+            sourceApp: widget.sourceApp,
+          ),
+        ),
       );
     }
   }
@@ -213,7 +263,7 @@ class _PrivacyNote extends StatelessWidget {
   }
 }
 
-/// Input sheet for one workflow. Pops with the rendered prompt on Run.
+/// Input sheet for one workflow. Pops with a [WorkflowRun] on Run.
 class WorkflowSheet extends StatefulWidget {
   final Workflow workflow;
   final String initialText;
@@ -299,7 +349,8 @@ class _WorkflowSheetState extends State<WorkflowSheet> {
     final tokens = theme.extension<DhruvaTokens>()!;
     final w = widget.workflow;
     final option = w.option;
-    final canRun = _ctrl.text.trim().isNotEmpty;
+    final tooShort = tooShortFor(w, _ctrl.text);
+    final canRun = _ctrl.text.trim().isNotEmpty && tooShort == null;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
@@ -342,6 +393,16 @@ class _WorkflowSheetState extends State<WorkflowSheet> {
               SizedBox(height: tokens.spacing.xs),
               Text(
                 'Trimmed to $workflowInputLimit characters to fit your model.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: tokens.warning,
+                ),
+              ),
+            ],
+            if (tooShort != null) ...[
+              SizedBox(height: tokens.spacing.xs),
+              Text(
+                tooShort,
+                key: const ValueKey('workflow-too-short'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: tokens.warning,
                 ),
@@ -390,10 +451,11 @@ class _WorkflowSheetState extends State<WorkflowSheet> {
             SizedBox(height: tokens.spacing.lg),
             FilledButton(
               onPressed: canRun
-                  ? () => Navigator.pop(
-                      context,
-                      renderWorkflowPrompt(w, _ctrl.text, _option),
-                    )
+                  ? () => Navigator.pop<WorkflowRun>(context, (
+                      workflow: w,
+                      text: _ctrl.text,
+                      option: _option,
+                    ))
                   : null,
               child: const Text('Run'),
             ),

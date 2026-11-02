@@ -40,6 +40,10 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
 
+  /// "Action: Draft a reply": the label over a user message that started an
+  /// Action chat (the instruction itself is in the system layer).
+  final String? actionLabel;
+
   /// Opens the report flow for this (assistant) reply. Null hides the
   /// action (e.g. previews/tests that don't wire it).
   final VoidCallback? onReport;
@@ -65,6 +69,7 @@ class MessageBubble extends StatelessWidget {
     this.attachedImage,
     this.onRegenerate,
     this.onEdit,
+    this.actionLabel,
     this.onReport,
     this.onSave,
     this.todoCount = 0,
@@ -116,6 +121,17 @@ class MessageBubble extends StatelessWidget {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isUser && actionLabel != null)
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.xs),
+                child: Text(
+                  actionLabel!,
+                  key: const ValueKey('action-label'),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
             Container(
               padding: EdgeInsets.all(tokens.spacing.md),
               decoration: BoxDecoration(
