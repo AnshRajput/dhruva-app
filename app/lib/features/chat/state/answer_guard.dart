@@ -7,9 +7,15 @@
 /// Pure text rules; the reply is only inspected, never acted on.
 library;
 
+import '../../../core/actions/action_prompt.dart' show actionTitleOf;
 import '../../../data/connectors/ask_sources.dart'
     show askInstruction, askInstructionWithDocs;
 import '../../../data/connectors/sources_block.dart' show sourcesPreamble;
+
+/// `MessageInfo.errorKind` of an Action reply that echoed its own instruction.
+/// The row is an error with no text, so the thread shows a retry card and no
+/// reply-level action (Replace selected text, Edit draft, Copy) can touch it.
+const actionEchoErrorKind = 'ActionEchoFailure';
 
 /// What the thread shows instead of an echoed prompt.
 const echoNotice = "I couldn't answer that from your sources. Here they are.";
@@ -32,6 +38,59 @@ Set<String> _shingles(List<String> w, int n) => {
 };
 
 String _norm(String s) => _tokens(s).join(' ');
+
+/// Meta-sentences a small model parrots from an Action's system layer instead
+/// of doing the task. Matched on normalised words, anywhere in the reply.
+const _actionMeta = [
+  "the user's next message",
+  'the text to work on',
+  'text to work on',
+  'the message the user sends',
+  'the text is inside',
+  'text tags',
+  'reply with only the result',
+  'output only the reply',
+  'no preamble and no explanation',
+];
+
+/// True when [reply] to an Action chat (one whose [systemPrompt] carries the
+/// `Action:` header) is the Action's own instruction, or a meta-sentence about
+/// it ("The user's next message is the text to work on."), rather than a
+/// result. Three rules: a meta-sentence anywhere; a whole instruction
+/// sentence of four or more words anywhere; or a reply made mostly of the
+/// instruction's four-word runs. Whatever the user's own [userText] contains
+/// is exempt, so summarising a document that quotes such words is no echo.
+///
+/// Pure text rules; the reply is only inspected, never acted on.
+bool isActionEcho(String reply, String systemPrompt, {String userText = ''}) {
+  if (actionTitleOf(systemPrompt) == null) return false;
+  final r = _norm(reply);
+  if (r.isEmpty) return false;
+  final padded = ' $r ';
+  final user = ' ${_norm(userText)} ';
+  bool echoes(String phrase) {
+    final n = _norm(phrase);
+    if (n.isEmpty) return false;
+    return padded.contains(' $n ') && !user.contains(' $n ');
+  }
+
+  if (_actionMeta.any(echoes)) return true;
+  final nl = systemPrompt.indexOf('\n');
+  final instruction = nl < 0 ? '' : systemPrompt.substring(nl + 1);
+  for (final sentence in instruction.split(RegExp(r'(?<=[.!?])\s+|\n+'))) {
+    if (_tokens(sentence).length >= 4 && echoes(sentence)) return true;
+  }
+  final w = _tokens(reply);
+  if (w.length >= 8) {
+    final mine = _shingles(w, 4);
+    final theirs = _shingles(_tokens(instruction), 4);
+    if (mine.isNotEmpty &&
+        mine.where(theirs.contains).length / mine.length > 0.5) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// True when [reply] is the grounded prompt (or its sources) echoed back.
 /// [prompt] is the grounded prompt that was sent; with it, a reply made mostly

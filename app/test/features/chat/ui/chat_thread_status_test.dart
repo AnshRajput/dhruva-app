@@ -1,6 +1,7 @@
 // D1 markers + Continue, D3 warm-up / timeout / instant composer clear, as
 // the user sees them in the thread.
 
+import 'package:dhruva/core/actions/action_prompt.dart';
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/intents/process_text.dart';
@@ -49,10 +50,14 @@ void main() {
     required String content,
     String? errorKind,
     bool secondTurn = false,
+    String systemPrompt = '',
   }) async {
     final modelId = await insertModel();
     final r = ChatRepository(db: db);
-    final convo = await r.createConversation(modelId: modelId);
+    final convo = await r.createConversation(
+      modelId: modelId,
+      systemPrompt: systemPrompt,
+    );
     await r.appendMessage(
       conversationId: convo,
       role: MessageRole.user,
@@ -397,6 +402,93 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Replace selected text'), findsNothing);
     });
+
+    testWidgets(
+      'REGRESSION: an Action reply that is its own instruction (saved '
+      'as complete before the guard) offers no Replace, only Try again',
+      (tester) async {
+        tall(tester);
+        final args = await savedThread(
+          status: MessageStatus.complete,
+          content: "The user's next message is the text to work on.",
+          systemPrompt: actionSystemPrompt(
+            title: 'Fix grammar',
+            instruction:
+                'Fix the grammar and spelling of the text.\n'
+                "The user's next message is the text to work on.",
+          ),
+        );
+        final bridge = _FakeBridge();
+        await tester.pumpWidget(
+          app(FakeEngineService(), args, replaceable: true, bridge: bridge),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Replace selected text'), findsNothing);
+        expect(find.textContaining('text to work on'), findsNothing);
+        expect(
+          find.textContaining('repeated its instructions'),
+          findsOneWidget,
+        );
+        expect(find.text('Try again'), findsOneWidget);
+        expect(bridge.sent, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'REGRESSION: an Action reply that echoes the sources scaffold offers no '
+      'Replace / Copy, only Try again',
+      (tester) async {
+        tall(tester);
+        final args = await savedThread(
+          status: MessageStatus.complete,
+          content: '<sources>\n[1] event | Standup | 9am\n</sources>',
+          systemPrompt: actionSystemPrompt(
+            title: 'Fix grammar',
+            instruction: 'Fix the grammar and spelling of the text.',
+          ),
+        );
+        final bridge = _FakeBridge();
+        await tester.pumpWidget(
+          app(FakeEngineService(), args, replaceable: true, bridge: bridge),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Replace selected text'), findsNothing);
+        expect(find.textContaining("couldn't answer that"), findsNothing);
+        expect(find.text('Try again'), findsOneWidget);
+        expect(bridge.sent, isEmpty);
+      },
+    );
+
+    for (final status in [
+      MessageStatus.cancelled,
+      MessageStatus.truncated,
+      MessageStatus.error,
+    ]) {
+      testWidgets('a ${status.name} Action reply never offers replacing', (
+        tester,
+      ) async {
+        tall(tester);
+        final args = await savedThread(
+          status: status,
+          content: 'Half a fixed sentence',
+          systemPrompt: actionSystemPrompt(
+            title: 'Fix grammar',
+            instruction: 'Fix the grammar and spelling of the text.',
+          ),
+        );
+        await tester.pumpWidget(
+          app(FakeEngineService(), args, replaceable: true),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Replace selected text'),
+          findsNothing,
+          reason: '$status',
+        );
+      });
+    }
 
     testWidgets('an unfinished reply never offers replacing', (tester) async {
       tall(tester);

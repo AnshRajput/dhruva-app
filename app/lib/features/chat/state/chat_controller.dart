@@ -25,6 +25,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
+import '../../../core/actions/action_prompt.dart'
+    show actionTitleOf, stripActionDelimiters, wrapActionText;
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
@@ -505,6 +507,11 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// The reply parroted the grounded prompt: the thread shows [echoNotice]
   /// instead, live and at completion, whatever the stop reason.
   bool _echoBlocked = false;
+
+  /// An Action's reply was its own instruction ([isActionEcho]): the row ends
+  /// as an error with no text, so the thread offers a retry and nothing that
+  /// could write the echo anywhere.
+  bool _actionEchoBlocked = false;
 
   @override
   Future<ChatThreadState> build() async {
@@ -1236,15 +1243,25 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final hasDocs = state.value!.documents.isNotEmpty;
     final selection = ref.read(askSelectionProvider(args)).selection;
     final store = ref.read(connectorStoreProvider);
+    // SECURITY (N1): an Action (Draft reply and all the rest) works on text
+    // that may come from a stranger (a notification, a shared message).
+    // Auto-grounding would let that text choose which of the user's private
+    // sources get searched and quoted into the reply, so an Action only
+    // grounds in sources the USER pinned. Attached documents are the user's
+    // own and still count.
+    final noAuto = actionTitleOf(systemPrompt) != null && selection.auto;
     // Contact names only matter when they can change the answer.
     final needNames =
-        selection.auto || selection.pinned.contains(AskSource.contacts);
+        !noAuto &&
+        (selection.auto || selection.pinned.contains(AskSource.contacts));
     final names = needNames ? await store.contactNames() : const <String>[];
-    final wanted = selection.resolve(
-      question: question,
-      contactNames: names,
-      hasDocuments: hasDocs,
-    );
+    final wanted = noAuto
+        ? <AskSource>{if (hasDocs) AskSource.docs}
+        : selection.resolve(
+            question: question,
+            contactNames: names,
+            hasDocuments: hasDocs,
+          );
     final docsWanted = wanted.contains(AskSource.docs) && hasDocs;
     final wantedConnectors = connectorSourcesOf(wanted);
     final active = wantedConnectors.isEmpty
@@ -1455,6 +1472,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _rawBuffer = '';
     _outputBlocked = false;
     _echoBlocked = false;
+    _actionEchoBlocked = false;
     _pushedContent = continued?.content ?? '';
     _pushedReasoning = continued?.reasoningContent ?? '';
     _reasoningStartedAt = null;
@@ -1575,9 +1593,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _flush({required bool isFinal}) {
     final id = _activeAssistantId;
     if (id == null) return;
-    var split = splitThinkContent(
-      _seedRaw + safeThinkPrefix(_rawBuffer, isFinal: isFinal),
-    );
+    // An Action's user turn is wrapped in <text> tags; a model that copies
+    // them into its answer must not show them.
+    final systemPrompt = state.value?.systemPrompt ?? '';
+    final isAction = actionTitleOf(systemPrompt) != null;
+    var rawReply = _seedRaw + safeThinkPrefix(_rawBuffer, isFinal: isFinal);
+    if (isAction) rawReply = stripActionDelimiters(rawReply);
+    var split = splitThinkContent(rawReply);
     // Safety: stop a reply that sexualizes a minor mid-stream and replace
     // everything shown so far with the notice.
     if (!_outputBlocked &&
@@ -1593,16 +1615,41 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // Scaffold echo (the model repeats the sources prompt/rows): swap the
     // stream for the plain notice as soon as it is recognisable, and stop
     // generating the rest of the dump.
+    // In an Action chat the reply may land in the user's own field, so the
+    // echo is a failed result (error row, retry card), never a notice dressed
+    // up as an answer.
     if (!_outputBlocked &&
         !_echoBlocked &&
-        _activePrompt != null &&
+        !_actionEchoBlocked &&
+        (isAction || _activePrompt != null) &&
         isScaffoldEcho(split.content, prompt: _activePrompt)) {
-      _echoBlocked = true;
+      if (isAction) {
+        _actionEchoBlocked = true;
+      } else {
+        _echoBlocked = true;
+      }
       if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
     }
     if (_echoBlocked) {
       _seedRaw = '';
       split = splitThinkContent(echoNotice);
+    }
+
+    // Action echo (the reply is the action's own instruction): drop the text
+    // as soon as it is recognisable and stop generating; the row finishes as
+    // an error so the user gets "Try again", never a reply to copy or replace
+    // a selection with.
+    if (isAction &&
+        !_outputBlocked &&
+        !_echoBlocked &&
+        !_actionEchoBlocked &&
+        isActionEcho(split.content, systemPrompt, userText: _lastUserText())) {
+      _actionEchoBlocked = true;
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_actionEchoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent('');
     }
 
     if (_reasoningStartedAt == null &&
@@ -1760,7 +1807,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (id == null) return;
     // `_flush(isFinal)` above already swapped an echoed reply for the notice,
     // so it counts as a finished (not stopped/truncated) answer.
-    final status = _outputBlocked || _echoBlocked
+    final status = _actionEchoBlocked
+        ? MessageStatus.error
+        : _outputBlocked || _echoBlocked
         ? MessageStatus.complete
         : switch (event.reason) {
             EngineStopReason.cancelled => MessageStatus.cancelled,
@@ -1773,6 +1822,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         status: status,
         tokCount: event.tokenCount,
         genMs: event.elapsedMs,
+        errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
       ),
     );
     final current = state.value;
@@ -1796,6 +1846,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           m.copyWith(
             status: status,
             content: answer,
+            errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
@@ -1886,6 +1937,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _activePrompt = null;
     _outputBlocked = false;
     _echoBlocked = false;
+    _actionEchoBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';
@@ -1963,6 +2015,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     return convo?.title ?? fallback;
   }
 
+  /// The newest user message in the thread (the Action's material).
+  String _lastUserText() =>
+      state.value?.messages
+          .where((m) => m.role == MessageRole.user)
+          .lastOrNull
+          ?.content ??
+      '';
+
   /// [attachedImages]: Loop 7's session-only image map (see
   /// [ChatThreadState.attachedImages]) — a user turn whose message id has an
   /// entry gets that image attached to its [ChatTurn], the only way an image
@@ -1981,6 +2041,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       if (userContext.isNotEmpty) userContext,
       if (systemPrompt.trim().isNotEmpty) systemPrompt,
     ].join('\n\n');
+    // An Action's material is its FIRST user message (later ones are the
+    // user's own follow-ups); it rides in <text> tags while the instruction
+    // stays in the system layer only.
+    final isAction = actionTitleOf(systemPrompt) != null;
+    final materialId = isAction
+        ? messages.where((m) => m.role == MessageRole.user).firstOrNull?.id
+        : null;
     // Growable: `_runAssistantTurn` swaps the last user turn for its
     // document-grounded version.
     return [
@@ -1993,7 +2060,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
                 m.content == SafetyGuard.blockedNotice))
           switch (m.role) {
             MessageRole.user => ChatTurn.user(
-              m.content,
+              m.id == materialId ? wrapActionText(m.content) : m.content,
               images: attachedImages[m.id] == null
                   ? const []
                   : [attachedImages[m.id]!],

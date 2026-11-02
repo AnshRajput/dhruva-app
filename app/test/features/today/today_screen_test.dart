@@ -77,13 +77,10 @@ Future<void> _tapCited(WidgetTester tester, String containing) async {
   await settle(tester);
 }
 
-/// The chips scroll sideways and build lazily: bring [id] on screen.
+/// The chips wrap (none is ever clipped): [id] is already on screen once the
+/// row has scrolled into view with the page.
 Future<void> _revealAction(WidgetTester tester, String id) async {
-  await tester.dragUntilVisible(
-    find.byKey(ValueKey('today-action-$id')),
-    find.byKey(const ValueKey('today-quick-actions')),
-    const Offset(-120, 0),
-  );
+  await tester.ensureVisible(find.byKey(ValueKey('today-action-$id')));
   await settle(tester);
 }
 

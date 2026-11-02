@@ -22,6 +22,7 @@ import '../../data/docs/document_extractor.dart';
 import '../../data/docs/document_repository.dart';
 import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
+import '../../data/downloads/model_file_channel.dart';
 import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../data/safety/report_repository.dart';
@@ -146,6 +147,11 @@ DownloadRequest voiceModelDownloadRequest(VoiceCatalogEntry entry) {
 final deviceInfoServiceProvider = Provider<DeviceInfoService>((ref) {
   return PluginDeviceInfoService();
 });
+
+/// Native picker + streaming copy for sideloaded GGUFs.
+final modelFileChannelProvider = Provider<ModelFileChannel>(
+  (ref) => ModelFileChannel(),
+);
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();

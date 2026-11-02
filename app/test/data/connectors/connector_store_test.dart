@@ -200,6 +200,57 @@ void main() {
       expect(next.map((e) => e.externalId), ['t2', 'tomorrow']);
     });
 
+    test('next events include in-progress and overlapping ones, never an '
+        'all-day event from an earlier day', () async {
+      ItemDraft timed(String id, DateTime at, DateTime end) => ItemDraft(
+        externalId: id,
+        kind: ItemKind.event,
+        title: id,
+        startsAt: at,
+        flags: {'allDay': false, 'end': end.millisecondsSinceEpoch},
+      );
+      ItemDraft allDay(String id, DateTime at) => ItemDraft(
+        externalId: id,
+        kind: ItemKind.event,
+        title: id,
+        startsAt: at,
+        flags: {
+          'allDay': true,
+          'end': at.add(const Duration(days: 1)).millisecondsSinceEpoch,
+        },
+      );
+      await store.upsertItems('calendar', [
+        allDay('holiday-yesterday', DateTime(2026, 10, 31)),
+        allDay('birthday-today', DateTime(2026, 11, 1)),
+        timed('over', DateTime(2026, 11, 1, 8), DateTime(2026, 11, 1, 9)),
+        timed(
+          'standup',
+          DateTime(2026, 11, 1, 9),
+          DateTime(2026, 11, 1, 10, 30),
+        ),
+        timed(
+          'design',
+          DateTime(2026, 11, 1, 9, 30),
+          DateTime(2026, 11, 1, 11),
+        ),
+        timed('pickup', DateTime(2026, 11, 1, 12), DateTime(2026, 11, 1, 13)),
+        allDay('offsite-tomorrow', DateTime(2026, 11, 2)),
+      ]);
+      final now = DateTime(2026, 11, 1, 10);
+      final next = await store.watchNextEvents(now, limit: 4).first;
+      expect(next.map((e) => e.externalId), [
+        'standup',
+        'design',
+        'pickup',
+        'offsite-tomorrow',
+      ]);
+      // At 9:45 the two overlapping meetings are both "now".
+      final nine45 = await store
+          .watchNextEvents(DateTime(2026, 11, 1, 9, 45))
+          .first;
+      expect(nine45.map((e) => e.externalId), ['standup', 'design']);
+    });
+
     test('notifications group by app, newest app first', () async {
       ItemDraft n(String id, String pkg, String app, int minute) => ItemDraft(
         externalId: id,

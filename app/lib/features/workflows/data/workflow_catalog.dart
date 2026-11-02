@@ -229,7 +229,10 @@ String workflowInstruction(Workflow workflow, [String? option]) {
       .replaceFirst(RegExp(r'\n*[A-Za-z ]+:\s*$'), '')
       .replaceAll(' below', '')
       .trim();
-  return "$t\nThe user's next message is the text to work on.";
+  // The old closing sentence ("The user's next message is the text to work
+  // on.") was exactly what a 0.5B model echoed back as its reply. This one
+  // names the delimiter and ends on the output rule.
+  return '$t\nThe text is inside <text> tags. Reply with only the result.';
 }
 
 /// Words in [input], for the minimum-length guard.

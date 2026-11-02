@@ -470,9 +470,32 @@ class ConnectorStore {
     );
   }
 
-  /// The next [limit] events starting at or after [now].
+  /// The next [limit] events that are happening now or still ahead, earliest
+  /// start first: a timed event counts from its start until its end, so a
+  /// meeting in progress (and one overlapping it) shows; an all-day event only
+  /// counts while it is still ahead, never one from an earlier day. The end
+  /// lives in `flags` (no column), so this reads from two days back and
+  /// filters in Dart.
   Stream<List<ConnectorItem>> watchNextEvents(DateTime now, {int limit = 2}) {
-    return _events((t) => t.startsAt.isBiggerOrEqualValue(now), limit: limit);
+    return _events(
+      (t) => t.startsAt.isBiggerOrEqualValue(
+        now.subtract(const Duration(days: 2)),
+      ),
+    ).map(
+      (events) => [
+        for (final e in events)
+          if (_isNowOrAhead(e, now)) e,
+      ].take(limit).toList(),
+    );
+  }
+
+  static bool _isNowOrAhead(ConnectorItem e, DateTime now) {
+    final start = e.startsAt;
+    if (start == null) return false;
+    if (!start.isBefore(now)) return true;
+    if (e.flags['allDay'] == true) return false;
+    final end = e.flags['end'];
+    return end is int && DateTime.fromMillisecondsSinceEpoch(end).isAfter(now);
   }
 
   Stream<List<ConnectorItem>> _events(

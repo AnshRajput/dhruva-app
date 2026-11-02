@@ -22,7 +22,9 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
+import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Channel `app.dhruva/connectors`: the native half of the connectors (Dart:
@@ -37,6 +39,10 @@ import java.util.concurrent.Executors
  * release,
  * notifications.granted | settings | capture | excluded | queueDir,
  * power.charging.
+ *
+ * Second channel `app.dhruva/model_import` (sideloading a GGUF): pick (SAF
+ * ACTION_OPEN_DOCUMENT) | copy (streamed by [ModelImport]; reports `progress`
+ * back to Dart) | cancel.
  */
 class DhruvaConnectorsPlugin :
     FlutterPlugin,
@@ -56,16 +62,24 @@ class DhruvaConnectorsPlugin :
     private var pendingPick: MethodChannel.Result? = null
     private var pendingCalendar: MethodChannel.Result? = null
 
+    private lateinit var importChannel: MethodChannel
+    private var pendingModelPick: MethodChannel.Result? = null
+    @Volatile private var pickedModelUri: Uri? = null
+    private var importCancelled = AtomicBoolean(false)
+
     // ---- FlutterPlugin / ActivityAware ----------------------------------------
 
     override fun onAttachedToEngine(b: FlutterPlugin.FlutterPluginBinding) {
         context = b.applicationContext
         channel = MethodChannel(b.binaryMessenger, "app.dhruva/connectors")
         channel.setMethodCallHandler(this)
+        importChannel = MethodChannel(b.binaryMessenger, "app.dhruva/model_import")
+        importChannel.setMethodCallHandler(::onImportCall)
     }
 
     override fun onDetachedFromEngine(b: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        importChannel.setMethodCallHandler(null)
         worker.shutdown()
     }
 
@@ -268,6 +282,7 @@ class DhruvaConnectorsPlugin :
     }
 
     override fun onActivityResult(code: Int, resultCode: Int, data: Intent?): Boolean {
+        if (code == REQ_PICK_MODEL) return onModelPicked(resultCode, data)
         if (code != REQ_PICK_FOLDER) return false
         val r = pendingPick ?: return true
         pendingPick = null
@@ -283,6 +298,93 @@ class DhruvaConnectorsPlugin :
                 main.post { r.success(mapOf("id" to uri.toString(), "name" to name)) }
             } catch (e: Exception) {
                 main.post { r.error("failed", "Could not keep access to that folder.", null) }
+            }
+        }
+        return true
+    }
+
+    // ---- model import (stream-copy; never loads the file into memory) --------------------
+
+    private fun onImportCall(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            when (call.method) {
+                "pick" -> pickModel(result)
+                "copy" -> copyModel(call, result)
+                "cancel" -> {
+                    importCancelled.set(true)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        } catch (e: FolderError) {
+            result.error(e.code, e.message, null)
+        } catch (e: Exception) {
+            result.error("failed", e.message ?: e.javaClass.simpleName, null)
+        }
+    }
+
+    private fun pickModel(result: MethodChannel.Result) {
+        val a = activity
+        if (a == null) {
+            result.error("no_activity", "Open the app to choose a file.", null)
+            return
+        }
+        pendingModelPick?.success(null)
+        pendingModelPick = result
+        // GGUF has no registered MIME type, so offer everything; Dart rejects non-.gguf names.
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+        )
+        try {
+            a.startActivityForResult(intent, REQ_PICK_MODEL)
+        } catch (e: Exception) {
+            pendingModelPick = null
+            result.error("no_picker", "This phone has no file picker.", null)
+        }
+    }
+
+    private fun copyModel(call: MethodCall, result: MethodChannel.Result) {
+        val uri = pickedModelUri
+        if (uri == null || uri.toString() != requireArg(call, "uri")) {
+            result.error("unreadable", "Pick the file again.", null)
+            return
+        }
+        val dest = File(requireArg(call, "dest"))
+        importCancelled = AtomicBoolean(false)
+        val cancelled = importCancelled
+        worker.execute {
+            try {
+                val n = ModelImport.copy(context, uri, dest, cancelled) { copied, total ->
+                    main.post { importChannel.invokeMethod("progress", mapOf("copied" to copied, "total" to total)) }
+                }
+                main.post { result.success(n) }
+            } catch (e: ImportError) {
+                main.post { result.error(e.code, e.message, null) }
+            } catch (e: Exception) {
+                main.post { result.error("failed", e.message ?: e.javaClass.simpleName, null) }
+            } finally {
+                ModelImport.release(context, uri)
+                if (pickedModelUri == uri) pickedModelUri = null
+            }
+        }
+    }
+
+    private fun onModelPicked(resultCode: Int, data: Intent?): Boolean {
+        val r = pendingModelPick ?: return true
+        pendingModelPick = null
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            r.success(null) // cancelled
+            return true
+        }
+        worker.execute {
+            try {
+                ModelImport.keepGrant(context, uri)
+                val (name, size) = ModelImport.describe(context, uri)
+                pickedModelUri = uri
+                main.post { r.success(mapOf("uri" to uri.toString(), "name" to name, "size" to size)) }
+            } catch (e: Exception) {
+                main.post { r.error("failed", "Could not read that file.", null) }
             }
         }
         return true
@@ -342,5 +444,6 @@ class DhruvaConnectorsPlugin :
     private companion object {
         const val REQ_CALENDAR = 4101
         const val REQ_PICK_FOLDER = 4102
+        const val REQ_PICK_MODEL = 4103
     }
 }

@@ -5,7 +5,6 @@
 //
 // Setup: adb push SmolLM2-135M-Instruct-Q4_K_M.gguf /data/local/tmp/
 // Run:   flutter test integration_test/golden_path_workflow_test.dart -d <id>
-import 'dart:io';
 
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/app_router.dart';
@@ -18,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'dart_copy_channel.dart';
+
 const _modelPath = '/data/local/tmp/SmolLM2-135M-Instruct-Q4_K_M.gguf';
 const _shared =
     'The meeting moved to Thursday at 3pm. Priya will send the budget '
@@ -29,7 +30,10 @@ void main() {
   testWidgets(
     'import GGUF → Summarize workflow → real reply',
     (tester) async {
-      final container = ProviderContainer();
+      final model = PathCopyChannel(_modelPath);
+      final container = ProviderContainer(
+        overrides: [modelFileChannelProvider.overrideWithValue(model)],
+      );
       addTearDown(container.dispose);
 
       await (await container.read(
@@ -38,7 +42,7 @@ void main() {
       await container.read(storageControllerProvider.future);
       await container
           .read(storageControllerProvider.notifier)
-          .importLocal(File(_modelPath));
+          .importLocal(model.picked);
       final storage = await container.read(storageControllerProvider.future);
       expect(
         storage.installed.map((m) => m.repoId),

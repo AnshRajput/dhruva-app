@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/failures/app_failure.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:drift/native.dart';
@@ -9,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+import '../../../support/fake_model_native.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
@@ -27,11 +30,14 @@ class _FakePathProvider extends PathProviderPlatform
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late Directory tempDir;
   late ProviderContainer container;
+  late FakeModelNative native;
 
   setUp(() {
+    native = FakeModelNative();
     db = AppDatabase(NativeDatabase.memory());
     tempDir = Directory.systemTemp.createTempSync('dhruva_storage_ctrl_test_');
     PathProviderPlatform.instance = _FakePathProvider(tempDir.path);
@@ -39,6 +45,7 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+        modelFileChannelProvider.overrideWithValue(native.install()),
       ],
     );
   });
@@ -164,32 +171,76 @@ void main() {
     expect(state.actionError, isNotNull);
   });
 
-  test('importLocal() validates, copies, and registers a GGUF', () async {
-    await container.read(storageControllerProvider.future);
-    final source = File('${tempDir.path}/source.gguf')
-      ..writeAsBytesSync([0x47, 0x47, 0x55, 0x46, 1, 2, 3]);
+  test(
+    'pick + importLocal() validates, copies, and registers a GGUF',
+    () async {
+      await container.read(storageControllerProvider.future);
+      native.pickFile(
+        File('${tempDir.path}/source.gguf')
+          ..writeAsBytesSync([0x47, 0x47, 0x55, 0x46, 1, 2, 3]),
+        name: 'source.gguf',
+      );
+      final notifier = container.read(storageControllerProvider.notifier);
 
-    await container
-        .read(storageControllerProvider.notifier)
-        .importLocal(source);
+      final picked = await notifier.pickModelFile();
+      await notifier.importLocal(picked!);
 
-    final state = container.read(storageControllerProvider).value!;
-    expect(state.installed, hasLength(1));
-    expect(state.installed.single.repoId, 'local/source');
-    expect(state.actionError, isNull);
-  });
+      final state = container.read(storageControllerProvider).value!;
+      expect(state.installed, hasLength(1));
+      expect(state.installed.single.repoId, 'local/source');
+      expect(state.actionError, isNull);
+    },
+  );
 
   test('importLocal() surfaces a typed failure for a non-GGUF file', () async {
     await container.read(storageControllerProvider.future);
-    final source = File('${tempDir.path}/not-gguf.gguf')
-      ..writeAsBytesSync([0, 0, 0, 0]);
+    native.pickFile(
+      File('${tempDir.path}/not-gguf.gguf')..writeAsBytesSync([0, 0, 0, 0]),
+      name: 'not-gguf.gguf',
+    );
+    final notifier = container.read(storageControllerProvider.notifier);
 
-    await container
-        .read(storageControllerProvider.notifier)
-        .importLocal(source);
+    await notifier.importLocal((await notifier.pickModelFile())!);
 
     final state = container.read(storageControllerProvider).value!;
     expect(state.installed, isEmpty);
-    expect(state.actionError, isNotNull);
+    expect(state.actionError, isA<StorageCorruptFileFailure>());
+  });
+
+  test('pickModelFile() rejects a non-.gguf name with a typed error', () async {
+    await container.read(storageControllerProvider.future);
+    native.pickFile(
+      File('${tempDir.path}/notes.txt')..writeAsBytesSync([1]),
+      name: 'notes.txt',
+    );
+    final notifier = container.read(storageControllerProvider.notifier);
+
+    expect(await notifier.pickModelFile(), isNull);
+    expect(
+      container.read(storageControllerProvider).value!.actionError,
+      isA<StorageCorruptFileFailure>(),
+    );
+  });
+
+  test('pickModelFile() is null when the picker is cancelled', () async {
+    await container.read(storageControllerProvider.future);
+    native.pickResult = null;
+    final notifier = container.read(storageControllerProvider.notifier);
+    expect(await notifier.pickModelFile(), isNull);
+    expect(
+      container.read(storageControllerProvider).value!.actionError,
+      isNull,
+    );
+  });
+
+  test('a picker failure is surfaced, not thrown', () async {
+    await container.read(storageControllerProvider.future);
+    native.pickError = 'no_picker';
+    final notifier = container.read(storageControllerProvider.notifier);
+    expect(await notifier.pickModelFile(), isNull);
+    expect(
+      container.read(storageControllerProvider).value!.actionError,
+      isA<StorageIoFailure>(),
+    );
   });
 }

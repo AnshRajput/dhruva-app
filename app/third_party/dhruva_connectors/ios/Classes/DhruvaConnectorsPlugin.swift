@@ -17,7 +17,11 @@ public class DhruvaConnectorsPlugin: NSObject, FlutterPlugin, UIDocumentPickerDe
       name: "app.dhruva/connectors", binaryMessenger: registrar.messenger())
     let instance = DhruvaConnectorsPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
+    instance.modelImport = ModelImport(messenger: registrar.messenger())
   }
+
+  /// Sideloaded-GGUF picker + streaming copy (channel `app.dhruva/model_import`).
+  private var modelImport: ModelImport?
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any]

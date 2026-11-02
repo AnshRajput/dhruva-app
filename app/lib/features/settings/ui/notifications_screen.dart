@@ -123,10 +123,14 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               key: const ValueKey('download-alerts-switch'),
               icon: Icons.download_outlined,
               title: 'Download alerts',
-              subtitle:
-                  'Tell me when a model finishes or fails. A progress '
-                  'notification still shows while it downloads, so your phone '
-                  'keeps it running.',
+              // The progress-notification sentence is Android only: it is
+              // the foreground-service notification that keeps a download
+              // alive there. iOS has no such thing.
+              subtitle: Theme.of(context).platform == TargetPlatform.iOS
+                  ? 'Tell me when a model finishes or fails.'
+                  : 'Tell me when a model finishes or fails. A progress '
+                        'notification still shows while it downloads, so your '
+                        'phone keeps it running.',
               value: alerts,
               onChanged: (v) =>
                   ref.read(downloadNotificationsProvider.notifier).set(v),

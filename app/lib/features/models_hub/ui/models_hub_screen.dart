@@ -6,20 +6,16 @@
 /// `core/router/app_shell.dart`).
 library;
 
-import 'dart:io';
-
 // Deliberate, documented exception to ADR-002's "no plugin imports in
 // features/": file picking is a pure UI/platform concern with no business
 // logic — the picked `XFile`'s path is handed straight to
 // `StorageController.importLocal`, which is the only place that touches
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
 // concern, out of scope").
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
@@ -39,6 +35,45 @@ import '../widgets/curated_tab.dart';
 import '../widgets/installed_model_menu.dart';
 import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
+
+/// An app-bar action with a visible label (the bare globe and arrow read as
+/// nothing), plus a tooltip and the same words for screen readers. With large
+/// system text there is no room for the words, so it falls back to the icon
+/// alone (still tooltipped and labelled).
+class _BarAction extends StatelessWidget {
+  const _BarAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final large = MediaQuery.textScalerOf(context).scale(14) > 18;
+    if (large) {
+      return IconButton(
+        icon: Icon(icon),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      );
+    }
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
 
 class ModelsHubScreen extends StatelessWidget {
   /// Which tab to open on. Deep-linked callers (e.g. hands-free's "Set up
@@ -60,14 +95,16 @@ class ModelsHubScreen extends StatelessWidget {
           actions: [
             // Parity row 37: advanced Hugging Face search must be findable
             // without scrolling to the foot of Discover.
-            IconButton(
+            _BarAction(
               key: const ValueKey('models-hf-search'),
-              icon: const Icon(Icons.travel_explore),
+              icon: Icons.travel_explore,
+              label: 'Search',
               tooltip: 'Search all of Hugging Face (advanced)',
               onPressed: () => context.push('/models/search'),
             ),
-            IconButton(
-              icon: const Icon(Icons.download_outlined),
+            _BarAction(
+              icon: Icons.download_outlined,
+              label: 'Downloads',
               tooltip: 'Downloads',
               onPressed: () => context.push('/models/downloads'),
             ),
@@ -483,18 +520,17 @@ class _InstalledBody extends ConsumerWidget {
   }
 
   Future<void> _importFile(BuildContext context, WidgetRef ref) async {
-    const typeGroup = XTypeGroup(label: 'GGUF', extensions: ['gguf']);
-    final picked = await openFile(acceptedTypeGroups: [typeGroup]);
-    if (picked == null) return;
     final notifier = ref.read(storageControllerProvider.notifier);
-    if (await notifier.importExists(p.basename(picked.path))) {
+    final picked = await notifier.pickModelFile();
+    if (picked == null) return;
+    if (await notifier.importExists(picked.name)) {
       if (!context.mounted) return;
       final replace = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Model already imported'),
           content: Text(
-            '${p.basename(picked.path)} is already on this device. Replace '
+            '${picked.name} is already on this device. Replace '
             'it with the selected file?',
           ),
           actions: [
@@ -511,7 +547,7 @@ class _InstalledBody extends ConsumerWidget {
       );
       if (replace != true) return;
     }
-    await notifier.importLocal(File(picked.path));
+    await notifier.importLocal(picked);
   }
 }
 

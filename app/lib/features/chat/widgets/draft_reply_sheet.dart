@@ -24,6 +24,8 @@ import '../../../core/di/library_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart' show AskSource, AskSourceX;
+import '../state/ask_selection.dart';
 import '../state/chat_controller.dart';
 import '../state/message_info_x.dart';
 
@@ -103,9 +105,21 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
     if (!mounted) return;
     final now = ref.read(chatControllerProvider(widget.args)).value;
     final fresh = now == null ? null : latestReply(now);
+    // A rewrite that failed (or echoed the instruction) leaves the draft as
+    // it was; it never fills the field with anything but a finished reply.
+    final failed =
+        now != null &&
+        now.visibleMessages
+                .lastWhere(
+                  (m) => m.role == MessageRole.assistant,
+                  orElse: () => reply,
+                )
+                .status ==
+            MessageStatus.error;
+    if (failed) _toast("That didn't work. Try again.");
     setState(() {
       _rewriting = false;
-      if (fresh != null && fresh.content.trim().isNotEmpty) {
+      if (!failed && fresh != null && fresh.content.trim().isNotEmpty) {
         _ctrl.text = fresh.content.trim();
       }
     });
@@ -166,6 +180,13 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
     final canOpen =
         (widget.args.sourcePackage ?? '').isNotEmpty && _ctrl.text.isNotEmpty;
     final empty = _ctrl.text.trim().isEmpty;
+    final selection = ref.watch(askSelectionProvider(widget.args)).selection;
+    final pinned = selection.auto
+        ? const <String>[]
+        : [
+            for (final s in AskSource.values)
+              if (selection.pinned.contains(s)) s.label,
+          ];
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
@@ -308,6 +329,18 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
             SizedBox(height: tokens.spacing.sm),
             Text(
               'Nothing is sent. You edit it, then send it yourself.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            // N1: the draft reads your calendar, files or contacts only when
+            // you pinned them; otherwise it is written from the message alone.
+            Text(
+              key: const ValueKey('draft-sources-note'),
+              pinned.isEmpty
+                  ? 'Written from this message only.'
+                  : 'Also uses your ${pinned.join(', ')}, which you chose.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,

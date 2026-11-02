@@ -133,12 +133,7 @@ void main() {
 
     testWidgets('"All actions" opens the Actions list', (tester) async {
       await pumpDhruvaApp(tester);
-      // The row scrolls horizontally; bring the last chip into view.
-      await tester.drag(
-        find.byKey(const ValueKey('today-quick-actions')),
-        const Offset(-1200, 0),
-      );
-      await tester.pumpAndSettle();
+      // The row wraps, so the last chip is on screen without scrolling it.
       await tester.tap(find.byKey(const ValueKey('today-action-all')));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(AppBar, 'Actions'), findsOneWidget);

@@ -10,6 +10,8 @@ import 'package:dhruva/features/settings/ui/about_screen.dart';
 import 'package:dhruva/features/settings/ui/notifications_screen.dart';
 import 'package:dhruva/features/settings/ui/privacy_screen.dart';
 import 'package:dhruva/features/settings/ui/settings_screen.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -338,6 +340,28 @@ void main() {
       await tester.tap(row);
       await tester.pumpAndSettle();
       expect(prefs.values['download_notifications'], 'false');
+    });
+  });
+
+  group('Notifications copy by platform', () {
+    testWidgets('iOS has no foreground-service progress sentence', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await pump(tester, const NotificationsScreen());
+      expect(
+        find.textContaining('Tell me when a model finishes'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('keeps it running'), findsNothing);
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('Android keeps it', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await pump(tester, const NotificationsScreen());
+      expect(find.textContaining('keeps it running'), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
     });
   });
 

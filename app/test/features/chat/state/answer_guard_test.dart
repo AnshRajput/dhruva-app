@@ -1,5 +1,6 @@
 // A reply that echoes the grounded prompt is detected; real answers are not.
 
+import 'package:dhruva/core/actions/action_prompt.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart' show askInstruction;
 import 'package:dhruva/data/connectors/sources_block.dart' show sourcesPreamble;
 import 'package:dhruva/features/chat/state/answer_guard.dart';
@@ -50,5 +51,92 @@ void main() {
       isFalse,
     );
     expect(isScaffoldEcho('', prompt: prompt), isFalse);
+  });
+
+  group('isActionEcho', () {
+    final fixGrammar = actionSystemPrompt(
+      title: 'Fix grammar',
+      instruction:
+          'Fix the grammar and spelling of the text.\n'
+          'The text is inside <text> tags. Reply with only the result.',
+    );
+    // The system layer as it shipped when the on-device gate caught the echo.
+    final shipped = actionSystemPrompt(
+      title: 'Fix grammar',
+      instruction:
+          'Fix the grammar and spelling of the text.\n'
+          "The user's next message is the text to work on.",
+    );
+
+    test('the exact text the 0.5B model echoed on-device', () {
+      const echoed = "The user's next message is the text to work on.";
+      expect(isActionEcho(echoed, shipped), isTrue);
+      expect(isActionEcho(echoed, fixGrammar), isTrue);
+    });
+
+    test('meta-sentences and instruction lines, alone or inside a reply', () {
+      expect(isActionEcho('The text to work on.', shipped), isTrue);
+      expect(
+        isActionEcho(
+          'Sure. Fix the grammar and spelling of the text. Done.',
+          fixGrammar,
+        ),
+        isTrue,
+      );
+      expect(
+        isActionEcho('The text is inside <text> tags.', fixGrammar),
+        isTrue,
+      );
+      expect(
+        isActionEcho(
+          'Fix the grammar and spelling of the text. The text is inside text '
+          'tags. Reply with only the result.',
+          fixGrammar,
+        ),
+        isTrue,
+      );
+    });
+
+    test('a real result is not an echo', () {
+      expect(
+        isActionEcho('I am going to the market tomorrow.', fixGrammar),
+        isFalse,
+      );
+      expect(isActionEcho('', fixGrammar), isFalse);
+    });
+
+    test('words the user wrote themselves are exempt', () {
+      const user = 'Notes: the text to work on is the intro, fix it.';
+      expect(
+        isActionEcho(
+          'Notes: the text to work on is the intro, fix it.',
+          shipped,
+          userText: user,
+        ),
+        isFalse,
+      );
+    });
+
+    test('only action chats are checked', () {
+      expect(
+        isActionEcho(
+          "The user's next message is the text to work on.",
+          'You are a chef.',
+        ),
+        isFalse,
+      );
+    });
+
+    test('the Draft reply instruction is guarded too', () {
+      final s = draftReplySystemPrompt('Warm');
+      expect(
+        isActionEcho(
+          'Write a Warm reply to the message inside the <text> tags.',
+          s,
+        ),
+        isTrue,
+      );
+      expect(isActionEcho('Sure, Friday works. Thanks!', s), isFalse);
+    });
   });
 }
