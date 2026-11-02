@@ -275,7 +275,7 @@ void main() {
       expect(_key('connector-calendar-action'), findsOneWidget);
     });
 
-    testWidgets('"Disconnect and open system settings" wipes the copy and '
+    testWidgets('"Disconnect and open Settings" wipes the copy and '
         'calls the OS deep link', (tester) async {
       final ui = await connectedCalendar(tester);
       await tester.tap(_key('connector-disconnect'));

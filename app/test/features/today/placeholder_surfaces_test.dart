@@ -206,7 +206,7 @@ void main() {
       ]) {
         final btn = find.byKey(ValueKey(key));
         expect(btn, findsOneWidget, reason: key);
-        expect(tester.widget<FilledButton>(btn).onPressed, isNotNull);
+        expect(tester.widget<TextButton>(btn).onPressed, isNotNull);
       }
     });
 
