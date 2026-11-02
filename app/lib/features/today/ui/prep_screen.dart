@@ -182,7 +182,7 @@ class _PrepBody extends ConsumerWidget {
               key: ValueKey('prep-file-${f.id}'),
               icon: Icons.description_outlined,
               title: f.title.isEmpty ? 'Untitled' : f.title,
-              subtitle: 'Mentions this meeting or the people in it',
+              subtitle: 'Possibly related',
               onTap: () =>
                   unawaited(context.push(askNewLocation(focus: [f.id]))),
             ),
@@ -226,7 +226,7 @@ class _PrepBody extends ConsumerWidget {
               onPressed: () => unawaited(
                 context.push(
                   askNewLocation(
-                    q: 'What should I raise in ${event.title}?',
+                    q: 'What should I raise in this meeting?',
                     sources: {
                       AskSource.calendar,
                       AskSource.contacts,

@@ -24,6 +24,7 @@ import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart';
 import '../../../data/library/todo_parser.dart';
+import '../state/answer_guard.dart';
 import '../state/ask_selection.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
@@ -524,7 +525,18 @@ class _ThreadScaffold extends ConsumerWidget {
     int index, {
     bool canReplaceSelection = false,
   }) {
-    final message = visible[index];
+    var message = visible[index];
+    // Render-time scaffold guard: a reply that parrots the sources prompt
+    // (saved before the guard, or reopened) shows the plain notice, not the
+    // app's own instructions or a raw dump.
+    if (message.role == MessageRole.assistant &&
+        message.status != MessageStatus.error &&
+        isScaffoldEcho(message.content)) {
+      message = message.copyWith(
+        content: echoNotice,
+        status: MessageStatus.complete,
+      );
+    }
     if (message.role == MessageRole.assistant &&
         message.status == MessageStatus.error &&
         message.content.trim().isEmpty) {

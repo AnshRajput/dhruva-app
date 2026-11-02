@@ -501,6 +501,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// can be recognised ([isScaffoldEcho]); null when ungrounded.
   String? _activePrompt;
 
+  /// The reply parroted the grounded prompt: the thread shows [echoNotice]
+  /// instead, live and at completion, whatever the stop reason.
+  bool _echoBlocked = false;
+
   @override
   Future<ChatThreadState> build() async {
     _lease = ref.read(engineLeaseProvider);
@@ -1438,6 +1442,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _seedRaw = continued == null ? '' : _seedFor(continued);
     _rawBuffer = '';
     _outputBlocked = false;
+    _echoBlocked = false;
     _pushedContent = continued?.content ?? '';
     _pushedReasoning = continued?.reasoningContent ?? '';
     _reasoningStartedAt = null;
@@ -1571,6 +1576,21 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       _seedRaw = '';
       _rawBuffer = SafetyGuard.blockedNotice;
       split = splitThinkContent(_rawBuffer);
+    }
+
+    // Scaffold echo (the model repeats the sources prompt/rows): swap the
+    // stream for the plain notice as soon as it is recognisable, and stop
+    // generating the rest of the dump.
+    if (!_outputBlocked &&
+        !_echoBlocked &&
+        _activePrompt != null &&
+        isScaffoldEcho(split.content, prompt: _activePrompt)) {
+      _echoBlocked = true;
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_echoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent(echoNotice);
     }
 
     if (_reasoningStartedAt == null &&
@@ -1726,7 +1746,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _flush(isFinal: true);
     final id = _activeAssistantId;
     if (id == null) return;
-    final status = _outputBlocked
+    // `_flush(isFinal)` above already swapped an echoed reply for the notice,
+    // so it counts as a finished (not stopped/truncated) answer.
+    final status = _outputBlocked || _echoBlocked
         ? MessageStatus.complete
         : switch (event.reason) {
             EngineStopReason.cancelled => MessageStatus.cancelled,
@@ -1743,18 +1765,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
     final current = state.value;
     if (current == null) return;
-    var answer = _pushedContent;
-    // A reply that parrots the sources prompt is no answer: say so plainly and
-    // keep the source chips (the notice cites nothing, so the top items show).
-    final echoed =
-        _activePrompt != null &&
-        status == MessageStatus.complete &&
-        isScaffoldEcho(answer, prompt: _activePrompt);
-    if (echoed) {
-      answer = echoNotice;
-      _pushedContent = echoNotice;
-      unawaited(_repo.setStreamingContent(id, content: echoNotice));
-    }
+    // A reply that parrots the sources prompt is no answer: it is already the
+    // plain notice here; the source chips stay (the notice cites nothing, so
+    // the top items show).
+    final answer = _pushedContent;
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
         : citedSources(answer, _activeSources);
@@ -1859,6 +1873,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _activeSources = const [];
     _activePrompt = null;
     _outputBlocked = false;
+    _echoBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';
