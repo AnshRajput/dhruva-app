@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
@@ -226,7 +227,9 @@ class _ContactsHint extends ConsumerWidget {
             onPressed: () async {
               final c = entry.connector;
               if (denied) {
-                await c.openSystemSettings();
+                await ref
+                    .read(connectorActionsProvider)
+                    .openSystemSettings(c.id);
                 return;
               }
               await c.connect();

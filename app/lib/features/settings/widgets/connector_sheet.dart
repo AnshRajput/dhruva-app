@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/folder_index_status.dart';
@@ -140,7 +141,7 @@ class _ConnectorSheetState extends ConsumerState<ConnectorSheet> {
     final status = entry?.status ?? ConnectorStatus.notConnected;
     final line = statusLine(
       status,
-      when: (d) => ledgerWhen(d, DateTime.now(), (t) => clockText(context, t)),
+      when: (d) => shortWhen(d, DateTime.now(), (t) => clockText(context, t)),
     );
 
     return SingleChildScrollView(

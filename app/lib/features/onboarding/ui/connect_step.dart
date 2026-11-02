@@ -78,14 +78,8 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
     await connectAndSync(ref, id);
   }
 
-  Future<void> _openSettings(String id) async {
-    try {
-      final hub = await ref.read(connectorHubProvider.future);
-      await hub.byId(id)?.openSystemSettings();
-    } on Object {
-      // The row keeps saying what to do.
-    }
-  }
+  Future<void> _openSettings(String id) =>
+      ref.read(connectorActionsProvider).openSystemSettings(id);
 
   @override
   Widget build(BuildContext context) {

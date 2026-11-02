@@ -20,6 +20,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/next_step_card.dart';
@@ -439,7 +440,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
     final line = (summary != null && summary.isNotEmpty)
         ? summary
         : item.body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final when = inboxWhen(
+    final when = shortWhen(
       item.when,
       DateTime.now(),
       (d) => MaterialLocalizations.of(

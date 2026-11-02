@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/connector_actions.dart';
 import '../../../core/di/model_download.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -93,7 +94,9 @@ class _BriefCardState extends ConsumerState<BriefCard> {
             : denied!.detail!,
         actionLabel: 'Open settings',
         actionKey: const ValueKey('today-brief-open-settings'),
-        onAction: () => openCalendarSettings(ref),
+        onAction: () => ref
+            .read(connectorActionsProvider)
+            .openSystemSettings(ConnectorIds.calendar),
       );
     }
     if (facts.isEmpty && !(status?.isConnected ?? false)) {

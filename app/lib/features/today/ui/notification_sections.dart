@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/di/connector_actions.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/connector.dart';
@@ -136,7 +137,9 @@ class DigestCard extends ConsumerWidget {
               SizedBox(height: tokens.spacing.md),
               OutlinedButton(
                 key: const ValueKey('digest-open-settings'),
-                onPressed: entry.connector.openSystemSettings,
+                onPressed: () => ref
+                    .read(connectorActionsProvider)
+                    .openSystemSettings(ConnectorIds.notifications),
                 child: const Text('Open settings'),
               ),
             ],

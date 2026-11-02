@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -105,7 +106,7 @@ class InboxItemScreen extends ConsumerWidget {
             ),
             SizedBox(height: tokens.spacing.xs),
             Text(
-              '${item.appLabel} · ${inboxWhen(item.when, DateTime.now(), (_) => when)}',
+              '${item.appLabel} · ${shortWhen(item.when, DateTime.now(), (_) => when)}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

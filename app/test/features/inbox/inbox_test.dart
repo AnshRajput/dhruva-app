@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
+import 'package:dhruva/core/format/when.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/notification_queue.dart';
@@ -130,10 +131,10 @@ void main() {
       expect(avatarLetters('Google Calendar'), 'GC');
       expect(avatarLetters(''), '?');
       String clock(DateTime d) => '7:30';
-      expect(inboxWhen(DateTime(2026, 11, 2, 7, 30), now, clock), '7:30');
-      expect(inboxWhen(DateTime(2026, 11, 1, 20), now, clock), 'Yesterday');
-      expect(inboxWhen(DateTime(2026, 10, 30, 20), now, clock), 'Fri');
-      expect(inboxWhen(DateTime(2026, 10, 3, 20), now, clock), '3 Oct');
+      expect(shortWhen(DateTime(2026, 11, 2, 7, 30), now, clock), '7:30');
+      expect(shortWhen(DateTime(2026, 11, 1, 20), now, clock), 'Yesterday');
+      expect(shortWhen(DateTime(2026, 10, 30, 20), now, clock), 'Fri');
+      expect(shortWhen(DateTime(2026, 10, 3, 20), now, clock), '3 Oct');
     });
   });
 

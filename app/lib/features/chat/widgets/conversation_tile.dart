@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/format/when.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/conversation_list_controller.dart';
 
@@ -57,7 +58,7 @@ class ConversationTile extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          _relativeTime(conversation.updatedAt),
+          timeAgo(conversation.updatedAt),
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -184,12 +185,4 @@ class ConversationTile extends ConsumerWidget {
       folderId == _noFolderSentinel ? null : folderId,
     );
   }
-}
-
-String _relativeTime(DateTime time) {
-  final diff = DateTime.now().difference(time);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  return '${diff.inDays}d ago';
 }

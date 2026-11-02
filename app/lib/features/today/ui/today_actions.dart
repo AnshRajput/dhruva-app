@@ -102,15 +102,6 @@ Future<void> retryConnectorSync(BuildContext context, WidgetRef ref) async {
 Future<ConnectorStatus?> connectCalendar(WidgetRef ref) =>
     connectAndSync(ref, ConnectorIds.calendar);
 
-Future<void> openCalendarSettings(WidgetRef ref) async {
-  try {
-    final hub = await ref.read(connectorHubProvider.future);
-    await hub.calendar.openSystemSettings();
-  } on Object {
-    // Nothing more to do: the card keeps showing the fix in words.
-  }
-}
-
 /// "Prep" for a meeting: Ask (the one `/ask/new` mechanism) opens with the
 /// question typed for the user, Calendar + Contacts + Files pinned and the
 /// event focused. The event's own text stays out of the

@@ -79,35 +79,6 @@ List<AppFilter> appFilters(List<ConnectorItem> items) {
   return out;
 }
 
-/// "7:30" today (via [clock]), "Yesterday", a short weekday within a week,
-/// else "3 Nov".
-String inboxWhen(DateTime at, DateTime now, String Function(DateTime) clock) {
-  final days = DateTime(
-    now.year,
-    now.month,
-    now.day,
-  ).difference(DateTime(at.year, at.month, at.day)).inDays;
-  if (days <= 0) return clock(at);
-  if (days == 1) return 'Yesterday';
-  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  if (days < 7) return weekdays[at.weekday - 1];
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${at.day} ${months[at.month - 1]}';
-}
-
 /// Letters for the round avatar: the app label's first letter (two for a
 /// two-word label), upper-case.
 String avatarLetters(String label) {

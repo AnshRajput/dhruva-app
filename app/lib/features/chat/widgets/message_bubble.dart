@@ -15,6 +15,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart' show ItemSource;
@@ -344,7 +345,7 @@ class _MetadataRowState extends State<_MetadataRow> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
-          '${_relativeTime(message.createdAt)}'
+          '${timeAgo(message.createdAt)}'
           '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
           style: style,
         ),
@@ -488,14 +489,6 @@ class _EditAffordance extends StatelessWidget {
       ),
     );
   }
-}
-
-String _relativeTime(DateTime time) {
-  final diff = DateTime.now().difference(time);
-  if (diff.inSeconds < 60) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  return '${diff.inDays}d ago';
 }
 
 class _MarkdownBody extends StatelessWidget {

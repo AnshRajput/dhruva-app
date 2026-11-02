@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
@@ -116,7 +117,7 @@ class StatusText extends StatelessWidget {
 }
 
 String _whenText(BuildContext context, DateTime at) =>
-    ledgerWhen(at, DateTime.now(), (d) => clockText(context, d));
+    shortWhen(at, DateTime.now(), (d) => clockText(context, d));
 
 class _ConnectorRow extends ConsumerStatefulWidget {
   const _ConnectorRow({required this.entry});
