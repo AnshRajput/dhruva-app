@@ -192,6 +192,16 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   };
 }
 
+final _diskFull = RegExp(
+  r'ENOSPC|No space|Insufficient space',
+  caseSensitive: false,
+);
+final _networkDrop = RegExp(
+  r'java\.net\.|javax\.net\.|unexpected end of stream|ECONNRESET|EPIPE|ETIMEDOUT|'
+  r'ENETUNREACH|ECONNABORTED|connection (abort|reset)|timed? ?out|Unable to resolve host',
+  caseSensitive: false,
+);
+
 /// Plain words for a failed download. The plugin's own description is OS
 /// text ("unknown error", NSURLErrorDomain…) that tells a user nothing and
 /// gives them no next step.
@@ -204,7 +214,16 @@ String downloadErrorText(bg.TaskException e) => switch (e) {
   bg.TaskHttpException(:final httpResponseCode) when httpResponseCode > 0 =>
     'Hugging Face had a problem (error $httpResponseCode). Tap retry.',
   bg.TaskConnectionException() => kNoConnectionMessage,
-  bg.TaskFileSystemException() =>
-    "Couldn't save the file. Free up some space and tap retry.",
+  // The plugin (TaskRunner.setTaskException) labels EVERY java IOException
+  // that isn't a SocketException "fileSystem" — so a dropped transfer
+  // (UnknownHost, SocketTimeout, SSL, "unexpected end of stream") lands here
+  // with the java exception in `description`. Only the description can
+  // tell a full disk from a dead network.
+  bg.TaskFileSystemException(:final description) =>
+    _diskFull.hasMatch(description)
+        ? "Couldn't save the file. Free up some space and tap retry."
+        : _networkDrop.hasMatch(description)
+        ? kNoConnectionMessage
+        : "Couldn't save the file. Tap retry.",
   _ => "The download couldn't start. Tap retry.",
 };

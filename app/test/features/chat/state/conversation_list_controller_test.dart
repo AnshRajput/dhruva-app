@@ -38,6 +38,27 @@ void main() {
     },
   );
 
+  test('an untitled stub with no user message (character chat opened, never '
+      'sent) is not listed', () async {
+    final stub = await repo.createConversation();
+    await repo.appendMessage(
+      conversationId: stub,
+      role: MessageRole.assistant,
+      content: 'Hi, I am a character',
+    );
+    final real = await repo.createConversation();
+    await repo.appendMessage(
+      conversationId: real,
+      role: MessageRole.user,
+      content: 'hello',
+    );
+
+    final state = await container.read(
+      conversationListControllerProvider.future,
+    );
+    expect(state.conversations.map((c) => c.id), [real]);
+  });
+
   test('selectFolder scopes the conversation list', () async {
     final folderId = await repo.createFolder('Work');
     final inFolder = await repo.createConversation(

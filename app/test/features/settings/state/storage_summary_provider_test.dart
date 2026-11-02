@@ -8,6 +8,7 @@ library;
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:dhruva/features/settings/state/storage_summary_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,7 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late ProviderContainer container;
 
@@ -71,4 +73,28 @@ void main() {
       expect(summary.voiceBytes, 200);
     },
   );
+
+  test('follows the Models hub: a model installed later shows up without '
+      'reopening Settings', () async {
+    container.listen(storageSummaryProvider, (_, _) {});
+    expect((await container.read(storageSummaryProvider.future)).modelCount, 0);
+
+    await db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'r/b',
+            fileName: 'b.gguf',
+            sizeBytes: 50,
+            localPath: '/tmp/b.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+    // what the download-complete path does (app_shell / download controller)
+    container.invalidate(storageControllerProvider);
+
+    final summary = await container.read(storageSummaryProvider.future);
+    expect(summary.modelCount, 1);
+    expect(summary.totalBytes, 50);
+  });
 }
