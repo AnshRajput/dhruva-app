@@ -77,6 +77,10 @@ class FolderConnector extends BaseConnector {
       'The folder is no longer available. Choose it again to keep searching '
       'your files.';
 
+  /// How long a suspicious listing must keep proposing the same removal
+  /// before it is believed (M3).
+  static const _pruneHoldFor = Duration(hours: 1);
+
   String? _grantId(ConnectorAccount? a) => a?.config['grantId'] as String?;
 
   @override
@@ -212,7 +216,8 @@ class FolderConnector extends BaseConnector {
     // smaller listing is what a cloud provider that is offline or a partial
     // read looks like, and acting on it would wipe the whole index. Such a
     // listing removes nothing the first time; if the very same removal is
-    // proposed again at the next sync, it is believed.
+    // proposed again at a sync at least [_pruneHoldFor] later (an offline
+    // provider fails twice in a row minutes apart), it is believed.
     // ponytail: the native directory cap (5000 folders) cannot be seen from
     // here; the "much smaller" guard is what covers it. A native `partial`
     // flag on the listing would make this exact.
@@ -227,7 +232,13 @@ class FolderConnector extends BaseConnector {
             (rowsByFile.length >= 8 &&
                 staleFiles.length * 2 > rowsByFile.length));
     final hold = account.config['pruneHold'];
-    if (!suspicious || hold == staleFiles.length) {
+    final heldAt = account.config['pruneHoldAt'];
+    final believed =
+        hold == staleFiles.length &&
+        heldAt is int &&
+        store.now.millisecondsSinceEpoch - heldAt >=
+            _pruneHoldFor.inMilliseconds;
+    if (!suspicious || believed) {
       await store.removeByExternalIds(id, [
         for (final k in staleFiles) ...rowsByFile[k]!,
       ]);
@@ -235,7 +246,8 @@ class FolderConnector extends BaseConnector {
         await store.saveAccount(
           id,
           config: {...account.config, 'total': entries.length}
-            ..remove('pruneHold'),
+            ..remove('pruneHold')
+            ..remove('pruneHoldAt'),
           onlyIfExists: true,
         );
       }
@@ -246,6 +258,7 @@ class FolderConnector extends BaseConnector {
           ...account.config,
           'total': entries.length,
           'pruneHold': staleFiles.length,
+          'pruneHoldAt': store.now.millisecondsSinceEpoch,
         },
         onlyIfExists: true,
       );

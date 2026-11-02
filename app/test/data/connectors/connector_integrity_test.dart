@@ -15,13 +15,12 @@ import '../../support/fake_connector_sources.dart';
 void main() {
   late AppDatabase db;
   late ConnectorTestKit kit;
+  var now = DateTime.utc(2026, 11, 1, 8);
 
   setUp(() {
+    now = DateTime.utc(2026, 11, 1, 8);
     db = AppDatabase(NativeDatabase.memory());
-    kit = ConnectorTestKit.create(
-      db,
-      clock: () => DateTime.utc(2026, 11, 1, 8),
-    );
+    kit = ConnectorTestKit.create(db, clock: () => now);
     kit.folder.nextPick = const FolderGrant(id: 'tree:notes', name: 'Notes');
   });
   tearDown(() async {
@@ -111,11 +110,22 @@ void main() {
       expect(await kit.hub.store.countItems('folder'), 3);
     });
 
-    test('the same empty listing seen again is believed (the user really '
-        'emptied the folder)', () async {
+    test('the same empty listing seen again minutes later is still held '
+        '(an offline provider fails twice in a row)', () async {
       await indexed(3);
       kit.folder.entries.clear();
       await kit.hub.folder.indexNow();
+      now = now.add(const Duration(minutes: 10));
+      await kit.hub.folder.indexNow();
+      expect(await kit.hub.store.countItems('folder'), 3);
+    });
+
+    test('the same empty listing seen again an hour later is believed (the '
+        'user really emptied the folder)', () async {
+      await indexed(3);
+      kit.folder.entries.clear();
+      await kit.hub.folder.indexNow();
+      now = now.add(const Duration(hours: 1, minutes: 1));
       await kit.hub.folder.indexNow();
       expect(await kit.hub.store.countItems('folder'), 0);
     });
@@ -150,6 +160,7 @@ void main() {
       }
       await kit.hub.folder.indexNow();
       expect(await kit.hub.store.countItems('folder'), 10);
+      now = now.add(const Duration(hours: 2));
       await kit.hub.folder.indexNow();
       expect(await kit.hub.store.countItems('folder'), 2);
     });
