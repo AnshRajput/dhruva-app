@@ -42,6 +42,12 @@ String friendlyFailureMessage(AppFailure failure) {
 /// (e.g. `ErrorStateView`) can avoid stacking it under an identical title.
 const String kGenericFailureMessage = 'Something went wrong.';
 
+/// Plain words for "the phone has no connection". Shared by the HF client (a
+/// request that never connected) and the download backend (a transfer that
+/// lost its connection), so a download card reads the same either way.
+const String kNoConnectionMessage =
+    'No connection. Check your internet and tap retry.';
+
 /// For an arbitrary caught [Object] (e.g. from `AsyncValue.error`, which
 /// isn't statically known to carry an [AppFailure]): the typed message when
 /// it is one, a generic fallback otherwise.

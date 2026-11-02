@@ -1,6 +1,7 @@
 import 'package:background_downloader/background_downloader.dart' as bg;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../core/failures/failure_message.dart' show kNoConnectionMessage;
 import 'download_backend.dart';
 import 'download_notifications.dart';
 
@@ -202,8 +203,7 @@ String downloadErrorText(bg.TaskException e) => switch (e) {
     'Hugging Face refused this download. Pick another model.',
   bg.TaskHttpException(:final httpResponseCode) when httpResponseCode > 0 =>
     'Hugging Face had a problem (error $httpResponseCode). Tap retry.',
-  bg.TaskConnectionException() =>
-    'No connection. Check your internet and tap retry.',
+  bg.TaskConnectionException() => kNoConnectionMessage,
   bg.TaskFileSystemException() =>
     "Couldn't save the file. Free up some space and tap retry.",
   _ => "The download couldn't start. Tap retry.",
