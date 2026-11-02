@@ -245,7 +245,8 @@ void main() {
       );
       expect(
         _briefText(tester),
-        'Meera, your first meeting is Design sync at 9:30 AM with Ravi, '
+        // The greeting above already says the name: the brief doesn't repeat it.
+        'Your first meeting is Design sync at 9:30 AM with Ravi, '
         'Sana and Dev. You have 2 meetings today, from 9:30 AM to 12:00 PM. '
         'Ravi Menon on WhatsApp is waiting for a reply. You also have 7 other '
         'notifications: 4 from Swiggy and 3 from HDFC.',

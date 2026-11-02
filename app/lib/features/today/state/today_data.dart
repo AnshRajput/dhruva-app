@@ -219,7 +219,6 @@ final dayBriefProvider = Provider<DayBrief>((ref) {
     calendarConnected: calendar?.status.isConnected ?? false,
     calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
-    name: ref.watch(todayNameProvider),
     openTodos: ref.watch(openTodoCountProvider),
   );
 });

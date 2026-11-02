@@ -317,7 +317,10 @@ class _UpNextCard extends ConsumerWidget {
                             if (people.isNotEmpty)
                               Row(
                                 children: [
-                                  AvatarStack(people: people, showOverflow: false),
+                                  AvatarStack(
+                                    people: people,
+                                    showOverflow: false,
+                                  ),
                                   SizedBox(width: tokens.spacing.sm),
                                   Expanded(
                                     child: AttendeeLine(
