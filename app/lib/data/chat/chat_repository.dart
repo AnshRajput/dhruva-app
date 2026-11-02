@@ -268,6 +268,22 @@ final class ChatRepository {
     bool onlyUnfiled = false,
   }) async {
     final query = _db.select(_db.conversations);
+    // A character chat inserts its row (+ greeting) the moment it opens
+    // (chat_controller `_buildFromCharacter`), so leaving without sending
+    // used to leave an untitled stub in the list. A conversation only
+    // "exists" for the user once it has a title or a user message.
+    query.where(
+      (t) =>
+          t.title.equals('').not() |
+          existsQuery(
+            _db.selectOnly(_db.messages)
+              ..addColumns([_db.messages.id])
+              ..where(
+                _db.messages.conversationId.equalsExp(t.id) &
+                    _db.messages.role.equalsValue(MessageRole.user),
+              ),
+          ),
+    );
     if (onlyUnfiled) {
       query.where((t) => t.folderId.isNull());
     } else if (folderId != null) {
