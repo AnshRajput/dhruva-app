@@ -101,6 +101,9 @@ abstract final class AppTheme {
         scrolledUnderElevation: tokenElevation[1].dp,
         titleTextStyle: textTheme.titleLarge,
         systemOverlayStyle: overlayStyleFor(brightness),
+        // Left-aligned on every platform: iOS centred some bars (Library) and
+        // left-aligned others (Today, Ask).
+        centerTitle: false,
       ),
       cardTheme: CardThemeData(
         elevation: tokenElevation[1].dp,

@@ -67,3 +67,58 @@ class NextStepCard extends StatelessWidget {
     );
   }
 }
+
+/// A quiet empty state for a section that sits under others: one muted line
+/// and a text action, no card and no filled button. Four identical
+/// icon + paragraph + button cards in a row read as a wall of tutorials; the
+/// section that matters (the folder) keeps the loud treatment, the rest stay
+/// out of the way until they have something to show. Still always ends in a
+/// working next action.
+class QuietNextStep extends StatelessWidget {
+  const QuietNextStep({
+    super.key,
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.onAction,
+    this.actionKey,
+  });
+
+  final String title;
+  final String body;
+  final String actionLabel;
+  final VoidCallback onAction;
+  final Key? actionKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall),
+                Text(
+                  body,
+                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: tokens.spacing.sm),
+          TextButton(
+            key: actionKey,
+            onPressed: onAction,
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
