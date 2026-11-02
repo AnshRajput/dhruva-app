@@ -208,6 +208,30 @@ void main() {
       await settle(tester);
       expect(find.text('Calendar access is off'), findsOneWidget);
     });
+
+    todayTest('once access is off the header, Up next and the timeline stop '
+        'counting the meetings the store still holds', (tester) async {
+      final h = await pumpToday(tester, seed: _seedDay);
+      expect(
+        find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
+        findsOneWidget,
+      );
+      h.kit.calendar.perm = DevicePermission.denied;
+      await h.kit.hub.calendar.refreshStatus();
+      await settle(tester);
+      expect(find.textContaining('meetings'), findsNothing);
+      expect(find.textContaining('2 meeting'), findsNothing);
+      expect(find.text('Monday 2 November · 1 reply waiting'), findsOneWidget);
+      expect(find.text('Up next'), findsNothing);
+      // Granting it again brings the day back without a re-sync.
+      h.kit.calendar.perm = DevicePermission.granted;
+      await h.kit.hub.calendar.refreshStatus();
+      await settle(tester);
+      expect(
+        find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
+        findsOneWidget,
+      );
+    });
   });
 
   group('brief: written by rules', () {

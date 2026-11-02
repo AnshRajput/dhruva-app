@@ -74,15 +74,37 @@ final connectorsLoadedProvider = Provider<bool>(
   (ref) => ref.watch(connectorListProvider).hasValue,
 );
 
+/// True once calendar access is off (the phone's settings took it back, or it
+/// was never given): events the store still holds from before are stale, so
+/// every Today surface reads none, derived from the live connector status
+/// rather than from what happens to be stored. Unknown (the list is still
+/// loading) and a failed read keep what is there.
+final calendarOffProvider = Provider<bool>((ref) {
+  final state = ref.watch(
+    connectorListProvider.select(
+      (v) => v.value
+          ?.where((e) => e.connector.id == ConnectorIds.calendar)
+          .firstOrNull
+          ?.status
+          .state,
+    ),
+  );
+  return state == ConnectorState.permissionDenied ||
+      state == ConnectorState.notConnected;
+});
+
 /// Events on the local calendar day of [todayClockProvider]; re-queried when
-/// the date changes.
+/// the date changes. None while calendar access is off.
 final todayEventsProvider = StreamProvider<List<ConnectorItem>>((ref) {
+  if (ref.watch(calendarOffProvider)) return Stream.value(const []);
   final store = ref.watch(connectorStoreProvider);
   return store.watchTodaysEvents(ref.watch(todayDayProvider));
 });
 
 /// The next two events from now (today or later), refreshed as time passes.
+/// None while calendar access is off.
 final upNextEventsProvider = StreamProvider<List<ConnectorItem>>((ref) {
+  if (ref.watch(calendarOffProvider)) return Stream.value(const []);
   final store = ref.watch(connectorStoreProvider);
   return store.watchNextEvents(ref.watch(nowProvider));
 });
