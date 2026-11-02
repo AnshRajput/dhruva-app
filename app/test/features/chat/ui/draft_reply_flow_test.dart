@@ -118,7 +118,7 @@ void main() {
     expect(turns.first.role, EngineRole.system);
     expect(turns.first.content, contains('Write a Warm reply'));
     expect(turns.last.role, EngineRole.user);
-    expect(turns.last.content, _message);
+    expect(turns.last.content, wrapActionText(_message));
 
     // The sheet opened by itself with the reply, editable.
     expect(find.byKey(const ValueKey('draft-sheet')), findsOneWidget);
@@ -134,6 +134,8 @@ void main() {
     for (final t in ['Short', 'Warm', 'Formal']) {
       expect(find.byKey(ValueKey('draft-tone-$t')), findsOneWidget);
     }
+    // N1: nothing of the user's calendar/files/contacts was searched.
+    expect(find.text('Written from this message only.'), findsOneWidget);
     expect(find.text('Open in WhatsApp'), findsOneWidget);
     expect(find.byKey(const ValueKey('draft-copy')), findsOneWidget);
     expect(find.byKey(const ValueKey('draft-share')), findsOneWidget);

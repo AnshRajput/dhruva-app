@@ -486,6 +486,7 @@ class _ThreadScaffold extends ConsumerWidget {
                   : _SearchInRow(
                       args: args,
                       hasDocuments: state.documents.isNotEmpty,
+                      isAction: actionTitleOf(state.systemPrompt) != null,
                     ),
               initialText: args.initialDraft,
               onChanged: (text) =>
@@ -547,6 +548,27 @@ class _ThreadScaffold extends ConsumerWidget {
       message = message.copyWith(
         content: echoNotice,
         status: MessageStatus.complete,
+      );
+    }
+    // Same for an Action reply that is its own instruction (saved before the
+    // live guard): a retry card, so no Replace / Edit draft / Copy is offered.
+    if (message.role == MessageRole.assistant &&
+        message.id != state.streamingMessageId &&
+        message.status != MessageStatus.error &&
+        isActionEcho(
+          message.content,
+          state.systemPrompt,
+          userText: visible
+              .firstWhere(
+                (m) => m.role == MessageRole.user,
+                orElse: () => message,
+              )
+              .content,
+        )) {
+      message = message.copyWith(
+        content: '',
+        status: MessageStatus.error,
+        errorKind: actionEchoErrorKind,
       );
     }
     if (message.role == MessageRole.assistant &&
@@ -978,8 +1000,21 @@ class _ThreadScaffold extends ConsumerWidget {
   List<String> focusTitles,
   AskSelectionNotifier notifier,
 })
-_searchInData(WidgetRef ref, ChatRouteArgs args, bool hasDocuments) {
-  final picked = ref.watch(askSelectionProvider(args));
+_searchInData(
+  WidgetRef ref,
+  ChatRouteArgs args,
+  bool hasDocuments, {
+  bool isAction = false,
+}) {
+  var picked = ref.watch(askSelectionProvider(args));
+  // An Action never auto-grounds (the controller skips it): its chip reads
+  // "None" until the user pins a source themselves.
+  if (isAction && picked.selection.auto) {
+    picked = AskSelectionState(
+      selection: const AskSourceSelection(auto: false),
+      draft: picked.draft,
+    );
+  }
   final connectors = ref.watch(askConnectorsProvider);
   final names = ref.watch(askContactNamesProvider).value ?? const <String>[];
   final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
@@ -1018,11 +1053,16 @@ _searchInData(WidgetRef ref, ChatRouteArgs args, bool hasDocuments) {
 class _SearchInRow extends ConsumerWidget {
   final ChatRouteArgs args;
   final bool hasDocuments;
-  const _SearchInRow({required this.args, required this.hasDocuments});
+  final bool isAction;
+  const _SearchInRow({
+    required this.args,
+    required this.hasDocuments,
+    this.isAction = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final d = _searchInData(ref, args, hasDocuments);
+    final d = _searchInData(ref, args, hasDocuments, isAction: isAction);
     if (d.chips.isEmpty && d.focusTitles.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1040,8 +1080,11 @@ class _SearchInRow extends ConsumerWidget {
             context: context,
             showDragHandle: true,
             useSafeArea: true,
-            builder: (_) =>
-                _SearchInSheet(args: args, hasDocuments: hasDocuments),
+            builder: (_) => _SearchInSheet(
+              args: args,
+              hasDocuments: hasDocuments,
+              isAction: isAction,
+            ),
           ),
         ),
       ),
@@ -1053,13 +1096,18 @@ class _SearchInRow extends ConsumerWidget {
 class _SearchInSheet extends ConsumerWidget {
   final ChatRouteArgs args;
   final bool hasDocuments;
-  const _SearchInSheet({required this.args, required this.hasDocuments});
+  final bool isAction;
+  const _SearchInSheet({
+    required this.args,
+    required this.hasDocuments,
+    this.isAction = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final d = _searchInData(ref, args, hasDocuments);
+    final d = _searchInData(ref, args, hasDocuments, isAction: isAction);
     return SingleChildScrollView(
       key: const ValueKey('sources-sheet'),
       padding: EdgeInsets.fromLTRB(
@@ -1078,8 +1126,11 @@ class _SearchInSheet extends ConsumerWidget {
           ),
           SizedBox(height: tokens.spacing.xs),
           Text(
-            'Auto picks from your question. Tap sources to choose them '
-            'yourself.',
+            isAction
+                ? 'This works on your text only. Tap a source to add it '
+                      'yourself.'
+                : 'Auto picks from your question. Tap sources to choose them '
+                      'yourself.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

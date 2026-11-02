@@ -130,6 +130,16 @@ ChatErrorContent chatErrorContentFor(
         primaryAction: ChatRecoveryAction.retry,
         primaryLabel: 'Retry',
       );
+    // An Action whose reply was its own instruction (answer_guard.dart
+    // `isActionEcho`). Plain words, one way out.
+    case 'ActionEchoFailure':
+      return const ChatErrorContent(
+        message:
+            "That didn't work. The model repeated its instructions instead "
+            'of doing the task. Nothing was changed. Try again.',
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Try again',
+      );
     case 'EngineDecodeFailure':
     case 'EngineValidationFailure':
       return const ChatErrorContent(

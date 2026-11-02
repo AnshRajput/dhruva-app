@@ -39,7 +39,7 @@ const draftTones = ['Short', 'Warm', 'Formal'];
 
 /// The instruction for a drafted reply in [tone].
 String draftReplyInstruction(String tone) =>
-    'Write a $tone reply to the message the user sends. Answer every '
+    'Write a $tone reply to the message inside the <text> tags. Answer every '
     'question and request in it. Keep it brief and ready to send. Output only '
     'the reply, no preamble and no explanation.';
 
@@ -57,6 +57,20 @@ String draftToneOf(String systemPrompt) {
   final t = m?.group(1);
   return t != null && draftTones.contains(t) ? t : 'Warm';
 }
+
+// ---- user text delimiters ----------------------------------------------------
+
+final _textTag = RegExp('</?text>', caseSensitive: false);
+
+/// The user turn of an action chat: [text] between `<text>` tags, so a small
+/// model can tell the material from the instruction (which lives only in the
+/// system layer) and does not echo it. Tags inside [text] are dropped so it
+/// cannot close the block early.
+String wrapActionText(String text) =>
+    '<text>\n${text.replaceAll(_textTag, '').trim()}\n</text>';
+
+/// [reply] without any `<text>` tags the model copied into its answer.
+String stripActionDelimiters(String reply) => reply.replaceAll(_textTag, '');
 
 // ---- omissions -------------------------------------------------------------
 

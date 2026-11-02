@@ -52,7 +52,8 @@ void main() {
       expect(i, isNot(contains('{')), reason: w.id);
       expect(i, isNot(contains('Text:')), reason: w.id);
       if (w.id != 'draft_reply') {
-        expect(i, contains("user's next message"), reason: w.id);
+        expect(i, contains('<text> tags'), reason: w.id);
+        expect(i, isNot(contains('next message')), reason: w.id);
       }
     }
     expect(
@@ -61,7 +62,7 @@ void main() {
     );
     expect(
       workflowInstruction(byId('draft_reply'), 'Short'),
-      contains('Write a Short reply to the message the user sends'),
+      contains('Write a Short reply to the message inside the <text> tags'),
     );
   });
 
