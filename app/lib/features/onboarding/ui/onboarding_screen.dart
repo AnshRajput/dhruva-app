@@ -261,6 +261,65 @@ class _WelcomeStep extends StatelessWidget {
   }
 }
 
+/// Model cards shown before "Other models": the pick plus two alternatives.
+const _upFront = 3;
+
+/// The model cards: [_upFront] of them, then "Other models" for the rest. A
+/// selected model is never hidden, and the choice to expand survives rebuilds.
+class _ModelList extends StatefulWidget {
+  const _ModelList({
+    required this.models,
+    required this.active,
+    required this.recommended,
+    required this.totalRamBytes,
+    required this.onSelect,
+  });
+
+  final List<StarterModel> models;
+  final StarterModel active;
+  final StarterModel recommended;
+  final int? totalRamBytes;
+  final ValueChanged<StarterModel> onSelect;
+
+  @override
+  State<_ModelList> createState() => _ModelListState();
+}
+
+class _ModelListState extends State<_ModelList> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    final models = widget.models;
+    final hiddenSelected = models
+        .skip(_upFront)
+        .any((m) => m.repoId == widget.active.repoId);
+    final showAll = _expanded || hiddenSelected;
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        for (final m in showAll ? models : models.take(_upFront)) ...[
+          _ModelOption(
+            model: m,
+            selected: m.repoId == widget.active.repoId,
+            recommended: m.repoId == widget.recommended.repoId,
+            totalRamBytes: widget.totalRamBytes,
+            onTap: () => widget.onSelect(m),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+        ],
+        if (!showAll && models.length > _upFront)
+          TextButton(
+            key: const ValueKey('onboarding-other-models'),
+            onPressed: () => setState(() => _expanded = true),
+            child: const Text('Other models'),
+          ),
+      ],
+    );
+  }
+}
+
 class _PickStep extends ConsumerWidget {
   const _PickStep({
     required this.selected,
@@ -322,18 +381,16 @@ class _PickStep extends ConsumerWidget {
             ),
           ),
           SizedBox(height: tokens.spacing.lg),
+          // The recommended pick and two alternatives; the rest sit behind
+          // "Other models" (seven identical cards was a wall of choices for a
+          // first-time user). A selected model is never hidden.
           Expanded(
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: models.length,
-              separatorBuilder: (_, _) => SizedBox(height: tokens.spacing.sm),
-              itemBuilder: (context, i) => _ModelOption(
-                model: models[i],
-                selected: models[i].repoId == active.repoId,
-                recommended: models[i].repoId == recommended.repoId,
-                totalRamBytes: ram,
-                onTap: () => onSelect(models[i]),
-              ),
+            child: _ModelList(
+              models: models,
+              active: active,
+              recommended: recommended,
+              totalRamBytes: ram,
+              onSelect: onSelect,
             ),
           ),
           SizedBox(height: tokens.spacing.md),
@@ -342,7 +399,9 @@ class _PickStep extends ConsumerWidget {
             child: FilledButton.icon(
               icon: const Icon(Icons.download_outlined, size: 18),
               onPressed: () => onDownload(active),
-              label: Text('Download ${active.displayName}'),
+              // The chosen model is the highlighted card above; the button
+              // says what it costs instead of repeating a long model name.
+              label: Text('Download · ${_formatBytes(active.approxSizeBytes)}'),
             ),
           ),
           SizedBox(height: tokens.spacing.sm),
@@ -452,7 +511,10 @@ class _ModelOption extends StatelessWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        if (tier != null) ...[
+                        // "Runs great" on every card says nothing: it shows on
+                        // the recommended pick, and any warning always shows.
+                        if (tier != null &&
+                            (recommended || tier != ModelTier.comfortable)) ...[
                           SizedBox(width: tokens.spacing.sm),
                           Text(
                             '·  ${_tierLabel(tier)}',
