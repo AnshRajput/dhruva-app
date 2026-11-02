@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/dhruva_theme_extension.dart';
+import '../widgets/dhruva_sheet.dart';
 import 'prefs_store.dart';
 
 const whatMovedDismissedKey = 'what_moved_dismissed';
@@ -78,7 +79,7 @@ class _WhatMovedGateState extends ConsumerState<WhatMovedGate> {
     _shown = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await showModalBottomSheet<void>(
+      await showDhruvaSheet<void>(
         context: context,
         isScrollControlled: true,
         showDragHandle: true,

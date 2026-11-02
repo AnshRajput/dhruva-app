@@ -692,8 +692,12 @@ class _CitedTextState extends State<CitedText> {
           children: [
             Text.rich(
               text,
+              // Only cap lines when collapsed AND truncated; an ellipsis
+              // combined with maxLines: null clips the brief to one line.
               maxLines: _expanded || !overflows ? null : _briefCollapsedLines,
-              overflow: TextOverflow.ellipsis,
+              overflow: _expanded || !overflows
+                  ? TextOverflow.clip
+                  : TextOverflow.ellipsis,
             ),
             if (overflows)
               Semantics(

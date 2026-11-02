@@ -195,7 +195,8 @@ class _GalleryBody extends ConsumerWidget {
       onRefresh: () =>
           ref.read(charactersControllerProvider.notifier).refresh(),
       child: ListView(
-        padding: EdgeInsets.all(tokens.spacing.md),
+        // Bottom room so the extended Create FAB never covers the last row.
+        padding: EdgeInsets.all(tokens.spacing.md).copyWith(bottom: 96),
         children: [
           if (mine.isNotEmpty) ...[
             heading('Yours'),
