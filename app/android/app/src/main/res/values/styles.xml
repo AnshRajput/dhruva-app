@@ -15,4 +15,9 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
+    <!-- ProcessTextActivity draws nothing: it forwards the selected text to
+         MainActivity and waits (invisibly) for the optional replacement. -->
+    <style name="TrampolineTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

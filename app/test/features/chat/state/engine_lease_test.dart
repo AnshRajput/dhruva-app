@@ -8,7 +8,6 @@ import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
-import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:dhruva/engine_bindings/engine_service.dart';
