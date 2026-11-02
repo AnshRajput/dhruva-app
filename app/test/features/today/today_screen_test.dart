@@ -394,6 +394,25 @@ void main() {
       expect(h.writer.prompts, isEmpty);
     });
 
+    todayTest('a download whose bytes are all here says Finishing up, never '
+        '100%', (tester) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+        download: const DownloadProgress(
+          taskId: 't',
+          repoId: 'org/model',
+          fileName: 'm.gguf',
+          state: DownloadState.running,
+          downloadedBytes: 1000,
+          totalBytes: 1000,
+        ),
+      );
+      expect(find.text('Finishing up…'), findsOneWidget);
+      expect(find.textContaining('100%'), findsNothing);
+    });
+
     todayTest('a cached brief from before the check (v1) is never shown', (
       tester,
     ) async {

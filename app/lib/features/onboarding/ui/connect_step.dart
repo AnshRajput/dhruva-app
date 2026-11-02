@@ -336,10 +336,13 @@ class _DownloadStrip extends ConsumerWidget {
     final failed = status == OnboardingDownloadStatus.failed;
     final done = status == OnboardingDownloadStatus.installed;
     final pct = ((dl?.progress ?? 0) * 100).round();
+    final finishing = dl?.finishing ?? false;
     final label = failed
         ? "Download didn't finish. ${dl?.errorMessage ?? ''}".trim()
         : done
         ? 'Your model is ready.'
+        : finishing
+        ? 'Finishing up…'
         : pct > 0
         ? 'Your model is downloading in the background · $pct%'
         : 'Getting your model ready in the background…';

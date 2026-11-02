@@ -22,10 +22,20 @@ bool _active(DownloadProgress p) =>
       DownloadState.canceled => false,
     };
 
-/// 0..1, or null while the total is unknown.
+/// True once every byte is here but the model is not yet registered (hashing
+/// the file, then writing its row): "100%" would be a promise the app cannot
+/// keep for another moment, so every download surface says "Finishing up…".
+bool downloadFinishing(DownloadProgress p) {
+  if (p.state == DownloadState.verifying) return true;
+  final t = p.totalBytes;
+  return t != null && t > 0 && p.downloadedBytes >= t;
+}
+
+/// 0..1 while bytes are still arriving; null while the total is unknown or the
+/// download is [downloadFinishing] (show an indeterminate bar, not 100%).
 double? downloadFraction(DownloadProgress p) {
   final t = p.totalBytes;
-  if (t == null || t <= 0) return null;
+  if (t == null || t <= 0 || downloadFinishing(p)) return null;
   return (p.downloadedBytes / t).clamp(0.0, 1.0);
 }
 

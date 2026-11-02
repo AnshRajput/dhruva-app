@@ -18,13 +18,14 @@ class ModelDownloadLine extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final f = downloadFraction(progress);
+    final finishing = downloadFinishing(progress);
     final pct = f == null ? '' : ' · ${(f * 100).round()}%';
     final transfer = progress.transferLabel;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Downloading your model$pct',
+          finishing ? 'Finishing up…' : 'Downloading your model$pct',
           key: const ValueKey('model-download-label'),
           style: theme.textTheme.titleSmall,
         ),
