@@ -847,5 +847,9 @@ class _RecordingSummarizer
   @override
   void dispose() {}
   @override
+  void setVisible(Object owner, bool visible) {}
+  @override
+  void forget(Object owner) {}
+  @override
   List<int> get done => const [];
 }

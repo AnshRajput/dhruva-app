@@ -161,6 +161,8 @@ class PlaygroundController extends Notifier<PlaygroundState> {
     final lease = ref.read(engineLeaseProvider);
     if (lease.speedTestRunning) return;
     lease.chatEnter();
+    // Chat-class user: background work (brief, inbox summaries) yields first.
+    await lease.preemptBackground();
     _aborted = false;
     // Model B waits its turn while A loads + streams (single-session, ADR-001),
     // so mark it queued rather than idle/"Ready" — it never reads as inert.

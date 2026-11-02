@@ -4,8 +4,10 @@
 ///  - only for rows currently on screen (a row asks when it is built and
 ///    withdraws when it goes away), never in bulk;
 ///  - only while the app is in the foreground (a backgrounded app stops, and
-///    resumes on return);
-///  - never while a chat or a speed test holds the engine;
+///    resumes on return) AND the Inbox is the visible screen (the tab branch
+///    stays mounted off screen, so rows alone prove nothing);
+///  - never while a chat or a speed test holds the engine, and it yields
+///    within about a second when chat asks for it (the engine lease);
 ///  - one at a time, cached in `items.summary`, so each row is summarised once.
 ///
 /// The notification text is untrusted: it goes to the model only inside the
@@ -64,6 +66,34 @@ class InboxSummarizer with WidgetsBindingObserver {
   bool _paused = false;
   bool _disposed = false;
   Timer? _retry;
+  BackgroundHold? _hold;
+
+  // Which Inbox screens are on top right now (H2). Hidden owners count only
+  // when no screen is shown, and with no screen registered at all the
+  // summarizer is not held back (the rows that call it exist only inside one).
+  final _shown = <Object>{};
+  final _hidden = <Object>{};
+  bool get _visible => _shown.isNotEmpty || _hidden.isEmpty;
+
+  /// An Inbox screen ([owner]) became the visible route, or stopped being it
+  /// (another tab, covered). Hidden: stop writing now; visible: resume.
+  void setVisible(Object owner, bool visible) {
+    if (_disposed) return;
+    (visible ? _hidden : _shown).remove(owner);
+    (visible ? _shown : _hidden).add(owner);
+    if (visible) {
+      unawaited(_pump());
+    } else if (!_visible && _running) {
+      _cancelOwn();
+    }
+  }
+
+  /// The screen is gone for good.
+  void forget(Object owner) {
+    _shown.remove(owner);
+    _hidden.remove(owner);
+    if (!_visible && _running) _cancelOwn();
+  }
 
   /// Failed tries per row; a row is given up on after [_maxTries].
   final _tries = <int, int>{};
@@ -91,7 +121,7 @@ class InboxSummarizer with WidgetsBindingObserver {
   /// or a chat on top of the Inbox, which now needs the engine).
   void pause() {
     _paused = true;
-    if (_running) unawaited(_ref.read(engineServiceProvider).cancel());
+    if (_running) _cancelOwn();
   }
 
   void resume() {
@@ -104,7 +134,7 @@ class InboxSummarizer with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       unawaited(_pump());
     } else if (_running) {
-      unawaited(_ref.read(engineServiceProvider).cancel());
+      _cancelOwn();
     }
   }
 
@@ -122,18 +152,19 @@ class InboxSummarizer with WidgetsBindingObserver {
     final engine = _ref.read(engineServiceProvider);
     final lease = _ref.read(engineLeaseProvider);
     try {
-      while (_wanted.isNotEmpty && !_disposed && !_paused && _isForeground()) {
-        if (lease.chatBusy || lease.speedTestRunning) {
-          // The engine is in use: try again shortly instead of queueing up.
-          _retry?.cancel();
-          _retry = Timer(const Duration(seconds: 10), () => unawaited(_pump()));
+      while (_canWork) {
+        // One background claim per row, taken synchronously (no gap for chat
+        // to slip into). Refused while chat or a speed test has the engine.
+        final hold = lease.tryEnterBackground(() => unawaited(engine.cancel()));
+        if (hold == null) {
+          _retryLater();
           break;
         }
+        _hold = hold;
         // The row stays wanted until it is written or given up on: a
-        // summary cut short (app backgrounded, row opened) or a failed one is
-        // tried again, not lost for the rest of the session.
+        // summary cut short (app backgrounded, row opened, chat started) or a
+        // failed one is tried again, not lost for the rest of the session.
         final item = _wanted.values.first;
-        lease.chatEnter();
         var failed = false;
         try {
           final models = await _ref
@@ -141,6 +172,10 @@ class InboxSummarizer with WidgetsBindingObserver {
               .listTextModels();
           if (models.isEmpty) {
             _wanted.clear(); // nothing to write with: rows keep their text
+            break;
+          }
+          if (hold.preempted) {
+            _retryLater();
             break;
           }
           final model = models.first;
@@ -151,11 +186,21 @@ class InboxSummarizer with WidgetsBindingObserver {
               model.localPath,
               params: EngineLoadParams(mmprojPath: model.mmprojPath),
             );
+            weLoaded = true;
+            // Chat asked for the engine while this was loading: the load is
+            // left alone (chat's own load shares it) and nothing else is run.
+            if (hold.preempted) {
+              _retryLater();
+              break;
+            }
             await _ref.read(storageManagerProvider).touchLastUsed(model.id);
             _ref.read(loadedModelIdProvider.notifier).set(model.id);
-            weLoaded = true;
           }
           final text = await _summarise(engine, item);
+          if (hold.preempted) {
+            _retryLater(); // yielded to chat: not a failure, try again later
+            break;
+          }
           if (text != null && _wanted.containsKey(item.id)) {
             await _ref
                 .read(connectorStoreProvider)
@@ -163,19 +208,25 @@ class InboxSummarizer with WidgetsBindingObserver {
             done.add(item.id);
             _wanted.remove(item.id);
             _tries.remove(item.id);
-          } else if (text == null && !_paused && _isForeground()) {
+          } else if (text == null && _canWork) {
             failed = true; // empty output (not a pause or a backgrounding)
           }
         } catch (e) {
           // A failed, cancelled or timed-out summary leaves the raw text
-          // showing; make sure the engine is not left generating.
+          // showing; make sure our own generation is not left running (never
+          // chat's: after a preempt the engine is not ours to cancel).
           debugPrint('InboxSummarizer: $e');
+          if (hold.preempted) {
+            _retryLater();
+            break;
+          }
           failed = true;
           try {
             await engine.cancel();
           } catch (_) {}
         } finally {
-          lease.chatLeave();
+          _hold = null;
+          hold.release();
         }
         if (failed) {
           final n = (_tries[item.id] ?? 0) + 1;
@@ -183,11 +234,7 @@ class InboxSummarizer with WidgetsBindingObserver {
           if (n >= _maxTries) {
             _wanted.remove(item.id);
           } else if (_wanted.containsKey(item.id)) {
-            _retry?.cancel();
-            _retry = Timer(
-              const Duration(seconds: 10),
-              () => unawaited(_pump()),
-            );
+            _retryLater();
           }
           break; // later rows wait for the retry; no hot loop on a bad model
         }
@@ -196,12 +243,37 @@ class InboxSummarizer with WidgetsBindingObserver {
       _running = false;
       // Do not hold a model in memory just because the Inbox was opened; a
       // model somebody else loaded is left alone.
-      if (weLoaded && _wanted.isEmpty && !lease.chatBusy) {
+      if (weLoaded &&
+          _wanted.isEmpty &&
+          !lease.chatBusy &&
+          !lease.speedTestRunning) {
         try {
           await engine.unload();
           _ref.read(loadedModelIdProvider.notifier).set(null);
         } catch (_) {}
       }
+    }
+  }
+
+  /// Work may run: something is wanted, the Inbox is the visible screen, the
+  /// app is resumed, and nobody paused us.
+  bool get _canWork =>
+      _wanted.isNotEmpty &&
+      !_disposed &&
+      !_paused &&
+      _visible &&
+      _isForeground();
+
+  void _retryLater() {
+    _retry?.cancel();
+    _retry = Timer(const Duration(seconds: 10), () => unawaited(_pump()));
+  }
+
+  /// Stops our own in-flight generation (never one that is no longer ours).
+  void _cancelOwn() {
+    final h = _hold;
+    if (h != null && !h.preempted) {
+      unawaited(_ref.read(engineServiceProvider).cancel());
     }
   }
 

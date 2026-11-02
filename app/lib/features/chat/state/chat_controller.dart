@@ -624,10 +624,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   Future<void> ensureModelLoaded() {
     return _loadInFlight ??= () {
       _lease.chatEnter();
-      return _ensureModelLoaded().whenComplete(() {
-        _loadInFlight = null;
-        _lease.chatLeave();
-      });
+      // H1: chat outranks background work (brief writer, inbox summaries):
+      // it is told to stop and given ~1 s to let go of the engine, so a send
+      // never meets "busy" and never starts a second load/generate.
+      return _lease
+          .preemptBackground()
+          .then((_) => _ensureModelLoaded())
+          .whenComplete(() {
+            _loadInFlight = null;
+            _lease.chatLeave();
+          });
     }();
   }
 
