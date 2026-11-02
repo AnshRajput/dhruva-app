@@ -15,6 +15,9 @@ import '../state/listing_download_controller.dart';
 import '../state/recommended_models_provider.dart';
 import 'curated_model_card.dart';
 
+/// Cards shown before "More models": the recommended pick plus two others.
+const _upFront = 3;
+
 class CuratedTab extends ConsumerWidget {
   const CuratedTab({super.key});
 
@@ -65,6 +68,28 @@ class CuratedTab extends ConsumerWidget {
         recommended != null &&
         listing?[recommended.repoId]?.status == ListingModelStatus.installed;
 
+    Widget fittingCard(StarterModel model) => Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.md,
+        vertical: tokens.spacing.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (identical(model, recommended) && !recommendedInstalled) ...[
+            _RecommendedBadge(),
+            SizedBox(height: tokens.spacing.xs),
+          ],
+          CuratedModelCard(
+            model: model,
+            totalRamBytes: ram,
+            // "Comfortable" once, on the recommended pick, not on every card.
+            hideComfortableVerdict: !identical(model, recommended),
+          ),
+        ],
+      ),
+    );
+
     return ListView(
       padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
       children: [
@@ -93,20 +118,18 @@ class CuratedTab extends ConsumerWidget {
             ],
           ),
         ),
-        for (final model in fitting)
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: tokens.spacing.md,
-              vertical: tokens.spacing.xs,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        // One recommended pick and two alternatives up front; the rest sit
+        // behind "More models" so Discover is not a wall of identical cards.
+        for (final model in fitting.take(_upFront)) fittingCard(model),
+        if (fitting.length > _upFront)
+          Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('discover-more-models'),
+              tilePadding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+              title: Text('More models', style: theme.textTheme.titleSmall),
               children: [
-                if (identical(model, recommended) && !recommendedInstalled) ...[
-                  _RecommendedBadge(),
-                  SizedBox(height: tokens.spacing.xs),
-                ],
-                CuratedModelCard(model: model, totalRamBytes: ram),
+                for (final model in fitting.skip(_upFront)) fittingCard(model),
               ],
             ),
           ),

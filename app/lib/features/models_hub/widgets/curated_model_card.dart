@@ -24,10 +24,16 @@ class CuratedModelCard extends ConsumerWidget {
   /// name/best-for/size without blocking on the verdict.
   final int? totalRamBytes;
 
+  /// Hide the verdict chip when it would only say "Comfortable": under a
+  /// "Runs great on your phone" heading, that word on every card carries no
+  /// signal. "Possible" and "Not recommended" always show.
+  final bool hideComfortableVerdict;
+
   const CuratedModelCard({
     super.key,
     required this.model,
     required this.totalRamBytes,
+    this.hideComfortableVerdict = false,
   });
 
   @override
@@ -115,7 +121,10 @@ class CuratedModelCard extends ConsumerWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        if (tier != null && ram != null)
+                        if (tier != null &&
+                            ram != null &&
+                            !(hideComfortableVerdict &&
+                                tier == ModelTier.comfortable))
                           ModelVerdictChip(
                             tier: tier,
                             fileSizeBytes: model.approxSizeBytes,

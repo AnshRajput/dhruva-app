@@ -15,6 +15,7 @@ import 'dart:io';
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
 // concern, out of scope").
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,6 +27,7 @@ import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../../../data/downloads/storage_manager.dart';
 import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../voice/voice_model_catalog.dart'
@@ -70,16 +72,64 @@ class ModelsHubScreen extends StatelessWidget {
               onPressed: () => context.push('/models/downloads'),
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Discover'),
-              Tab(text: 'Installed'),
-              Tab(text: 'Voice'),
-            ],
-          ),
+          // Rule 6: Material underline tabs on Android, a segmented control
+          // on iOS.
+          bottom: isCupertinoChrome(context)
+              ? const _CupertinoTabs()
+              : const TabBar(
+                  tabs: [
+                    Tab(text: 'Discover'),
+                    Tab(text: 'Installed'),
+                    Tab(text: 'Voice'),
+                  ],
+                ),
         ),
         body: const TabBarView(
           children: [CuratedTab(), _InstalledTab(), _VoiceTab()],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three tabs as an iOS segmented control, driven by the same
+/// `DefaultTabController` the `TabBarView` reads.
+class _CupertinoTabs extends StatelessWidget implements PreferredSizeWidget {
+  const _CupertinoTabs();
+
+  static const _labels = ['Discover', 'Installed', 'Voice'];
+
+  @override
+  Size get preferredSize => const Size.fromHeight(52);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: AnimatedBuilder(
+        animation: controller.animation!,
+        builder: (context, _) => CupertinoSlidingSegmentedControl<int>(
+          key: const ValueKey('models-tabs'),
+          groupValue: controller.index,
+          thumbColor: theme.colorScheme.primaryContainer,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          children: {
+            for (final (i, label) in _labels.indexed)
+              i: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+          },
+          onValueChanged: (i) {
+            if (i != null) controller.animateTo(i);
+          },
         ),
       ),
     );
