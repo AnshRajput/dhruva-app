@@ -90,6 +90,10 @@ class CuratedModelCard extends ConsumerWidget {
                           SizedBox(width: tokens.spacing.xs),
                           _VisionBadge(),
                         ],
+                        if (dl?.status == ListingModelStatus.installed) ...[
+                          SizedBox(width: tokens.spacing.xs),
+                          const _InstalledBadge(),
+                        ],
                       ],
                     ),
                     SizedBox(height: tokens.spacing.xs),
@@ -149,6 +153,43 @@ class CuratedModelCard extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Installed" state on a Discover card, so a model you already have never
+/// looks like one you still need to download.
+class _InstalledBadge extends StatelessWidget {
+  const _InstalledBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Container(
+      key: const ValueKey('curated-installed-badge'),
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.sm,
+        vertical: tokens.spacing.xs / 2,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.success.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(tokens.radius.full),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline, size: 12, color: tokens.success),
+          SizedBox(width: tokens.spacing.xs),
+          Text(
+            'Installed',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: tokens.success,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

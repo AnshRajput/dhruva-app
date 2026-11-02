@@ -168,7 +168,8 @@ class _ModelsRow extends ConsumerWidget {
       subtitle: switch (summary) {
         AsyncData(:final value) when value.modelCount > 0 =>
           '${value.modelCount} model${value.modelCount == 1 ? '' : 's'} · '
-              '${_formatBytes(value.totalBytes)} used',
+              '${_formatBytes(value.totalBytes)} used'
+              '${value.voiceBytes > 0 ? ' · voice ${_formatBytes(value.voiceBytes)}' : ''}',
         AsyncError() => "Couldn't read storage usage",
         _ => 'Discover, installed, speed test',
       },

@@ -47,10 +47,8 @@ String _freshCache() => jsonEncode(
 );
 
 /// The brief's sentences as plain text.
-String _briefText(WidgetTester tester) => tester
-    .widget<RichText>(_briefRichText)
-    .text
-    .toPlainText();
+String _briefText(WidgetTester tester) =>
+    tester.widget<RichText>(_briefRichText).text.toPlainText();
 
 // First RichText: a long brief also carries a "Read more" toggle after it.
 final _briefRichText = find

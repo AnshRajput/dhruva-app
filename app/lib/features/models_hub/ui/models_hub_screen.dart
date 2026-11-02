@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -55,6 +56,14 @@ class ModelsHubScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Models'),
           actions: [
+            // Parity row 37: advanced Hugging Face search must be findable
+            // without scrolling to the foot of Discover.
+            IconButton(
+              key: const ValueKey('models-hf-search'),
+              icon: const Icon(Icons.travel_explore),
+              tooltip: 'Search all of Hugging Face (advanced)',
+              onPressed: () => context.push('/models/search'),
+            ),
             IconButton(
               icon: const Icon(Icons.download_outlined),
               tooltip: 'Downloads',
@@ -93,21 +102,45 @@ class _VoiceTab extends ConsumerWidget {
       AsyncData(:final value) => ListView(
         children: [
           _VoiceBundleCard(states: value, onInstall: notifier.downloadBundle),
-          for (final role in VoiceModelRole.values) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                _roleLabel(role),
-                style: Theme.of(context).textTheme.labelLarge,
+          // The technical parts (model names, quantization, voice engines)
+          // live under Advanced; the primary surface stays plain words.
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('voice-advanced'),
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: Text(
+                'Advanced',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
+              subtitle: Text(
+                'Pick or remove individual voice models',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                for (final role in VoiceModelRole.values) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _roleLabel(role),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                  ),
+                  for (final s in value.where((s) => s.entry.role == role))
+                    VoiceModelTile(
+                      state: s,
+                      onDownload: () => notifier.download(s.entry),
+                      onDelete: () => notifier.delete(s.entry),
+                    ),
+                ],
+              ],
             ),
-            for (final s in value.where((s) => s.entry.role == role))
-              VoiceModelTile(
-                state: s,
-                onDownload: () => notifier.download(s.entry),
-                onDelete: () => notifier.delete(s.entry),
-              ),
-          ],
+          ),
         ],
       ),
       AsyncError(:final error) => ErrorStateView(
@@ -119,9 +152,9 @@ class _VoiceTab extends ConsumerWidget {
   }
 
   String _roleLabel(VoiceModelRole role) => switch (role) {
-    VoiceModelRole.vad => 'Turn-taking (required)',
-    VoiceModelRole.asr => 'Speech-to-text',
-    VoiceModelRole.tts => 'Text-to-speech voices',
+    VoiceModelRole.vad => 'Knows when you stop talking (required)',
+    VoiceModelRole.asr => 'Listens to you',
+    VoiceModelRole.tts => 'Speaks the answers',
   };
 }
 
@@ -179,7 +212,7 @@ class _VoiceBundleCard extends StatelessWidget {
                 SizedBox(width: tokens.spacing.sm),
                 Expanded(
                   child: Text(
-                    'Hands-free voice',
+                    'Talk hands-free',
                     style: theme.textTheme.titleMedium,
                   ),
                 ),
@@ -188,10 +221,9 @@ class _VoiceBundleCard extends StatelessWidget {
             SizedBox(height: tokens.spacing.xs),
             Text(
               allInstalled
-                  ? 'Everything hands-free needs is installed. You\'re ready '
-                        'to talk.'
-                  : 'Turn-taking, speech-to-text, and a voice — installed '
-                        'together in one tap.',
+                  ? 'Everything you need to talk is installed. You\'re ready.'
+                  : 'Talk to ${AppIdentity.shortName} and hear it answer, all on '
+                        'your phone. One tap installs everything.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -259,6 +291,8 @@ class _VoiceBundleCard extends StatelessWidget {
     );
   }
 }
+
+enum _ModelAction { chat, delete }
 
 class _InstalledTab extends ConsumerWidget {
   const _InstalledTab();
@@ -380,22 +414,33 @@ class _InstalledBody extends ConsumerWidget {
                     SpeedTestRow(model: m),
                   ],
                 ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Designer Phase B nit: the Installed tab was delete-only.
-                    // Add Chat (consistent with the Search tab's installed row)
-                    // carrying the model — `extra: <drift row id>` →
-                    // ChatRouteArgs.initialModelId — so it opens a LOADED chat.
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      tooltip: 'Chat',
-                      onPressed: () => context.push('/chat/new', extra: m.id),
+                // A LABELLED overflow instead of two bare icons side by side
+                // (wave 4: "chat" and "trash" next to each other, unlabelled).
+                // Chat carries the model (`extra: <drift row id>` →
+                // ChatRouteArgs.initialModelId) so it opens a LOADED chat.
+                trailing: PopupMenuButton<_ModelAction>(
+                  key: ValueKey('installed-menu-${m.id}'),
+                  tooltip: 'Model actions',
+                  onSelected: (a) => switch (a) {
+                    _ModelAction.chat => context.push('/chat/new', extra: m.id),
+                    _ModelAction.delete => _confirmDelete(context, ref, m),
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: _ModelAction.chat,
+                      child: ListTile(
+                        leading: Icon(Icons.chat_bubble_outline),
+                        title: Text('Chat'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete',
-                      onPressed: () => _confirmDelete(context, ref, m),
+                    PopupMenuItem(
+                      value: _ModelAction.delete,
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                   ],
                 ),
