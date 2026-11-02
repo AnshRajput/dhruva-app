@@ -40,6 +40,7 @@ void main() {
     await pumpDhruvaApp(
       tester,
       location: '/inbox',
+      stubConnectorList: false,
       overrides: [
         connectorHubProvider.overrideWith((ref) async {
           kit = ConnectorTestKit.create(ref.read(appDatabaseProvider));

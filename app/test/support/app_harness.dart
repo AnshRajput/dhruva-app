@@ -25,10 +25,14 @@ import 'mock_hf_client.dart';
 /// shows Today needs no OS connectors and leaves no drift timer behind (a live
 /// query leaves a zero-length timer when disposed, which fails a widget test).
 /// The Today tests use the real store instead, see test/features/today.
-List<Override> todayStubOverrides() => [
-  connectorListProvider.overrideWith(
-    (ref) => Stream.value(const <ConnectorEntry>[]),
-  ),
+///
+/// [connectorList] false keeps the real connector list, for a test that needs a
+/// connected source to show (the Inbox tab only exists while one is).
+List<Override> todayStubOverrides({bool connectorList = true}) => [
+  if (connectorList)
+    connectorListProvider.overrideWith(
+      (ref) => Stream.value(const <ConnectorEntry>[]),
+    ),
   todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
   upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
   notificationGroupsProvider.overrideWith((ref) => Stream.value(const [])),
@@ -59,6 +63,7 @@ Future<AppDatabase> pumpDhruvaApp(
   // Wide enough for flutter_test's Ahem font (much wider than Manrope).
   Size surface = const Size(800, 2400),
   bool settle = true,
+  bool stubConnectorList = true,
 }) async {
   await tester.binding.setSurfaceSize(surface);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -82,7 +87,7 @@ Future<AppDatabase> pumpDhruvaApp(
         // Drift live queries leave a zero-length timer when disposed, which
         // fails a widget test; Today's streams read as empty here (the Today
         // tests use the real store, see test/features/today).
-        ...todayStubOverrides(),
+        ...todayStubOverrides(connectorList: stubConnectorList),
         hfApiClientProvider.overrideWithValue(
           mockHfClient(MockClient((r) async => http.Response('[]', 200))),
         ),

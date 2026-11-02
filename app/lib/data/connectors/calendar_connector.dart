@@ -42,16 +42,7 @@ class CalendarConnector extends BaseConnector {
 
   @override
   Future<ConnectorStatus> evaluate(ConnectorAccount? account) async {
-    if (account == null) {
-      // The user said no in-app and is still deciding in system settings:
-      // keep saying what to do until the OS grants it, then fall back to
-      // "not connected" so the caller can connect without a prompt.
-      if (currentStatus.state == ConnectorState.permissionDenied &&
-          await source.permission() != DevicePermission.granted) {
-        return currentStatus;
-      }
-      return ConnectorStatus.notConnected;
-    }
+    if (account == null) return ConnectorStatus.notConnected;
     if (await source.permission() != DevicePermission.granted) {
       return ConnectorStatus(
         ConnectorState.permissionDenied,

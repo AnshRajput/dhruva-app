@@ -128,7 +128,17 @@ Future<_Pumped> _pumpFlow(
           controller ?? _StubDownloadController.new,
         ),
       ],
-      child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+      child: MaterialApp.router(
+        theme: AppTheme.dark,
+        routerConfig: router,
+        builder: (_, child) => Consumer(
+          builder: (context, ref, _) {
+            // The app-root resume hook main.dart has.
+            ref.watch(connectorResumeProvider);
+            return child!;
+          },
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -253,20 +263,32 @@ void main() {
       expect(find.text('chat-home'), findsOneWidget);
     });
 
-    testWidgets('permission denied: says what to do, Open settings works, '
-        'Not now still finishes', (tester) async {
+    testWidgets('first Deny: retry sentence and Allow stays; second Deny: '
+        'Open settings works, Not now still finishes', (tester) async {
       final p = await _pumpFlow(
         tester,
         controller: () => _DownloadResultController(_installed),
       );
-      p.kit.calendar.afterRequest = DevicePermission.denied;
+      // Android's first Deny: the system will still ask.
+      p.kit.calendar.afterRequest = DevicePermission.notDetermined;
       await _toConnect(tester);
       await tester.tap(find.byKey(const ValueKey('connect-allow')));
       await tester.pumpAndSettle();
       expect(
-        find.byKey(const ValueKey('connect-calendar-denied')),
+        find.textContaining(
+          "Calendar wasn't allowed. Tap Connect to try again",
+        ),
         findsOneWidget,
       );
+      expect(find.byKey(const ValueKey('connect-allow')), findsOneWidget);
+      expect(find.byKey(const ValueKey('connect-open-settings')), findsNothing);
+
+      // Second Deny: the system will not ask again.
+      p.kit.calendar.afterRequest = DevicePermission.denied;
+      await tester.tap(find.byKey(const ValueKey('connect-allow')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Calendar access is blocked'), findsOneWidget);
+      expect(find.byKey(const ValueKey('connect-allow')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('connect-open-settings')));
       await tester.pumpAndSettle();
       expect(p.kit.calendar.settingsOpened, 1);
@@ -276,7 +298,7 @@ void main() {
       expect(find.text('chat-home'), findsOneWidget);
     });
 
-    testWidgets('denied, then allowed in system settings: coming back moves '
+    testWidgets('blocked, then allowed in system settings: coming back moves '
         'on by itself, no second tap', (tester) async {
       final p = await _pumpFlow(
         tester,
@@ -286,10 +308,7 @@ void main() {
       await _toConnect(tester);
       await tester.tap(find.byKey(const ValueKey('connect-allow')));
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('connect-calendar-denied')),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Calendar access is blocked'), findsOneWidget);
 
       // Back from settings, still off: the fix stays on screen.
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);

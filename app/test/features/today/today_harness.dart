@@ -114,6 +114,14 @@ class TodayHarness {
   }
 }
 
+/// The app-root resume hook main.dart has (grants made in system settings).
+Widget withAppRootResume(Widget? child) => Consumer(
+  builder: (context, ref, _) {
+    ref.watch(connectorResumeProvider);
+    return child!;
+  },
+);
+
 /// Builds the app around Today. [home] defaults to Today; pass
 /// `const DayTimelineScreen()` for the timeline.
 Future<TodayHarness> pumpToday(
@@ -199,7 +207,11 @@ Future<TodayHarness> pumpToday(
         ),
         ...overrides,
       ],
-      child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+      child: MaterialApp.router(
+        theme: AppTheme.dark,
+        routerConfig: router,
+        builder: (_, child) => withAppRootResume(child),
+      ),
     ),
   );
   await settle(tester);

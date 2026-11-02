@@ -133,23 +133,49 @@ void main() {
       expect(find.text('Design sync'), findsWidgets);
     });
 
-    todayTest('permission denied: says so and offers Open settings', (
-      tester,
-    ) async {
+    todayTest('first Deny: retry sentence, Connect stays; second Deny: Open '
+        'settings', (tester) async {
       final h = await pumpToday(tester);
-      h.kit.calendar.afterRequest = DevicePermission.denied;
+      // Android's first Deny: the system will still ask.
+      h.kit.calendar.afterRequest = DevicePermission.notDetermined;
       await tester.tap(find.byKey(const ValueKey('today-brief-connect')));
       await settle(tester);
 
-      expect(find.text('Calendar access is off'), findsOneWidget);
+      expect(
+        find.textContaining(
+          "Calendar wasn't allowed. Tap Connect to try again",
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('today-brief-connect')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('today-brief-open-settings')),
+        findsNothing,
+      );
       expect(find.text('Up next'), findsNothing);
+
+      // A resume does not wipe the sentence.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await settle(tester);
+      expect(find.textContaining("Calendar wasn't allowed"), findsOneWidget);
+
+      // Second Deny: the system will not ask again.
+      h.kit.calendar.afterRequest = DevicePermission.denied;
+      await tester.tap(find.byKey(const ValueKey('today-brief-connect')));
+      await settle(tester);
+      expect(find.textContaining('Calendar access is blocked'), findsOneWidget);
+      expect(
+        find.textContaining('Open settings, allow Calendar'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('today-brief-connect')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('today-brief-open-settings')));
       await settle(tester);
       expect(h.kit.calendar.settingsOpened, 1);
     });
 
-    todayTest('denied, then allowed in system settings: coming back recovers '
-        'on its own', (tester) async {
+    todayTest('blocked, then allowed in system settings: coming back '
+        'recovers on its own', (tester) async {
       final h = await pumpToday(tester);
       h.kit.calendar.items = [
         calEvent('e1', title: 'Design sync', start: at(9, 30)),
@@ -157,17 +183,17 @@ void main() {
       h.kit.calendar.afterRequest = DevicePermission.denied;
       await tester.tap(find.byKey(const ValueKey('today-brief-connect')));
       await settle(tester);
-      expect(find.text('Calendar access is off'), findsOneWidget);
+      expect(find.textContaining('Calendar access is blocked'), findsOneWidget);
 
       // Back from settings, still off: the fix stays.
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await settle(tester);
-      expect(find.text('Calendar access is off'), findsOneWidget);
+      expect(find.textContaining('Calendar access is blocked'), findsOneWidget);
 
       h.kit.calendar.perm = DevicePermission.granted;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await settle(tester);
-      expect(find.text('Calendar access is off'), findsNothing);
+      expect(find.textContaining('Calendar access is blocked'), findsNothing);
       expect(find.text('Up next'), findsOneWidget);
       expect(find.text('Design sync'), findsWidgets);
     });

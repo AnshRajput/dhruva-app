@@ -36,34 +36,17 @@ class ConnectStep extends ConsumerStatefulWidget {
   ConsumerState<ConnectStep> createState() => _ConnectStepState();
 }
 
-class _ConnectStepState extends ConsumerState<ConnectStep>
-    with WidgetsBindingObserver {
+class _ConnectStepState extends ConsumerState<ConnectStep> {
   bool _busy = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  /// Back from system settings: re-read what the OS allows, and move on if
-  /// Calendar was just switched on (there is no pull-to-refresh here).
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    unawaited(
-      resumeConnectors(ref).then((granted) {
-        if (granted && mounted) unawaited(widget.onDone());
-      }),
-    );
-  }
+  /// Where the last tap on Allow ended when the system permission was not
+  /// granted (same as the Connectors row): the connector's own sentence, and
+  /// whether only system settings is left. Null after a grant. A blocked
+  /// Calendar that later connects (the app root finishes it on resume, after
+  /// the user allowed it in settings) moves on by itself.
+  ConnectorStatus? _denied;
+  bool _finished = false;
 
   ConnectorStatus? _status(String id) {
     final list = ref.watch(connectorListProvider).value ?? const [];
@@ -85,6 +68,9 @@ class _ConnectStepState extends ConsumerState<ConnectStep>
       if (status == null) {
         _error = "Couldn't reach your calendar. Try again in a moment.";
       }
+      _denied = status != null && status.detail != null && !status.isConnected
+          ? status
+          : null;
     });
   }
 
@@ -108,7 +94,22 @@ class _ConnectStepState extends ConsumerState<ConnectStep>
     final scheme = theme.colorScheme;
     final calendar = _status(ConnectorIds.calendar);
     final connected = calendar?.isConnected ?? false;
-    final denied = calendar?.state == ConnectorState.permissionDenied;
+    // The connector words every case. First Deny on Android: its retry
+    // sentence, Allow stays. Second Deny (or access switched off later): Open
+    // settings.
+    final denied = calendar?.state == ConnectorState.notConnected
+        ? _denied
+        : null;
+    final blocked =
+        (denied?.needsSettings ?? false) ||
+        calendar?.state == ConnectorState.permissionDenied;
+    final retryText = blocked || connected ? null : denied?.detail;
+    if (connected && (_denied?.needsSettings ?? false) && !_finished) {
+      _finished = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(widget.onDone());
+      });
+    }
     final notifications = _status(ConnectorIds.notifications);
 
     return SingleChildScrollView(
@@ -170,7 +171,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep>
               onPressed: () => widget.onDone(),
               child: const Text('Continue to Today'),
             ),
-          ] else if (denied) ...[
+          ] else if (blocked) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -178,7 +179,8 @@ class _ConnectStepState extends ConsumerState<ConnectStep>
                 SizedBox(width: tokens.spacing.sm),
                 Expanded(
                   child: Text(
-                    calendar?.detail ??
+                    denied?.detail ??
+                        calendar?.detail ??
                         'Calendar access is off. Open settings and allow '
                             'Calendar.',
                     key: const ValueKey('connect-calendar-denied'),
@@ -199,6 +201,23 @@ class _ConnectStepState extends ConsumerState<ConnectStep>
               child: const Text('Not now'),
             ),
           ] else ...[
+            if (retryText != null) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline, color: scheme.error, size: 20),
+                  SizedBox(width: tokens.spacing.sm),
+                  Expanded(
+                    child: Text(
+                      retryText,
+                      key: const ValueKey('connect-calendar-denied'),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.md),
+            ],
             FilledButton(
               key: const ValueKey('connect-allow'),
               onPressed: _busy ? null : _allow,
