@@ -1,7 +1,20 @@
-/// go_router setup. `/chat` is the app home (chat-spec.md §1: "the product's
-/// make-or-break feature and the MVP closer" — Loop 4). Characters (Loop 5),
-/// models hub, playground (UI-PARITY), and settings are the second through
-/// fifth bottom-nav destinations (`app_shell.dart`).
+/// go_router setup. `/today` is the app home (daily-assistant redesign). The
+/// shell has four branches: Today, Inbox (tab hidden until an inbox source
+/// exists), Ask (the old Chat tab) and Library. EVERYTHING else is a
+/// full-screen route outside the shell: Settings (opened from Today's gear),
+/// Actions (the old Workflows), Personas (the old Characters), the Models hub
+/// (now under Settings), Compare/AI news (the old Playground), chat threads.
+///
+/// Rule for callers: screens outside the shell must never `push` a
+/// shell-branch route (`/today`, `/inbox`, `/ask`, `/library`): that builds a
+/// second shell whose branch renders blank (the 0.6.0 bug: chat -> mic ->
+/// empty page). Use `go` to return to the shell, or push the full-screen
+/// equivalent (`/models/hub`, `/inbox/connect`). `test/core/router` sweeps
+/// `lib/` for violations.
+///
+/// Old routes keep working through [legacyRouteRedirect]: `/chat`,
+/// `/characters`, `/models`, `/playground`, `/workflows` redirect to their new
+/// homes (query strings preserved); `/chat/:id` is unchanged.
 ///
 /// Repo ids contain a `/` (`namespace/model-name`), so callers must
 /// percent-encode the id when pushing `/models/repo/:id` — `GoRoute`'s
@@ -17,22 +30,64 @@ import '../../features/characters/ui/characters_gallery_screen.dart';
 import '../../features/chat/state/chat_controller.dart';
 import '../../features/chat/ui/chat_thread_screen.dart';
 import '../../features/chat/ui/conversation_list_screen.dart';
+import '../../features/inbox/ui/inbox_item_screen.dart';
+import '../../features/inbox/ui/inbox_screen.dart';
+import '../../features/library/ui/file_search_screen.dart';
+import '../../features/library/ui/library_lists_screen.dart';
+import '../../features/library/ui/library_screen.dart';
 import '../../features/models_hub/ui/advanced_search_screen.dart';
 import '../../features/models_hub/ui/downloads_screen.dart';
 import '../../features/models_hub/ui/model_detail_screen.dart';
 import '../../features/models_hub/ui/models_hub_screen.dart';
+import '../../features/models_hub/widgets/download_status_pill.dart';
 import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
+import '../../features/settings/ui/about_me_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
+import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
+import '../../features/settings/ui/ledger_screen.dart';
+import '../../features/settings/ui/notifications_screen.dart';
+import '../../features/settings/ui/privacy_screen.dart';
 import '../../features/settings/ui/safety_screen.dart';
 import '../../features/settings/ui/settings_screen.dart';
+import '../../features/today/ui/day_timeline_screen.dart';
+import '../../features/today/ui/prep_screen.dart';
+import '../../features/today/ui/today_screen.dart';
 import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
 import 'app_shell.dart';
+import 'ask_route.dart';
+
+/// Maps a pre-redesign route to its new home, or null if [uri] is current.
+/// Pure so tests can pin every old route. Query strings are preserved
+/// (`/models?tab=voice`, `/workflows?text=...`).
+String? legacyRouteRedirect(Uri uri) {
+  final path = uri.path.length > 1 && uri.path.endsWith('/')
+      ? uri.path.substring(0, uri.path.length - 1)
+      : uri.path;
+  final query = uri.hasQuery ? '?${uri.query}' : '';
+  return switch (path) {
+    '/' => '/today',
+    '/chat' => '/ask',
+    '/characters' => '/personas',
+    '/models' => '/settings/models$query',
+    '/playground' => '/settings/models/compare$query',
+    '/workflows' => '/actions$query',
+    _ => null,
+  };
+}
+
+/// Locations that are shell branches. Navigating to one from outside the
+/// shell must use `go`, never `push` (see the library doc).
+bool isShellLocation(String location) {
+  final path = Uri.parse(location).path;
+  return const {'/today', '/inbox', '/ask', '/library'}.contains(path);
+}
 
 final appRouter = GoRouter(
-  initialLocation: '/chat',
+  initialLocation: '/today',
+  redirect: (context, state) => legacyRouteRedirect(state.uri),
   routes: [
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
@@ -41,7 +96,24 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/chat',
+              path: '/today',
+              builder: (context, state) =>
+                  const TodayScreen(statusPill: DownloadStatusPill()),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/inbox',
+              builder: (context, state) => const InboxScreen(),
+            ),
+          ],
+        ),
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/ask',
               builder: (context, state) => const ConversationListScreen(),
             ),
           ],
@@ -49,39 +121,118 @@ final appRouter = GoRouter(
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/characters',
-              builder: (context, state) => const CharactersGalleryScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/models',
-              // `?tab=voice` deep-links straight to the Voice tab (WS5:
-              // hands-free's "Set up voice" must land on voice models, not the
-              // default Discover tab — now the curated catalog, not a firehose).
-              builder: (context, state) => _modelsHub(state),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/playground',
-              builder: (context, state) => const PlaygroundScreen(),
-            ),
-          ],
-        ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/settings',
-              builder: (context, state) => const SettingsScreen(),
+              path: '/library',
+              builder: (context, state) => const LibraryScreen(),
             ),
           ],
         ),
       ],
+    ),
+    // Library sub-pages (full-screen, outside the shell): file search and the
+    // "See all" lists.
+    GoRoute(
+      path: '/library/search',
+      builder: (context, state) => const FileSearchScreen(),
+    ),
+    GoRoute(
+      path: '/library/documents',
+      builder: (context, state) => const DocumentsScreen(),
+    ),
+    GoRoute(
+      path: '/library/saved',
+      builder: (context, state) => const SavedScreen(),
+    ),
+    // Settings opens full-screen from the gear on Today.
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/connectors',
+      builder: (context, state) => const ConnectorsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/connectors/ledger',
+      builder: (context, state) => const LedgerScreen(),
+    ),
+    GoRoute(
+      path: '/settings/about-me',
+      builder: (context, state) => const AboutMeScreen(),
+    ),
+    GoRoute(
+      path: '/settings/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
+    GoRoute(
+      path: '/settings/privacy',
+      builder: (context, state) => const PrivacyScreen(),
+    ),
+    // Models hub now lives under Settings (full-screen). `/models` redirects
+    // here; `/models/hub` stays as the alias out-of-shell callers push.
+    GoRoute(
+      path: '/settings/models',
+      builder: (context, state) => _modelsHub(state),
+    ),
+    // Compare two models + AI news (the old Playground tab). `?tab=news`
+    // opens AI news.
+    GoRoute(
+      path: '/settings/models/compare',
+      builder: (context, state) => PlaygroundScreen(
+        initialTabIndex: state.uri.queryParameters['tab'] == 'news' ? 1 : 0,
+      ),
+    ),
+    // "Set up your inbox" from Today: the Inbox connect state as a full-screen
+    // route, so Today never pushes the shell's own /inbox branch.
+    GoRoute(
+      path: '/inbox/connect',
+      builder: (context, state) => const InboxScreen(standalone: true),
+    ),
+    // One notification in full (opened from an Inbox row).
+    GoRoute(
+      path: '/inbox/item/:id',
+      builder: (context, state) {
+        final id = int.tryParse(state.pathParameters['id']!);
+        return id == null
+            ? const InboxScreen(standalone: true)
+            : InboxItemScreen(itemId: id);
+      },
+    ),
+    // Rule-built meeting prep (no model): `/prep/<event item id>`.
+    GoRoute(
+      path: '/prep/:id',
+      builder: (context, state) =>
+          PrepScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? 0),
+    ),
+    GoRoute(
+      path: '/day',
+      builder: (context, state) => const DayTimelineScreen(),
+    ),
+    // Personas (the old Characters gallery), reached from Ask.
+    GoRoute(
+      path: '/personas',
+      builder: (context, state) => const CharactersGalleryScreen(),
+    ),
+    // A fresh Ask thread, optionally prefilled and with sources pinned:
+    // `/ask/new?q=Prep me for Budget review&sources=calendar,contacts,files`
+    // (contract + builder in `ask_route.dart`). Outside the shell, so callers
+    // `push` it. `extra` may carry an installed model id, like `/chat/new`.
+    GoRoute(
+      path: '/ask/new',
+      builder: (context, state) {
+        final q = parseAskNewQuery(
+          state.uri.queryParameters,
+          focus: state.uri.queryParametersAll['focus'] ?? const [],
+        );
+        return ChatThreadScreen(
+          args: ChatRouteArgs(
+            initialModelId: state.extra is int ? state.extra! as int : null,
+            initialDraft: q.draft,
+            initialSources: q.sources,
+            focusItemIds: q.focus,
+            about: q.about,
+          ),
+        );
+      },
     ),
     GoRoute(
       path: '/chat/:id',
@@ -111,6 +262,10 @@ final appRouter = GoRouter(
           // first turn auto-sends — a query param, like `characterId`, so
           // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
           final promptParam = state.uri.queryParameters['prompt'];
+          // Actions: the instruction rides in the system prompt (`asys`), the
+          // user's text is `prompt`; `pkg` / `app` name the message's source
+          // app so a drafted reply can offer "Open in <app>".
+          final actionSystem = state.uri.queryParameters['asys'];
           // Android widget "Talk" (IntentInbox route `talk`): open hands-free
           // voice as soon as the new chat is ready.
           final openVoice = state.uri.queryParameters['talk'] == '1';
@@ -122,6 +277,9 @@ final appRouter = GoRouter(
                   ? null
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
+              actionSystemPrompt: actionSystem,
+              sourcePackage: state.uri.queryParameters['pkg'],
+              sourceApp: state.uri.queryParameters['app'],
             ),
           );
         }
@@ -130,15 +288,18 @@ final appRouter = GoRouter(
         );
       },
     ),
-    // Workflows: `?text=` prefills the input (share sheet / text-selection
-    // intents via `IntentInbox`), `?id=` opens one workflow's sheet directly
-    // (chat quick strip) — query params so `features/chat` never imports
-    // `features/workflows` (ADR-002).
+    // Actions (the old Workflows): `?text=` prefills the input (share sheet /
+    // text-selection intents via `IntentInbox`), `?id=` opens one action's
+    // sheet directly (Ask quick strip, Today quick actions) — query params so
+    // `features/chat` / `features/today` never import `features/workflows`
+    // (ADR-002). `/workflows` redirects here.
     GoRoute(
-      path: '/workflows',
+      path: '/actions',
       builder: (context, state) => WorkflowsScreen(
         initialText: state.uri.queryParameters['text'],
         initialWorkflowId: state.uri.queryParameters['id'],
+        sourcePackage: state.uri.queryParameters['pkg'],
+        sourceApp: state.uri.queryParameters['app'],
       ),
     ),
     GoRoute(
@@ -162,10 +323,10 @@ final appRouter = GoRouter(
       },
     ),
     // WS2: the guided first-run flow. NOT the router's `initialLocation`
-    // (that stays `/chat` so every existing deep-link/test lands on chat) —
+    // (that stays `/today`) —
     // `main()` reads the "onboarding done" flag ONCE at startup and, only on
     // a fresh install, redirects here before the first frame. Onboarding
-    // writes the flag on finish/skip and `context.go('/chat')`, so it's a
+    // writes the flag on finish/skip and `context.go('/today')`, so it's a
     // one-time cold-start decision, not an always-on redirect.
     GoRoute(
       path: '/onboarding',

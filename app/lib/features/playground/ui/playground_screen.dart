@@ -16,8 +16,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
+import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../data/hf_api/models/hf_model_summary.dart';
 import '../state/ai_news_controller.dart';
@@ -25,55 +28,27 @@ import '../state/playground_controller.dart';
 import '../state/playground_installed_models_provider.dart';
 
 class PlaygroundScreen extends StatelessWidget {
-  const PlaygroundScreen({super.key});
+  /// 0 = Compare, 1 = AI news (`?tab=news`).
+  final int initialTabIndex;
+
+  const PlaygroundScreen({super.key, this.initialTabIndex = 0});
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: initialTabIndex,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Playground'),
-          actions: const [
-            Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Center(child: _ABChip()),
-            ),
-          ],
+          title: const Text('Compare models'),
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Playground'),
+              Tab(text: 'Compare'),
               Tab(text: 'AI news'),
             ],
           ),
         ),
         body: const TabBarView(children: [_PlaygroundTab(), _AiNewsTab()]),
-      ),
-    );
-  }
-}
-
-class _ABChip extends StatelessWidget {
-  const _ABChip();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.sm,
-        vertical: tokens.spacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(tokens.radius.full),
-      ),
-      child: Text(
-        'A / B',
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
-        ),
       ),
     );
   }
@@ -119,7 +94,7 @@ class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
     return switch (modelsAsync) {
       AsyncData(:final value) =>
         value.length < 2
-            ? _InstallMorePrompt(installedCount: value.length)
+            ? _InstallMorePrompt(installedCount: value.length, installed: value)
             : _CompareBody(
                 models: value,
                 promptCtrl: _promptCtrl,
@@ -136,24 +111,34 @@ class _PlaygroundTabState extends ConsumerState<_PlaygroundTab> {
   }
 }
 
-/// Shown when fewer than two models are installed. Rather than only *describing*
-/// the A/B compare, it renders a static, clearly-labelled PREVIEW of what a real
-/// comparison looks like (two example columns, one marked "Fastest") so the
-/// payoff is visible and the incentive to install a 2nd model is concrete (WS6).
-class _InstallMorePrompt extends StatelessWidget {
+/// Shown when fewer than two models are installed. D4: it never invents
+/// numbers. It lists the speed this phone really measured for the models you
+/// have (from the speed test), and the two-column picture of a comparison is
+/// labelled "Example" inside the card, with no speeds and no "Fastest" badge,
+/// because those belong to real runs only.
+class _InstallMorePrompt extends ConsumerWidget {
   final int installedCount;
-  const _InstallMorePrompt({required this.installedCount});
+  final List<InstalledModelInfo> installed;
+  const _InstallMorePrompt({
+    required this.installedCount,
+    this.installed = const [],
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final results = ref.watch(speedResultsProvider).value ?? const {};
+    final measured = [
+      for (final m in installed)
+        if (results[speedKey(m.repoId, m.fileName)] case final r?) (m, r),
+    ];
     final message = installedCount == 0
-        ? 'The Playground runs one prompt through two models side by side so you '
-              'can compare their answers and speed. Install two GGUF models to '
-              'try it.'
+        ? 'Compare runs one prompt through two models, one after the other, '
+              'so you can compare their answers and speed. Install two models '
+              'to try it.'
         : 'You have one model installed. Add one more to compare two side by '
-              'side, like the preview below.';
+              'side, like the example below.';
     return ListView(
       padding: EdgeInsets.all(tokens.spacing.md),
       children: [
@@ -175,11 +160,44 @@ class _InstallMorePrompt extends StatelessWidget {
             ),
           ],
         ),
+        if (measured.isNotEmpty) ...[
+          SizedBox(height: tokens.spacing.lg),
+          Text(
+            'MEASURED ON YOUR PHONE',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          for (final (m, r) in measured)
+            Padding(
+              padding: EdgeInsets.only(bottom: tokens.spacing.xs),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _shortName(m),
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  Text(
+                    '${r.decodeTps.toStringAsFixed(0)} tok/s',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
         SizedBox(height: tokens.spacing.lg),
         Row(
           children: [
             Text(
-              'PREVIEW',
+              'EXAMPLE',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 letterSpacing: 1.2,
@@ -205,25 +223,21 @@ class _InstallMorePrompt extends StatelessWidget {
             children: [
               Expanded(
                 child: _PreviewColumn(
-                  name: 'Llama 3.2 1B',
-                  status: '42 tok/s · done',
+                  name: 'First model',
                   reply:
                       'Gravity is an invisible pull that keeps your feet on the '
                       'ground and the moon close to Earth.',
                   accent: theme.colorScheme.primary,
-                  isFastest: true,
                 ),
               ),
               SizedBox(width: tokens.spacing.sm),
               Expanded(
                 child: _PreviewColumn(
-                  name: 'Qwen2.5 1.5B',
-                  status: '31 tok/s · done',
+                  name: 'Second model',
                   reply:
                       'Think of Earth giving everything a big, gentle hug that '
                       'never lets go — that hug is gravity.',
                   accent: theme.colorScheme.secondary,
-                  isFastest: false,
                 ),
               ),
             ],
@@ -231,7 +245,7 @@ class _InstallMorePrompt extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.lg),
         FilledButton(
-          onPressed: () => GoRouter.of(context).go('/models'),
+          onPressed: () => GoRouter.of(context).push('/models/hub'),
           child: const Text('Browse models'),
         ),
       ],
@@ -239,21 +253,17 @@ class _InstallMorePrompt extends StatelessWidget {
   }
 }
 
-/// A single non-interactive column in the install-more preview. Mirrors the
-/// live `_ResultColumn` look (accent name, status line, tok/s, "Fastest" badge)
-/// with static example content so the payoff reads at a glance.
+/// A single non-interactive column in the install-more example. It mirrors the
+/// live `_ResultColumn` layout but carries no speed and no verdict: it says
+/// "Example reply, not measured" inside the card.
 class _PreviewColumn extends StatelessWidget {
   final String name;
-  final String status;
   final String reply;
   final Color accent;
-  final bool isFastest;
   const _PreviewColumn({
     required this.name,
-    required this.status,
     required this.reply,
     required this.accent,
-    required this.isFastest,
   });
 
   @override
@@ -265,31 +275,21 @@ class _PreviewColumn extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(tokens.radius.md),
-        border: Border.all(
-          color: isFastest ? accent : theme.colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(color: accent),
-                ),
-              ),
-              if (isFastest) _FastestBadge(accent: accent),
-            ],
+          Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelMedium?.copyWith(color: accent),
           ),
           SizedBox(height: tokens.spacing.xs),
           Text(
-            status,
+            'Example reply · not measured',
             style: theme.textTheme.labelSmall?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -433,7 +433,7 @@ class _CompareBody extends ConsumerWidget {
         ),
         SizedBox(height: tokens.spacing.md),
         _SliderRow(
-          label: 'Temperature',
+          label: 'Creativity',
           value: state.temperature,
           min: 0,
           max: 2,
@@ -453,7 +453,7 @@ class _CompareBody extends ConsumerWidget {
           onChanged: controller.setTopP,
         ),
         _SliderRow(
-          label: 'Max tokens',
+          label: 'Answer length',
           value: state.maxTokens.toDouble(),
           min: 16,
           max: 1024,
@@ -522,7 +522,7 @@ class _CompareBody extends ConsumerWidget {
     void Function(int) onPick,
   ) async {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-    final picked = await showModalBottomSheet<int>(
+    final picked = await showDhruvaSheet<int>(
       context: context,
       builder: (context) => SafeArea(
         child: RadioGroup<int>(

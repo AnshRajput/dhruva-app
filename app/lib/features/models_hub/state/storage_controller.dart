@@ -4,8 +4,6 @@
 /// past this file into `ui/`).
 library;
 
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -13,6 +11,7 @@ import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/local_import.dart';
+import '../../../data/downloads/model_file_channel.dart';
 import '../../../data/downloads/storage_manager.dart';
 import 'speed_test_controller.dart';
 
@@ -85,15 +84,34 @@ class StorageController extends AsyncNotifier<StorageState> {
 
   void cancelImport() => _cancel?.cancel();
 
-  /// [sourceFile] is a user-picked GGUF (picked in the UI layer via
-  /// `file_selector` — selection itself is a UI concern). Validates, streams
-  /// the copy with progress, and surfaces typed failures instead of crashing.
+  /// Opens the system picker. Null when the user cancels, or when the pick
+  /// isn't a `.gguf` / the picker failed (then [StorageState.actionError] says
+  /// why). Nothing is read or copied here.
+  Future<PickedModelFile?> pickModelFile() async {
+    try {
+      final picked = await ref.read(modelFileChannelProvider).pick();
+      if (picked == null) return null;
+      if (!picked.name.toLowerCase().endsWith('.gguf')) {
+        _setActionError(
+          const StorageCorruptFileFailure('selected file is not a .gguf'),
+        );
+        return null;
+      }
+      return picked;
+    } on ModelFileException catch (e) {
+      _setActionError(StorageIoFailure(e.message, cause: e));
+      return null;
+    }
+  }
+
+  /// [picked] came from [pickModelFile]. Streams the copy natively with
+  /// progress, validates, and surfaces typed failures instead of crashing.
   /// A user cancel is silent (the partial file is already removed).
-  Future<void> importLocal(File sourceFile) async {
+  Future<void> importLocal(PickedModelFile picked) async {
     final current = state.value;
     if (current == null || _cancel != null) return;
     final token = _cancel = ImportCancelToken();
-    final name = p.basename(sourceFile.path);
+    final name = picked.name;
     var lastPct = -1;
     void publish(double progress) {
       state = AsyncData(
@@ -114,10 +132,11 @@ class StorageController extends AsyncNotifier<StorageState> {
           .read(deviceInfoServiceProvider)
           .getStorageInfo();
       final imported = await importLocalGguf(
-        sourceFile: sourceFile,
+        picked: picked,
+        channel: ref.read(modelFileChannelProvider),
         modelsDirectory: modelsDirectory,
         db: db,
-        repoId: 'local/${p.basenameWithoutExtension(sourceFile.path)}',
+        repoId: 'local/${p.basenameWithoutExtension(picked.name)}',
         freeBytes: storage.freeBytes,
         cancel: token,
         onProgress: (copied, total) {

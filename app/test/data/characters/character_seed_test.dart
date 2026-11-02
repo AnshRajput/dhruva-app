@@ -12,7 +12,7 @@ void main() {
         'assets/characters/starter_pack.json',
       ).readAsStringSync();
       final seeds = parseCharacterSeeds(raw);
-      expect(seeds, hasLength(10));
+      expect(seeds, hasLength(14));
       final coach = seeds.firstWhere((s) => s.name == 'Coach');
       expect(coach.avatarEmoji, '💪');
       expect(coach.personaSystemPrompt, contains('accountability partner'));
@@ -25,6 +25,28 @@ void main() {
       expect(coach.samplingParams?.temperature, 0.7);
       expect(coach.samplingParams?.topP, 0.9);
       expect(coach.samplingParams?.topK, 40);
+    });
+
+    test('ships the everyday assistants: writing, explaining, translating, '
+        'short answers, studying', () {
+      final raw = File(
+        'assets/characters/starter_pack.json',
+      ).readAsStringSync();
+      final byName = {for (final s in parseCharacterSeeds(raw)) s.name: s};
+      for (final name in [
+        'Writing Coach',
+        "Explain Like I'm New",
+        'Hindi-English Translator',
+        'Concise Assistant',
+        'Study Buddy',
+      ]) {
+        final seed = byName[name];
+        expect(seed, isNotNull, reason: name);
+        expect(seed!.personaSystemPrompt.length, greaterThan(100));
+        expect(seed.greeting, isNotEmpty);
+        expect(seed.samplingParams, isNotNull);
+        seed.samplingParams!.validate();
+      }
     });
 
     test('every entry in the real asset has a unique, non-empty name', () {

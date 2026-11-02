@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- design-tokens.json color.dark.background (navy): the launch window
+         behind the first Flutter frame when the system is in dark mode. -->
+    <color name="splash_background">#0E1220</color>
+</resources>

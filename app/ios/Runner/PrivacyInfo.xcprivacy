@@ -27,6 +27,9 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>C617.1</string>
+				<!-- File names and modified times inside the single folder the
+				     user chose in the Files connector (security-scoped). -->
+				<string>3B52.1</string>
 			</array>
 		</dict>
 		<dict>

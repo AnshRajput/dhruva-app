@@ -21,17 +21,29 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show KeepAliveLink;
 
+import '../../../core/actions/action_prompt.dart'
+    show actionTitleOf, stripActionDelimiters, wrapActionText;
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/ask_providers.dart';
+import '../../../core/di/connector_providers.dart'
+    show connectorStoreProvider, liveConnectorIdsProvider;
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
+import '../../../core/profile/user_profile.dart';
+import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
+import '../../../data/connectors/ask_retrieval.dart';
+import '../../../data/connectors/ask_sources.dart';
+import '../../../data/connectors/connector.dart' show ConnectorItem;
+import '../../../data/connectors/sources_block.dart' show SourcesBlock;
 import '../../../data/docs/bm25.dart';
 import '../../../data/docs/document_extractor.dart';
 import '../../../data/docs/document_repository.dart';
@@ -39,6 +51,8 @@ import '../../../data/docs/grounding.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../docs/document_picker.dart' show PickedDocument;
 import '../../../engine_bindings/engine_service.dart';
+import 'answer_guard.dart';
+import 'ask_selection.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
 import 'think_tag_parser.dart';
@@ -62,11 +76,46 @@ final class ChatRouteArgs {
   /// empty conversation list. Only meaningful when [conversationId] is null.
   final String? initialPrompt;
 
+  /// The system prompt of an Action chat (`core/actions/action_prompt.dart`):
+  /// the verb's instruction, kept out of the user's bubble. New drafts only.
+  final String? actionSystemPrompt;
+
+  /// The app a message came from (Inbox -> Draft reply), so the drafted reply
+  /// can offer "Open in" the source app. Package id and display name.
+  final String? sourcePackage;
+  final String? sourceApp;
+
+  /// Text to PREFILL the composer with (not sent): `/ask/new?q=...`, e.g.
+  /// Today's "Prep me for `<event>`". Only meaningful for a new draft.
+  final String? initialDraft;
+
+  /// Sources pinned in the "Search in" row (`/ask/new?sources=calendar,...`).
+  /// Empty = Auto.
+  final Set<AskSource> initialSources;
+
+  /// Connector items (a Library file's sections, one Inbox notification) the
+  /// new chat is ABOUT: `/ask/new?focus=<item id>` (repeatable). They ride on
+  /// the one Ask mechanism: the sources block always leads with them, then
+  /// whatever the "Search in" selection finds. Shown as "About" chips in the
+  /// row; never instructions to the model.
+  final List<int> focusItemIds;
+
+  /// Sanitized label this new chat is ABOUT (`/ask/new?about=`, a person's
+  /// name): a retrieval term and a chip, never part of the question text.
+  final String? about;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
     this.characterId,
     this.initialPrompt,
+    this.actionSystemPrompt,
+    this.sourcePackage,
+    this.sourceApp,
+    this.initialDraft,
+    this.initialSources = const {},
+    this.focusItemIds = const [],
+    this.about,
   });
 
   @override
@@ -75,11 +124,30 @@ final class ChatRouteArgs {
       other.conversationId == conversationId &&
       other.initialModelId == initialModelId &&
       other.characterId == characterId &&
-      other.initialPrompt == initialPrompt;
+      other.initialPrompt == initialPrompt &&
+      other.actionSystemPrompt == actionSystemPrompt &&
+      other.sourcePackage == sourcePackage &&
+      other.sourceApp == sourceApp &&
+      other.initialDraft == initialDraft &&
+      other.initialSources.length == initialSources.length &&
+      other.initialSources.containsAll(initialSources) &&
+      listEquals(other.focusItemIds, focusItemIds) &&
+      other.about == about;
 
   @override
-  int get hashCode =>
-      Object.hash(conversationId, initialModelId, characterId, initialPrompt);
+  int get hashCode => Object.hash(
+    conversationId,
+    initialModelId,
+    characterId,
+    initialPrompt,
+    actionSystemPrompt,
+    sourcePackage,
+    sourceApp,
+    initialDraft,
+    Object.hashAllUnordered(initialSources),
+    Object.hashAll(focusItemIds),
+    about,
+  );
 }
 
 final class ChatThreadState {
@@ -158,6 +226,19 @@ final class ChatThreadState {
   /// Session-only, same precedent as [reasoningDurationMs].
   final Set<int> heatStoppedMessageIds;
 
+  /// When the turn in flight started warming up (send tapped, model maybe
+  /// loading, no first token yet); null otherwise. Drives the "Warming up
+  /// (model name) · 4 s" row.
+  final DateTime? warmingSince;
+
+  /// True once a turn has waited [firstTokenTimeoutProvider] with no first
+  /// token: the thread offers Stop / Try again in plain words.
+  final bool firstTokenTimedOut;
+
+  /// "Looking through your calendar and files…" while Ask searches the
+  /// user's data for the turn in flight; null otherwise.
+  final String? searchingLabel;
+
   const ChatThreadState({
     this.conversationId,
     this.title = '',
@@ -182,6 +263,9 @@ final class ChatThreadState {
     this.extractingDocName,
     this.documentError,
     this.heatStoppedMessageIds = const {},
+    this.warmingSince,
+    this.firstTokenTimedOut = false,
+    this.searchingLabel,
   });
 
   /// Messages with a superseded predecessor (an edited/regenerated/retried
@@ -226,6 +310,11 @@ final class ChatThreadState {
     String? documentError,
     bool clearDocumentError = false,
     Set<int>? heatStoppedMessageIds,
+    DateTime? warmingSince,
+    bool clearWarmingSince = false,
+    bool? firstTokenTimedOut,
+    String? searchingLabel,
+    bool clearSearchingLabel = false,
   }) {
     return ChatThreadState(
       conversationId: conversationId ?? this.conversationId,
@@ -260,6 +349,13 @@ final class ChatThreadState {
           : (documentError ?? this.documentError),
       heatStoppedMessageIds:
           heatStoppedMessageIds ?? this.heatStoppedMessageIds,
+      warmingSince: clearWarmingSince
+          ? null
+          : (warmingSince ?? this.warmingSince),
+      firstTokenTimedOut: firstTokenTimedOut ?? this.firstTokenTimedOut,
+      searchingLabel: clearSearchingLabel
+          ? null
+          : (searchingLabel ?? this.searchingLabel),
     );
   }
 }
@@ -279,6 +375,21 @@ final chatControllerProvider = AsyncNotifierProvider.autoDispose
       (arg) => ChatController(args: arg),
     );
 
+/// How long a turn may wait for its first token before the thread offers
+/// Stop / Try again (D3). A constant, overridable in tests.
+const kFirstTokenTimeout = Duration(seconds: 60);
+
+final firstTokenTimeoutProvider = Provider<Duration>(
+  (ref) => kFirstTokenTimeout,
+);
+
+/// The follow-up the model gets when the user taps Continue on a reply that
+/// was stopped, cut short or errored. The partial reply is the previous
+/// assistant turn; the new text is appended to the same message.
+const _continuePrompt =
+    'Continue from exactly where you stopped. Do not repeat anything you '
+    'already wrote.';
+
 /// One flush's worth of the ≤100ms batching budget (chat-spec.md §3.2,
 /// `DhruvaTokens.motion.instant`). Not read from the theme extension —
 /// this is business-logic timing, not a widget animation, and the
@@ -292,7 +403,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
 
   StreamSubscription<EngineEvent>? _genSub;
   Timer? _flushTimer;
+  Timer? _firstTokenTimer;
   String _rawBuffer = '';
+
+  /// True while the turn in flight is a "Continue" of an existing reply: new
+  /// text is appended after [_seedRaw] (the reply so far) on the same row.
+  bool _continuing = false;
+  String _seedRaw = '';
 
   /// The exact `content`/`reasoning` strings already persisted for the
   /// active streaming message — the full text, not just a length, so
@@ -375,6 +492,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   final Map<int, ExtractedDocument> _pendingDocs = {};
   var _nextTempDocId = -1;
 
+  /// Bumped by every read and by [cancelDocumentRead]; a read whose number is
+  /// no longer current was cancelled, so its result is dropped.
+  var _docReadGen = 0;
+
   /// Retrieval corpus + BM25 index for this conversation's documents, built
   /// on first question and dropped whenever the document set changes.
   List<StoredChunk>? _corpus;
@@ -383,13 +504,34 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// Citations offered to the reply being generated (empty when ungrounded).
   List<DocSource> _activeSources = const [];
 
+  /// Connector items offered to the reply being generated (what the model
+  /// saw, in citation order); empty when no connector source was searched.
+  List<ConnectorItem> _activeItems = const [];
+
+  /// The grounded prompt sent for this turn, so a reply that merely echoes it
+  /// can be recognised ([isScaffoldEcho]); null when ungrounded.
+  String? _activePrompt;
+
+  /// The reply parroted the grounded prompt: the thread shows [echoNotice]
+  /// instead, live and at completion, whatever the stop reason.
+  bool _echoBlocked = false;
+
+  /// An Action's reply was its own instruction ([isActionEcho]): the row ends
+  /// as an error with no text, so the thread offers a retry and nothing that
+  /// could write the echo anywhere.
+  bool _actionEchoBlocked = false;
+
   @override
   Future<ChatThreadState> build() async {
     _lease = ref.read(engineLeaseProvider);
+    // Keep the "About the user" block warm so a send reads it synchronously
+    // (never waits on disk); main() also warms it at startup.
+    ref.listen(userContextProvider, (_, _) {});
     ref.onDispose(() {
       _disposed = true;
       unawaited(_genSub?.cancel());
       _flushTimer?.cancel();
+      _firstTokenTimer?.cancel();
       _releaseHealthLease();
     });
     // Heat guard: a critical reading while this thread is streaming stops the
@@ -408,7 +550,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       final model = args.initialModelId == null
           ? (await storage.listInstalledModels()).firstOrNull
           : await storage.getInstalledModel(args.initialModelId!);
-      return ChatThreadState(modelId: model?.id, model: model);
+      return ChatThreadState(
+        modelId: model?.id,
+        model: model,
+        // An Action chat: the instruction is the system layer, the user's own
+        // text the first turn.
+        systemPrompt: args.actionSystemPrompt ?? '',
+      );
     }
 
     final convo = await _repo.getConversation(conversationId);
@@ -525,10 +673,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   Future<void> ensureModelLoaded() {
     return _loadInFlight ??= () {
       _lease.chatEnter();
-      return _ensureModelLoaded().whenComplete(() {
-        _loadInFlight = null;
-        _lease.chatLeave();
-      });
+      // H1: chat outranks background work (brief writer, inbox summaries):
+      // it is told to stop and given ~1 s to let go of the engine, so a send
+      // never meets "busy" and never starts a second load/generate.
+      return _lease
+          .preemptBackground()
+          .then((_) => _ensureModelLoaded())
+          .whenComplete(() {
+            _loadInFlight = null;
+            _lease.chatLeave();
+          });
     }();
   }
 
@@ -780,6 +934,53 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     );
   }
 
+  /// Resumes the latest reply when it was stopped, cut short, heat-stopped
+  /// or errored part-way (D1): the model is shown the partial reply and
+  /// asked to carry on, and the new text is appended to the same message.
+  /// No-op for anything but the newest, non-empty, unfinished assistant reply.
+  Future<void> continueMessage(int assistantMessageId) async {
+    final current = state.value;
+    if (current == null ||
+        current.isGenerating ||
+        _turnInFlight ||
+        current.conversationId == null) {
+      return;
+    }
+    final visible = current.visibleMessages;
+    if (visible.isEmpty || visible.last.id != assistantMessageId) return;
+    final m = visible.last;
+    if (m.role != MessageRole.assistant ||
+        m.status == MessageStatus.complete ||
+        m.content.trim().isEmpty) {
+      return;
+    }
+    _turnInFlight = true;
+    await _runAssistantTurn(
+      conversationId: current.conversationId!,
+      historyMessages: visible,
+      parentMessageId: null,
+      continueMessageId: assistantMessageId,
+    );
+  }
+
+  /// "Try again" after [ChatThreadState.firstTokenTimedOut]: stops the stuck
+  /// turn, then re-runs it (a Continue stays a Continue).
+  Future<void> retryStalled() async {
+    final id = state.value?.streamingMessageId;
+    if (id == null) return;
+    final wasContinuing = _continuing;
+    await cancel();
+    // ponytail: poll for the cancel to land, same as useLighterModel.
+    for (var i = 0; i < 100 && _turnInFlight; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (wasContinuing) {
+      await continueMessage(id);
+    } else {
+      await regenerate(id);
+    }
+  }
+
   /// Edits a user message (chat-spec.md §2.4): supersedes it with a new
   /// row, then re-runs the assistant turn that followed it (superseding
   /// that reply too, if there was one).
@@ -868,18 +1069,20 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       return;
     }
     if (picked == null || _disposed) return;
+    final gen = ++_docReadGen;
     state = AsyncData(
       state.value!.copyWith(
         extractingDocName: picked.name,
         clearDocumentError: true,
       ),
     );
+    bool cancelled() => _disposed || gen != _docReadGen;
     try {
       final doc = await ref.read(documentExtractorProvider)(
         picked.path,
         picked.name,
       );
-      if (_disposed) return;
+      if (cancelled()) return;
       final cur = state.value!;
       final DocumentInfo info;
       if (cur.conversationId != null) {
@@ -891,7 +1094,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       }
       _corpus = null;
       _corpusIndex = null;
-      if (_disposed) return;
+      if (cancelled()) {
+        // Cancelled while it was being stored: take it straight back out.
+        if (info.id >= 0) unawaited(_docs.removeDocument(info.id));
+        _pendingDocs.remove(info.id);
+        return;
+      }
       state = AsyncData(
         state.value!.copyWith(
           documents: [...state.value!.documents, info],
@@ -899,7 +1107,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     } on DocumentException catch (e) {
-      if (_disposed) return;
+      if (cancelled()) return;
       state = AsyncData(
         state.value!.copyWith(
           documentError: e.message,
@@ -907,7 +1115,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     } catch (_) {
-      if (_disposed) return;
+      if (cancelled()) return;
       state = AsyncData(
         state.value!.copyWith(
           documentError: "Couldn't read that file.",
@@ -915,6 +1123,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     }
+  }
+
+  /// "Cancel" on the Reading chip: the chip goes at once and nothing is
+  /// attached when the read finishes (the extraction isolate still ends on its
+  /// own: it has a time limit and a memory watchdog).
+  void cancelDocumentRead() {
+    final current = state.value;
+    if (current == null || current.extractingDocName == null) return;
+    _docReadGen++;
+    state = AsyncData(current.copyWith(clearExtractingDocName: true));
   }
 
   /// Detaches a document from this conversation (and deletes its stored
@@ -984,6 +1202,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     required List<MessageInfo> historyMessages,
     required String systemPrompt,
     required SamplingParams samplingParams,
+    int reservedChars = 0,
   }) async {
     if (state.value!.documents.isEmpty) return null;
     final question = historyMessages
@@ -1004,10 +1223,144 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       budgetChars: excerptBudgetChars(
         contextTokens: samplingParams.contextLength,
         maxAnswerTokens: samplingParams.maxTokens,
-        promptChars: promptChars,
+        promptChars: promptChars + reservedChars,
       ),
     );
     return buildGroundedPrompt(question: question, excerpts: excerpts);
+  }
+
+  /// Decides what this turn is grounded in and builds the user turn that
+  /// replaces the plain question: the attached documents (as before), the
+  /// user's connected sources (calendar, contacts, files, mail), both, or
+  /// neither (null: an ordinary answer).
+  ///
+  /// Which sources comes from the "Search in" row ([askSelectionProvider]):
+  /// Auto picks by rules from the question; pinned sources are used as chosen.
+  /// A source the user has not connected is skipped (its chip offers Connect).
+  Future<_Grounding?> _ground({
+    required int conversationId,
+    required List<MessageInfo> historyMessages,
+    required String systemPrompt,
+    required SamplingParams samplingParams,
+  }) async {
+    final question = historyMessages
+        .where((m) => m.role == MessageRole.user)
+        .lastOrNull
+        ?.content;
+    if (question == null) return null;
+    final hasDocs = state.value!.documents.isNotEmpty;
+    final selection = ref.read(askSelectionProvider(args)).selection;
+    final store = ref.read(connectorStoreProvider);
+    // SECURITY (N1): an Action (Draft reply and all the rest) works on text
+    // that may come from a stranger (a notification, a shared message).
+    // Auto-grounding would let that text choose which of the user's private
+    // sources get searched and quoted into the reply, so an Action only
+    // grounds in sources the USER pinned. Attached documents are the user's
+    // own and still count.
+    final noAuto = actionTitleOf(systemPrompt) != null && selection.auto;
+    // Contact names only matter when they can change the answer.
+    final needNames =
+        !noAuto &&
+        (selection.auto || selection.pinned.contains(AskSource.contacts));
+    final names = needNames ? await store.contactNames() : const <String>[];
+    final wanted = noAuto
+        ? <AskSource>{if (hasDocs) AskSource.docs}
+        : selection.resolve(
+            question: question,
+            contactNames: names,
+            hasDocuments: hasDocs,
+          );
+    final docsWanted = wanted.contains(AskSource.docs) && hasDocs;
+    final wantedConnectors = connectorSourcesOf(wanted);
+    final active = wantedConnectors.isEmpty
+        ? const <AskSource>{}
+        : wantedConnectors.intersection(
+            await connectedAskSources(
+              store,
+              live: await ref.read(liveConnectorIdsProvider.future),
+            ),
+          );
+    // "Ask about this file / notification": the focused items lead the block
+    // even when no connector source is selected.
+    final focus = await ref.read(askFocusItemsProvider(args).future);
+
+    SourcesBlock? block;
+    final about = sanitizeAskAbout(args.about);
+    if (active.isNotEmpty || focus.isNotEmpty) {
+      final now = store.now;
+      final promptChars =
+          SafetyGuard.systemInstruction.length +
+          systemPrompt.length +
+          historyMessages.fold<int>(0, (n, m) => n + m.content.length);
+      var budget = askSourceBudgetChars(
+        contextTokens: samplingParams.contextLength,
+        maxAnswerTokens: samplingParams.maxTokens,
+        promptChars: promptChars,
+      );
+      // Documents share the room when both are in play.
+      if (docsWanted) budget ~/= 2;
+      _setSearching(searchingLabelFor(active));
+      try {
+        final retrieval = await (await ref.read(askRetrieverProvider.future))
+            .retrieve(
+              question: question,
+              sources: active,
+              now: now,
+              budgetChars: budget,
+              mentioned: [...mentionedContacts(question, names), ?about],
+              focus: focus,
+              about: about,
+            );
+        block = retrieval.block;
+      } finally {
+        _clearSearching();
+      }
+    }
+    final docs = docsWanted
+        ? await _groundQuestion(
+            conversationId: conversationId,
+            historyMessages: historyMessages,
+            systemPrompt: systemPrompt,
+            samplingParams: samplingParams,
+            reservedChars: block?.text.length ?? 0,
+          )
+        : null;
+    if (block == null) {
+      return docs == null
+          ? null
+          : _Grounding(docs.prompt, docs.sources, const []);
+    }
+    return _Grounding(
+      buildSourcedPrompt(
+        question: question,
+        block: block,
+        now: ref.read(connectorStoreProvider).now,
+        docExcerpts: docs?.excerptsText,
+      ),
+      docs?.sources ?? const [],
+      block.items,
+    );
+  }
+
+  void _setSearching(String label) {
+    final cur = state.value;
+    if (cur == null || _disposed) return;
+    state = AsyncData(cur.copyWith(searchingLabel: label));
+  }
+
+  void _clearSearching() {
+    final cur = state.value;
+    if (cur == null || _disposed || cur.searchingLabel == null) return;
+    state = AsyncData(cur.copyWith(clearSearchingLabel: true));
+  }
+
+  /// The current live row of a source chip (a persisted citation can point at
+  /// an item that has since been deleted or revoked: null).
+  Future<ConnectorItem?> loadSourceItem(ItemSource source) async {
+    final items = await ref.read(connectorStoreProvider).itemsByIds([
+      source.itemId,
+    ]);
+    return items.firstOrNull;
   }
 
   // ---- Streaming machinery -------------------------------------------------
@@ -1016,6 +1369,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     required int conversationId,
     required List<MessageInfo> historyMessages,
     required int? parentMessageId,
+    int? continueMessageId,
   }) async {
     // B1: acquire BEFORE the first `await` in this method, not after —
     // `ensureModelLoaded()` below does real async work (can load a whole
@@ -1029,6 +1383,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // it here too so a future caller of this method can't forget. Cleared on
     // both early returns below and in `_resetStreamState` once a stream ends.
     _turnInFlight = true;
+    _markWarming();
     // Safety: a prompt that sexualizes a minor never reaches the model.
     final lastUser = historyMessages
         .where((m) => m.role == MessageRole.user)
@@ -1040,6 +1395,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     await ensureModelLoaded();
     var current = state.value!;
     if (current.modelLoadError != null) {
+      state = AsyncData(current.copyWith(clearWarmingSince: true));
       _keepAliveLink?.close();
       _keepAliveLink = null;
       _turnInFlight = false;
@@ -1051,6 +1407,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           modelLoadError: const EngineLoadFailure(
             'no model selected for this conversation',
           ),
+          clearWarmingSince: true,
         ),
       );
       _keepAliveLink?.close();
@@ -1073,34 +1430,61 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       ),
     );
 
-    final assistantId = await _repo.appendMessage(
-      conversationId: conversationId,
-      role: MessageRole.assistant,
-      content: '',
-      parentMessageId: parentMessageId,
-    );
-    final placeholder = MessageInfo(
-      id: assistantId,
-      conversationId: conversationId,
-      role: MessageRole.assistant,
-      content: '',
-      status: MessageStatus.complete,
-      createdAt: DateTime.now(),
-      parentMessageId: parentMessageId,
-    );
-    current = state.value!;
-    state = AsyncData(
-      current.copyWith(
-        messages: [...current.messages, placeholder],
-        streamingMessageId: assistantId,
-      ),
-    );
+    final MessageInfo? continued = continueMessageId == null
+        ? null
+        : current.messages.where((m) => m.id == continueMessageId).firstOrNull;
+    final int assistantId;
+    if (continued == null) {
+      assistantId = await _repo.appendMessage(
+        conversationId: conversationId,
+        role: MessageRole.assistant,
+        content: '',
+        parentMessageId: parentMessageId,
+      );
+      final placeholder = MessageInfo(
+        id: assistantId,
+        conversationId: conversationId,
+        role: MessageRole.assistant,
+        content: '',
+        status: MessageStatus.complete,
+        createdAt: DateTime.now(),
+        parentMessageId: parentMessageId,
+      );
+      current = state.value!;
+      state = AsyncData(
+        current.copyWith(
+          messages: [...current.messages, placeholder],
+          streamingMessageId: assistantId,
+        ),
+      );
+    } else {
+      assistantId = continued.id;
+      current = state.value!;
+      // Shown as a normal streaming bubble again (not the error card) while
+      // the continuation runs; the terminal status is set on completion.
+      state = AsyncData(
+        current.copyWith(
+          messages: [
+            for (final m in current.messages)
+              if (m.id == assistantId)
+                m.copyWith(status: MessageStatus.complete)
+              else
+                m,
+          ],
+          streamingMessageId: assistantId,
+        ),
+      );
+    }
 
     _activeAssistantId = assistantId;
+    _continuing = continued != null;
+    _seedRaw = continued == null ? '' : _seedFor(continued);
     _rawBuffer = '';
     _outputBlocked = false;
-    _pushedContent = '';
-    _pushedReasoning = '';
+    _echoBlocked = false;
+    _actionEchoBlocked = false;
+    _pushedContent = continued?.content ?? '';
+    _pushedReasoning = continued?.reasoningContent ?? '';
     _reasoningStartedAt = null;
     _tokenArrivals.clear();
 
@@ -1109,20 +1493,40 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // from before the load (the composer's attach button being gated on
     // isMultimodal should already prevent this, but a stale in-flight image
     // from a just-swapped model must not reach a text-only engine).
+    // Settings > About me: the short "About the user" block rides on the
+    // system turn for Ask, Actions and character chats alike ('' when empty).
+    final userContext = ref.read(userContextProvider).value ?? '';
     final turns = _historyTurns(
-      historyMessages,
+      continued == null
+          ? historyMessages
+          : [
+              for (final m in historyMessages)
+                // An errored partial reply is normally dropped from history;
+                // a continuation needs it as the assistant turn to extend.
+                if (m.id == continued.id)
+                  m.copyWith(status: MessageStatus.complete)
+                else
+                  m,
+            ],
       current.systemPrompt,
       current.isMultimodal ? current.attachedImages : const {},
+      userContext: userContext,
     );
+    if (continued != null) turns.add(const ChatTurn.user(_continuePrompt));
     final samplingParams = current.samplingParams;
     _activeSources = const [];
+    _activeItems = const [];
+    _activePrompt = null;
     try {
-      final grounded = await _groundQuestion(
-        conversationId: conversationId,
-        historyMessages: historyMessages,
-        systemPrompt: current.systemPrompt,
-        samplingParams: samplingParams,
-      );
+      // A continuation extends an already-grounded answer; never re-ground.
+      final grounded = continued != null
+          ? null
+          : await _ground(
+              conversationId: conversationId,
+              historyMessages: historyMessages,
+              systemPrompt: current.systemPrompt,
+              samplingParams: samplingParams,
+            );
       if (grounded != null) {
         // Swap the plain question for the grounded prompt, on this request
         // only: the stored message (and so the history shown/exported) keeps
@@ -1133,11 +1537,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             grounded.prompt,
             images: turns[last].images,
           );
-          _activeSources = grounded.sources;
+          _activeSources = grounded.docSources;
+          _activeItems = grounded.items;
+          _activePrompt = grounded.prompt;
         }
       }
     } catch (e) {
       // Never answer a document question ungrounded: fail the turn instead.
+      _clearSearching();
       _onError(e);
       return;
     }
@@ -1180,6 +1587,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             if (!completer.isCompleted) completer.complete();
           },
         );
+    // D3: no first token within the timeout -> offer Stop / Try again.
+    _firstTokenTimer?.cancel();
+    _firstTokenTimer = Timer(ref.read(firstTokenTimeoutProvider), () {
+      final cur = state.value;
+      if (cur == null || _disposed || !cur.awaitingFirstToken) return;
+      state = AsyncData(cur.copyWith(firstTokenTimedOut: true));
+    });
     // A reading taken before the stream existed (or an unchanged "critical",
     // which the listener never re-reports) must still stop this reply.
     if (_holdsHealthLease) _stopIfTooHot(ref.read(deviceHealthProvider));
@@ -1189,9 +1603,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _flush({required bool isFinal}) {
     final id = _activeAssistantId;
     if (id == null) return;
-    var split = splitThinkContent(
-      safeThinkPrefix(_rawBuffer, isFinal: isFinal),
-    );
+    // An Action's user turn is wrapped in <text> tags; a model that copies
+    // them into its answer must not show them.
+    final systemPrompt = state.value?.systemPrompt ?? '';
+    final isAction = actionTitleOf(systemPrompt) != null;
+    var rawReply = _seedRaw + safeThinkPrefix(_rawBuffer, isFinal: isFinal);
+    if (isAction) rawReply = stripActionDelimiters(rawReply);
+    var split = splitThinkContent(rawReply);
     // Safety: stop a reply that sexualizes a minor mid-stream and replace
     // everything shown so far with the notice.
     if (!_outputBlocked &&
@@ -1199,11 +1617,53 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             SafetyGuard.blocksOutput(split.reasoning))) {
       _outputBlocked = true;
       unawaited(ref.read(engineServiceProvider).cancel());
+      _seedRaw = '';
       _rawBuffer = SafetyGuard.blockedNotice;
       split = splitThinkContent(_rawBuffer);
     }
 
+    // Scaffold echo (the model repeats the sources prompt/rows): swap the
+    // stream for the plain notice as soon as it is recognisable, and stop
+    // generating the rest of the dump.
+    // In an Action chat the reply may land in the user's own field, so the
+    // echo is a failed result (error row, retry card), never a notice dressed
+    // up as an answer.
+    if (!_outputBlocked &&
+        !_echoBlocked &&
+        !_actionEchoBlocked &&
+        (isAction || _activePrompt != null) &&
+        isScaffoldEcho(split.content, prompt: _activePrompt)) {
+      if (isAction) {
+        _actionEchoBlocked = true;
+      } else {
+        _echoBlocked = true;
+      }
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_echoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent(echoNotice);
+    }
+
+    // Action echo (the reply is the action's own instruction): drop the text
+    // as soon as it is recognisable and stop generating; the row finishes as
+    // an error so the user gets "Try again", never a reply to copy or replace
+    // a selection with.
+    if (isAction &&
+        !_outputBlocked &&
+        !_echoBlocked &&
+        !_actionEchoBlocked &&
+        isActionEcho(split.content, systemPrompt, userText: _lastUserText())) {
+      _actionEchoBlocked = true;
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_actionEchoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent('');
+    }
+
     if (_reasoningStartedAt == null &&
+        !_continuing &&
         (split.reasoningOpen || split.reasoning.isNotEmpty)) {
       _reasoningStartedAt = DateTime.now();
     }
@@ -1279,10 +1739,17 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         else
           m,
     ];
+    // A continuation already has text, so "first token" means any new token.
+    final awaiting = _continuing
+        ? _rawBuffer.isEmpty
+        : split.content.isEmpty && split.reasoning.isEmpty;
+    if (!awaiting) _firstTokenTimer?.cancel();
     state = AsyncData(
       current.copyWith(
         messages: updatedMessages,
-        awaitingFirstToken: split.content.isEmpty && split.reasoning.isEmpty,
+        awaitingFirstToken: awaiting,
+        clearWarmingSince: !awaiting,
+        firstTokenTimedOut: awaiting ? null : false,
         liveTokPerSec: _tokenArrivals.length.toDouble(),
         reasoningDurationMs: closedDurationMs == null
             ? current.reasoningDurationMs
@@ -1307,6 +1774,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (current != null) {
       state = AsyncData(
         current.copyWith(
+          clearWarmingSince: true,
           messages: [
             ...current.messages,
             MessageInfo(
@@ -1347,32 +1815,52 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _flush(isFinal: true);
     final id = _activeAssistantId;
     if (id == null) return;
-    final status = event.reason == EngineStopReason.cancelled && !_outputBlocked
-        ? MessageStatus.cancelled
-        : MessageStatus.complete;
+    // `_flush(isFinal)` above already swapped an echoed reply for the notice,
+    // so it counts as a finished (not stopped/truncated) answer.
+    final status = _actionEchoBlocked
+        ? MessageStatus.error
+        : _outputBlocked || _echoBlocked
+        ? MessageStatus.complete
+        : switch (event.reason) {
+            EngineStopReason.cancelled => MessageStatus.cancelled,
+            EngineStopReason.maxTokens => MessageStatus.truncated,
+            EngineStopReason.endOfSequence => MessageStatus.complete,
+          };
     unawaited(
       _repo.finalize(
         id,
         status: status,
         tokCount: event.tokenCount,
         genMs: event.elapsedMs,
+        errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
       ),
     );
     final current = state.value;
     if (current == null) return;
+    // A reply that parrots the sources prompt is no answer: it is already the
+    // plain notice here; the source chips stay (the notice cites nothing, so
+    // the top items show).
     final answer = _pushedContent;
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
         : citedSources(answer, _activeSources);
-    if (sources.isNotEmpty) unawaited(_repo.setSources(id, sources));
+    final itemSources = _activeItems.isEmpty || answer.trim().isEmpty
+        ? const <ItemSource>[]
+        : citedItemSources(answer, _activeItems);
+    if (sources.isNotEmpty || itemSources.isNotEmpty) {
+      unawaited(_repo.setSources(id, sources, items: itemSources));
+    }
     final updatedMessages = [
       for (final m in current.messages)
         if (m.id == id)
           m.copyWith(
             status: status,
+            content: answer,
+            errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
+            itemSources: itemSources.isEmpty ? null : itemSources,
           )
         else
           m,
@@ -1382,6 +1870,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         messages: updatedMessages,
         isGenerating: false,
         awaitingFirstToken: false,
+        clearWarmingSince: true,
+        firstTokenTimedOut: false,
         liveTokPerSec: 0,
         clearStreamingMessageId: true,
         heatStoppedMessageIds: _heatStoppedId == id
@@ -1425,6 +1915,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             messages: updatedMessages,
             isGenerating: false,
             awaitingFirstToken: false,
+            clearWarmingSince: true,
+            firstTokenTimedOut: false,
             liveTokPerSec: 0,
             clearStreamingMessageId: true,
           ),
@@ -1437,6 +1929,8 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           current.copyWith(
             isGenerating: false,
             awaitingFirstToken: false,
+            clearWarmingSince: true,
+            firstTokenTimedOut: false,
             liveTokPerSec: 0,
             clearStreamingMessageId: true,
             modelLoadError: failure,
@@ -1450,7 +1944,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   void _resetStreamState() {
     _activeAssistantId = null;
     _activeSources = const [];
+    _activePrompt = null;
     _outputBlocked = false;
+    _echoBlocked = false;
+    _actionEchoBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';
@@ -1458,11 +1955,35 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _tokenArrivals.clear();
     _genSub = null;
     _flushTimer = null;
+    _firstTokenTimer?.cancel();
+    _firstTokenTimer = null;
+    _continuing = false;
+    _seedRaw = '';
     _keepAliveLink?.close();
     _keepAliveLink = null;
     _heatStoppedId = null;
     _releaseHealthLease();
     _turnInFlight = false;
+  }
+
+  /// Stamps the start of this turn's warm-up (see
+  /// [ChatThreadState.warmingSince]).
+  void _markWarming() {
+    final cur = state.value;
+    if (cur == null) return;
+    state = AsyncData(
+      cur.copyWith(warmingSince: DateTime.now(), firstTokenTimedOut: false),
+    );
+  }
+
+  /// Raw (tag-bearing) text of a reply so far, the base a continuation
+  /// appends to.
+  String _seedFor(MessageInfo m) {
+    final reasoning = m.reasoningContent ?? '';
+    if (reasoning.isEmpty) return m.content;
+    return m.content.isEmpty
+        ? '$thinkOpenTag$reasoning'
+        : '$thinkOpenTag$reasoning$thinkCloseTag${m.content}';
   }
 
   void _stopIfTooHot(DeviceHealth health) {
@@ -1504,6 +2025,14 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     return convo?.title ?? fallback;
   }
 
+  /// The newest user message in the thread (the Action's material).
+  String _lastUserText() =>
+      state.value?.messages
+          .where((m) => m.role == MessageRole.user)
+          .lastOrNull
+          ?.content ??
+      '';
+
   /// [attachedImages]: Loop 7's session-only image map (see
   /// [ChatThreadState.attachedImages]) — a user turn whose message id has an
   /// entry gets that image attached to its [ChatTurn], the only way an image
@@ -1511,13 +2040,24 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   List<ChatTurn> _historyTurns(
     List<MessageInfo> messages,
     String systemPrompt,
-    Map<int, Uint8List> attachedImages,
-  ) {
+    Map<int, Uint8List> attachedImages, {
+    String userContext = '',
+  }) {
     // Safety instruction rides on the system turn (prepended to the
-    // persona/system prompt, or emitted alone) for every path.
-    final system = systemPrompt.trim().isEmpty
-        ? SafetyGuard.systemInstruction
-        : '${SafetyGuard.systemInstruction}\n\n$systemPrompt';
+    // persona/system prompt, or emitted alone) for every path; the "About
+    // the user" block (when the user filled it in) follows it.
+    final system = [
+      SafetyGuard.systemInstruction,
+      if (userContext.isNotEmpty) userContext,
+      if (systemPrompt.trim().isNotEmpty) systemPrompt,
+    ].join('\n\n');
+    // An Action's material is its FIRST user message (later ones are the
+    // user's own follow-ups); it rides in <text> tags while the instruction
+    // stays in the system layer only.
+    final isAction = actionTitleOf(systemPrompt) != null;
+    final materialId = isAction
+        ? messages.where((m) => m.role == MessageRole.user).firstOrNull?.id
+        : null;
     // Growable: `_runAssistantTurn` swaps the last user turn for its
     // document-grounded version.
     return [
@@ -1530,7 +2070,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
                 m.content == SafetyGuard.blockedNotice))
           switch (m.role) {
             MessageRole.user => ChatTurn.user(
-              m.content,
+              m.id == materialId ? wrapActionText(m.content) : m.content,
               images: attachedImages[m.id] == null
                   ? const []
                   : [attachedImages[m.id]!],
@@ -1540,4 +2080,13 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           },
     ];
   }
+}
+
+/// What a turn is grounded in: the replacement user turn plus the citations
+/// it offers (document pages and connector items).
+final class _Grounding {
+  final String prompt;
+  final List<DocSource> docSources;
+  final List<ConnectorItem> items;
+  const _Grounding(this.prompt, this.docSources, this.items);
 }

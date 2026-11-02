@@ -3,6 +3,9 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - third_party/** # vendored pdf_cos (Apache-2.0), upstream style
+    # `flutter test` copies the bundled pubspec.yaml here, whose relative
+    # `path:` deps do not resolve from inside build/.
+    - build/**
   language:
     strict-casts: true
     strict-inference: true

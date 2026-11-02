@@ -1,5 +1,5 @@
-/// "Quick workflows" strip on the conversation list: the handful of most useful
-/// one-tap text verbs plus "All". Chips push `/workflows?id=<id>` (the router
+/// "Quick actions" strip on the conversation list: the handful of most useful
+/// one-tap text verbs plus "All". Chips push `/actions?id=<id>` (the router
 /// opens that workflow's sheet) so `features/chat` never imports
 /// `features/workflows` (ADR-002); the ids here mirror its catalog.
 library;
@@ -34,22 +34,23 @@ class WorkflowStrip extends StatelessWidget {
             tokens.spacing.md,
             tokens.spacing.xs,
           ),
+          // Sentence case like every other section header (this one was the
+          // only uppercase tracked label in the app).
           child: Text(
-            'QUICK WORKFLOWS',
-            style: theme.textTheme.labelSmall?.copyWith(
+            'Quick actions',
+            style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
             ),
           ),
         ),
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+        // Wraps instead of scrolling: no chip is ever clipped off the edge.
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+          child: Wrap(
+            spacing: tokens.spacing.xs,
+            runSpacing: tokens.spacing.xs,
             children: [
-              for (final (id, icon, label) in _quick) ...[
+              for (final (id, icon, label) in _quick)
                 ActionChip(
                   avatar: Icon(
                     icon,
@@ -57,14 +58,12 @@ class WorkflowStrip extends StatelessWidget {
                     color: theme.colorScheme.primary,
                   ),
                   label: Text(label),
-                  onPressed: () => context.push('/workflows?id=$id'),
+                  onPressed: () => context.push('/actions?id=$id'),
                 ),
-                SizedBox(width: tokens.spacing.xs),
-              ],
               ActionChip(
-                label: const Text('All'),
+                label: const Text('All actions'),
                 avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
-                onPressed: () => context.push('/workflows'),
+                onPressed: () => context.push('/actions'),
               ),
             ],
           ),

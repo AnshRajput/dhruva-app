@@ -1,17 +1,14 @@
-/// Loop 6 QA: pins the deliberate design split flagged in the
-/// [flutter-core → qa-tester, reviewer] HANDOFF — `storage_controller.dart`
-/// (Models hub "Installed" tab) filters out `sherpa-voice/` rows so voice
-/// models don't pollute the GGUF list, but `storageSummaryProvider`
-/// (Settings' storage section) deliberately does NOT filter, because it's
-/// meant to report real disk usage. No existing test covered either
-/// direction of this contract; this file locks in the "don't filter here"
-/// half (`storage_controller_test.dart` locks in the "do filter there"
-/// half).
+/// Pins ONE counting rule across the app: `storage_controller.dart` (Models hub
+/// "Installed" tab) and `storageSummaryProvider` (Settings' storage line) both
+/// count language models only. Voice files (`sherpa-voice/`) are reported
+/// separately, so Settings never says "4 models" over an Installed tab that
+/// says "1 installed" (wave 4 re-audit, issue 7).
 library;
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:dhruva/features/settings/state/storage_summary_provider.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +20,7 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late ProviderContainer container;
 
@@ -42,8 +40,8 @@ void main() {
   });
 
   test(
-    'unlike the Models hub Installed tab, Settings\' storage summary DOES '
-    'count sherpa-voice/ (voice model) bytes — real disk usage, by design',
+    'one counting rule: the storage summary counts language models only, and '
+    'reports sherpa-voice/ bytes apart (they are not "models")',
     () async {
       await db
           .into(db.installedModels)
@@ -70,8 +68,33 @@ void main() {
 
       final summary = await container.read(storageSummaryProvider.future);
 
-      expect(summary.modelCount, 2);
-      expect(summary.totalBytes, 300);
+      expect(summary.modelCount, 1);
+      expect(summary.totalBytes, 100);
+      expect(summary.voiceBytes, 200);
     },
   );
+
+  test('follows the Models hub: a model installed later shows up without '
+      'reopening Settings', () async {
+    container.listen(storageSummaryProvider, (_, _) {});
+    expect((await container.read(storageSummaryProvider.future)).modelCount, 0);
+
+    await db
+        .into(db.installedModels)
+        .insert(
+          InstalledModelsCompanion.insert(
+            repoId: 'r/b',
+            fileName: 'b.gguf',
+            sizeBytes: 50,
+            localPath: '/tmp/b.gguf',
+            downloadedAt: DateTime.utc(2026, 7, 17),
+          ),
+        );
+    // what the download-complete path does (app_shell / download controller)
+    container.invalidate(storageControllerProvider);
+
+    final summary = await container.read(storageSummaryProvider.future);
+    expect(summary.modelCount, 1);
+    expect(summary.totalBytes, 50);
+  });
 }

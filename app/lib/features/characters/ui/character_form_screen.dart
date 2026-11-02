@@ -109,9 +109,9 @@ class _CharacterFormScreenState extends ConsumerState<CharacterFormScreen> {
         data: (character) {
           if (character == null) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Character')),
+              appBar: AppBar(title: const Text('Persona')),
               body: const EmptyStateView(
-                message: 'Character not found.',
+                message: 'Persona not found.',
                 icon: Icons.person_off_outlined,
               ),
             );
@@ -125,7 +125,7 @@ class _CharacterFormScreenState extends ConsumerState<CharacterFormScreen> {
         },
         loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
         error: (error, stack) => Scaffold(
-          appBar: AppBar(title: const Text('Character')),
+          appBar: AppBar(title: const Text('Persona')),
           body: ErrorStateView(
             error: error,
             onRetry: () =>
@@ -407,7 +407,7 @@ class _ModelDropdown extends ConsumerWidget {
             Padding(
               padding: EdgeInsets.only(top: tokens.spacing.xs),
               child: Text(
-                'No models installed yet — install one from the Models tab to '
+                'No models installed yet — install one from Settings > Models to '
                 'bind a default.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,

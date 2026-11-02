@@ -1,7 +1,7 @@
-// Global download indicator (Amendment 4b): the Models bottom-nav
-// destination shows a live badge while any download is active
-// (queued/running/paused/verifying) and hides it once the download
-// completes — proven end-to-end through the real DownloadManager wired to
+// Global download indicator (Amendment 4b, moved in the daily-assistant
+// redesign): Models now lives under Settings, so Today shows a status pill
+// while any download is active (queued/running/paused/verifying) and hides it
+// once the download completes — proven end-to-end through the real DownloadManager wired to
 // a FakeDownloadBackend, same harness shape as downloads_screen_test.dart.
 
 import 'dart:async';
@@ -20,6 +20,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import '../../support/app_harness.dart' show todayStubOverrides;
 import '../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -63,6 +65,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...todayStubOverrides(),
           downloadManagerProvider.overrideWith((ref) async => manager),
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
@@ -98,50 +101,53 @@ void main() {
   }
 
   bool anyBadgeVisible(WidgetTester tester) =>
-      tester.widgetList<Badge>(find.byType(Badge)).any((b) => b.isLabelVisible);
+      find.byKey(const ValueKey('download-status-pill')).evaluate().isNotEmpty;
 
-  testWidgets('no badge before any download starts', (tester) async {
+  testWidgets('no status pill before any download starts', (tester) async {
     await pumpApp(tester);
-
-    expect(anyBadgeVisible(tester), isFalse);
-  });
-
-  testWidgets('badge appears once a download is running, disappears once it '
-      'completes', (tester) async {
-    await pumpApp(tester);
-    expect(anyBadgeVisible(tester), isFalse);
-
-    await settleAfter(
-      tester,
-      () => manager.enqueue(request, freeBytes: 1 << 30),
-    );
-    await emitAndSettle(
-      tester,
-      BackendProgressUpdate(
-        request.taskId,
-        progress: 0.4,
-        expectedFileSizeBytes: request.expectedSizeBytes,
-      ),
-    );
-    expect(anyBadgeVisible(tester), isTrue);
-
-    final file = File('${modelsDir.path}/${request.fileName}')
-      ..writeAsBytesSync([1, 2, 3, 4, 5]);
-    backend.filePaths[request.taskId] = file.path;
-    await emitAndSettle(
-      tester,
-      BackendStatusUpdate(request.taskId, status: BackendTaskStatus.complete),
-    );
 
     expect(anyBadgeVisible(tester), isFalse);
   });
 
   testWidgets(
-    // QA (Loop-4 attack list #7): failed is not in AppShell's `_isActive`
-    // set, so the badge should clear the instant the backend reports
+    'status pill appears once a download is running, disappears once it '
+    'completes',
+    (tester) async {
+      await pumpApp(tester);
+      expect(anyBadgeVisible(tester), isFalse);
+
+      await settleAfter(
+        tester,
+        () => manager.enqueue(request, freeBytes: 1 << 30),
+      );
+      await emitAndSettle(
+        tester,
+        BackendProgressUpdate(
+          request.taskId,
+          progress: 0.4,
+          expectedFileSizeBytes: request.expectedSizeBytes,
+        ),
+      );
+      expect(anyBadgeVisible(tester), isTrue);
+
+      final file = File('${modelsDir.path}/${request.fileName}')
+        ..writeAsBytesSync([1, 2, 3, 4, 5]);
+      backend.filePaths[request.taskId] = file.path;
+      await emitAndSettle(
+        tester,
+        BackendStatusUpdate(request.taskId, status: BackendTaskStatus.complete),
+      );
+
+      expect(anyBadgeVisible(tester), isFalse);
+    },
+  );
+
+  testWidgets(
+    // QA (Loop-4 attack list #7): failed is not in `isDownloadActive`'s
+    // set, so the pill should clear the instant the backend reports
     // failure — no separate "dismiss" step should be required. Pinning that
     // actual behavior here.
-    'badge disappears as soon as a download fails, with no dismiss step',
+    'status pill disappears as soon as a download fails, with no dismiss step',
     (tester) async {
       await pumpApp(tester);
 

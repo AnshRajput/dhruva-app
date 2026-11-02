@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.6.1+105
+version: 0.7.0+106
 
 environment:
   sdk: ^3.11.0
@@ -43,9 +43,21 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  # Connectors (Wave 2A): iOS calendar (EventKit full access, read calls only).
+  # MIT, maintained (bullet.to). Android does NOT use it for reading: 0.8 needs
+  # WRITE_CALENDAR declared and granted for any read, which a read-only
+  # assistant must not request, so Android reads through dhruva_connectors with
+  # READ_CALENDAR alone. Capped at 0.8.1 because 0.9+ needs Flutter 3.44.
+  device_calendar_plus: ^0.8.1
   device_info_plus: ^13.2.0 # RAM (physicalRamSize/availableRamSize) + disk
   # (freeDiskSize/totalDiskSize) on Android + iOS — verified in package source,
   # no custom MethodChannel needed.
+  # Connectors (Wave 2A): first-party native half (Android calendar read with
+  # READ_CALENDAR only, SAF folder grant, notification listener queue; iOS
+  # folder bookmark). In-repo, no network. A plugin (not MainActivity code) so
+  # the WorkManager background engine can reach it.
+  dhruva_connectors:
+    path: third_party/dhruva_connectors
   # HF metadata API client transport (hf_api/hf_api_client.dart). Replaced
   # package:http — dio gives us typed DioException mapping, per-request
   # connect/receive timeouts, and a light retry on flaky mobile networks
@@ -57,6 +69,10 @@ dependencies:
   file_selector: ^1.1.0
   flutter:
     sdk: flutter
+  # Connectors (Wave 2A): name/photo of people who appear in events, one email
+  # lookup at a time (data/connectors/system_sources.dart). MIT, maintained
+  # (QuisApp). Read permission only (READ_CONTACTS / NSContactsUsageDescription).
+  flutter_contacts: ^2.1.0
   # Loop 4 (chat): markdown rendering for assistant/user bubbles.
   # `flutter_markdown_plus` (BSD-3, actively maintained continuation of
   # Google's original flutter_markdown by Foresight Mobile — the original
@@ -67,6 +83,7 @@ dependencies:
   # its `builders` map (`MarkdownElementBuilder`) lets the `code` element be
   # swapped for the spec's own block (language label + copy button, §2.3)
   # instead of fighting a bespoke AI-chat-flavored renderer's opinions.
+  flutter_local_notifications: ^22.3.3
   flutter_markdown_plus: ^1.0.12
   flutter_riverpod: ^3.3.2
   freezed_annotation: ^3.1.0
@@ -122,7 +139,11 @@ dependencies:
   # federated plugin), BSD-3 — same license family as share_plus/
   # path_provider/device_info_plus already in this file.
   shorebird_code_push: ^2.0.7
+  timezone: ^0.11.2
   url_launcher: ^6.3.2
+  # Connectors (Wave 2A): Android periodic sync every 6 h (data/connectors/
+  # background_sync.dart). MIT, maintained (fluttercommunity). No network use.
+  workmanager: ^0.10.10
 
 # Vendored pdf_cos 14.0.0 (Apache-2.0) with a hard output cap on every stream
 # decoding filter (see third_party/pdf_cos/NOTICE.md). The upstream parser
@@ -179,6 +200,8 @@ flutter:
   assets:
     - assets/characters/starter_pack.json
     - shorebird.yaml
+    # Read at startup for the About/version line (features/settings/app_info).
+    - pubspec.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:

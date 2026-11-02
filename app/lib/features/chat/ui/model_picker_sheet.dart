@@ -14,10 +14,12 @@ import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/speed_label_chip.dart';
 import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
+import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../state/installed_models_provider.dart';
 import '../widgets/brand_motif.dart';
 import '../widgets/model_chip.dart';
@@ -27,22 +29,19 @@ Future<InstalledModelInfo?> showModelPickerSheet(
   BuildContext context, {
   int? selectedModelId,
   bool smallerModelsOnly = false,
+
+  /// With [smallerModelsOnly]: only installed models strictly smaller than
+  /// this many bytes (the model that just failed). When none exist the
+  /// sheet says so and links to Discover instead of listing a bigger model.
+  int? smallerThanBytes,
 }) {
-  final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-  return showModalBottomSheet<InstalledModelInfo>(
+  return showDhruvaSheet<InstalledModelInfo>(
     context: context,
     isScrollControlled: true,
-    // Nit 6, chat-spec.md §10 — see sampling_settings_sheet.dart's
-    // identical note: duration is sourced from the tokens, the
-    // entrance/exit curve is a documented deviation (no public
-    // `showModalBottomSheet` hook reads it).
-    sheetAnimationStyle: AnimationStyle(
-      duration: tokens.motion.moderate,
-      reverseDuration: tokens.motion.fast,
-    ),
     builder: (context) => _ModelPickerSheet(
       selectedModelId: selectedModelId,
       smallerModelsOnly: smallerModelsOnly,
+      smallerThanBytes: smallerThanBytes,
     ),
   );
 }
@@ -50,10 +49,12 @@ Future<InstalledModelInfo?> showModelPickerSheet(
 class _ModelPickerSheet extends ConsumerWidget {
   final int? selectedModelId;
   final bool smallerModelsOnly;
+  final int? smallerThanBytes;
 
   const _ModelPickerSheet({
     this.selectedModelId,
     required this.smallerModelsOnly,
+    this.smallerThanBytes,
   });
 
   @override
@@ -69,13 +70,17 @@ class _ModelPickerSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Choose a model', style: theme.textTheme.titleMedium),
+            Text(
+              smallerModelsOnly ? 'Use a smaller model' : 'Choose a model',
+              style: theme.textTheme.titleMedium,
+            ),
             SizedBox(height: tokens.spacing.sm),
             switch (modelsAsync) {
               AsyncData(:final value) => _ModelList(
                 models: value,
                 selectedModelId: selectedModelId,
                 smallerModelsOnly: smallerModelsOnly,
+                smallerThanBytes: smallerThanBytes,
               ),
               AsyncError(:final error) => ErrorStateView(
                 error: error,
@@ -123,11 +128,13 @@ class _ModelList extends ConsumerWidget {
   final List<InstalledModelInfo> models;
   final int? selectedModelId;
   final bool smallerModelsOnly;
+  final int? smallerThanBytes;
 
   const _ModelList({
     required this.models,
     required this.selectedModelId,
     required this.smallerModelsOnly,
+    this.smallerThanBytes,
   });
 
   @override
@@ -139,6 +146,12 @@ class _ModelList extends ConsumerWidget {
       );
     }
     if (!smallerModelsOnly) return _list(context, ref, models);
+    final cap = smallerThanBytes;
+    if (cap != null) {
+      final smaller = models.where((m) => m.sizeBytes < cap).toList();
+      if (smaller.isEmpty) return const _NoSmallerModel();
+      return _list(context, ref, smaller);
+    }
 
     return FutureBuilder<DeviceMemoryInfo>(
       future: ref.read(deviceInfoServiceProvider).getMemoryInfo(),
@@ -188,7 +201,7 @@ class _ModelList extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${model.quant ?? 'unknown quant'} · ${_formatBytes(model.sizeBytes)}',
+                '${plainQuantName(model.quant)} · ${_formatBytes(model.sizeBytes)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -202,6 +215,38 @@ class _ModelList extends ConsumerWidget {
           onTap: () => Navigator.of(context).pop(model),
         );
       },
+    );
+  }
+}
+
+/// Nothing installed is smaller than the failed model: say so and point at
+/// Discover, rather than offering a bigger model as a "smaller" one.
+class _NoSmallerModel extends StatelessWidget {
+  const _NoSmallerModel();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'You have no smaller model installed.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          FilledButton.tonal(
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.push('/models/hub');
+            },
+            child: const Text('Find a smaller model'),
+          ),
+        ],
+      ),
     );
   }
 }

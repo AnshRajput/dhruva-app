@@ -90,7 +90,7 @@ class ConversationListController extends AsyncNotifier<ConversationListState> {
     state = AsyncData(
       (current ?? const ConversationListState()).copyWith(
         folders: folders,
-        conversations: conversations,
+        conversations: _withoutPending(conversations),
       ),
     );
   }
@@ -103,7 +103,7 @@ class ConversationListController extends AsyncNotifier<ConversationListState> {
       current.copyWith(
         selectedFolderId: folderId,
         clearSelectedFolderId: folderId == null,
-        conversations: conversations,
+        conversations: _withoutPending(conversations),
       ),
     );
   }
@@ -138,6 +138,50 @@ class ConversationListController extends AsyncNotifier<ConversationListState> {
   Future<void> delete(int conversationId) async {
     await _guarded(() => _repo.deleteConversation(conversationId));
   }
+
+  // Deletes held back for the Undo window (conversation id -> commit timer).
+  final Map<int, Timer> _pendingDeletes = {};
+
+  /// Hides the row now and deletes it after [window] unless [undoDelete] is
+  /// called first (swipe-to-delete with an Undo snackbar instead of a confirm
+  /// dialog over a half-swiped row). If the app dies inside the window the
+  /// conversation is simply still there: the safe failure.
+  void deleteWithUndo(
+    int conversationId, {
+    Duration window = const Duration(seconds: 4),
+  }) {
+    final current = state.value;
+    if (current == null) return;
+    _pendingDeletes[conversationId]?.cancel();
+    _pendingDeletes[conversationId] = Timer(window, () {
+      _pendingDeletes.remove(conversationId);
+      unawaited(delete(conversationId));
+    });
+    state = AsyncData(
+      current.copyWith(
+        conversations: [
+          for (final c in current.conversations)
+            if (c.id != conversationId) c,
+        ],
+      ),
+    );
+  }
+
+  /// Cancels a held delete and brings the row back.
+  void undoDelete(int conversationId) {
+    final timer = _pendingDeletes.remove(conversationId);
+    if (timer == null) return;
+    timer.cancel();
+    unawaited(refresh());
+  }
+
+  List<ConversationSummary> _withoutPending(List<ConversationSummary> all) =>
+      _pendingDeletes.isEmpty
+      ? all
+      : [
+          for (final c in all)
+            if (!_pendingDeletes.containsKey(c.id)) c,
+        ];
 
   Future<void> _guarded(Future<void> Function() action) async {
     try {

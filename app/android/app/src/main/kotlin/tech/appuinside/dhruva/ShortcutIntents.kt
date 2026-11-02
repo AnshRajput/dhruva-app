@@ -7,7 +7,7 @@ import android.content.Intent
 /**
  * Builds the same `{route}` intent the static launcher shortcuts fire
  * (res/xml/shortcuts.xml), so the tile and widget reuse `IntentInbox` routing
- * instead of a second system. Routes: new_chat, workflows, talk.
+ * instead of a second system. Routes: today, ask, new_chat, workflows (opens Actions), talk.
  */
 object ShortcutIntents {
     private const val ACTION = "tech.appuinside.dhruva.SHORTCUT"

@@ -1,0 +1,25 @@
+name: dhruva_connectors
+description: >-
+  Native side of the Dhruva connectors (calendar read-only, folder grant,
+  notification capture, charging state). First-party, in-repo: it makes no
+  network calls. The Dart API is the `app.dhruva/connectors` method channel,
+  used from lib/data/connectors/system_sources.dart.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: tech.appuinside.dhruva.connectors
+        pluginClass: DhruvaConnectorsPlugin
+      ios:
+        pluginClass: DhruvaConnectorsPlugin

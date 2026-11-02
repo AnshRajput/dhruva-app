@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -7,6 +8,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    BackupExclusion.apply()
+    // flutter_local_notifications (morning brief): show/handle taps in the app.
+    UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    PrivacyChannel.installCover()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -14,6 +19,9 @@ import UIKit
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceHealthChannel") {
       DeviceHealthChannel.register(with: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PrivacyChannel") {
+      PrivacyChannel.register(with: registrar.messenger())
     }
   }
 }
@@ -47,6 +55,76 @@ enum DeviceHealthChannel {
         "charging": state == .charging || state == .full,
         "thermal": thermal,
       ])
+    }
+  }
+}
+
+/// Backup lockdown (daily-assistant spec B1). Marks the app's data
+/// directories (Documents: Drift DB; Application Support: models, flags,
+/// later the connector index) `NSURLIsExcludedFromBackupKey` so iCloud and
+/// iTunes/Finder backups never contain chats or connector data. The flag on a
+/// directory covers everything created inside it later; direct children are
+/// marked too as belt and braces. Runs on every launch (cheap, idempotent).
+enum BackupExclusion {
+  static func apply() {
+    let fm = FileManager.default
+    let roots: [URL] = [
+      fm.urls(for: .documentDirectory, in: .userDomainMask).first,
+      fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+    ].compactMap { $0 }
+    for var root in roots {
+      try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try? root.setResourceValues(values)
+      let children = (try? fm.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: nil)) ?? []
+      for var child in children {
+        try? child.setResourceValues(values)
+      }
+    }
+  }
+}
+
+/// "Hide content in app switcher" (Settings > Privacy; Dart: core/privacy).
+/// Dart sends `setHideInSwitcher(Bool)`. While enabled, an opaque cover goes
+/// over the scene's window as it becomes inactive (that is when iOS takes the
+/// app-switcher snapshot) and comes off when it is active again. Uses scene
+/// notifications so it needs no override in the Flutter scene delegate.
+enum PrivacyChannel {
+  static var enabled = false
+  private static let coverTag = 0xD40A
+
+  static func register(with messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "app.dhruva/privacy", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "setHideInSwitcher" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      enabled = (call.arguments as? Bool) ?? false
+      result(nil)
+    }
+  }
+
+  static func installCover() {
+    let center = NotificationCenter.default
+    center.addObserver(forName: UIScene.willDeactivateNotification, object: nil, queue: .main) {
+      note in
+      guard enabled, let window = (note.object as? UIWindowScene)?.windows.first,
+        window.viewWithTag(coverTag) == nil
+      else { return }
+      let cover = UIView(frame: window.bounds)
+      cover.tag = coverTag
+      cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      cover.backgroundColor = .systemBackground
+      window.addSubview(cover)
+    }
+    center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) {
+      note in
+      (note.object as? UIWindowScene)?.windows.forEach {
+        $0.viewWithTag(coverTag)?.removeFromSuperview()
+      }
     }
   }
 }

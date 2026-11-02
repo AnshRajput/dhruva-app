@@ -289,8 +289,11 @@ void main() {
 
     test('folderId filters to that folder only', () async {
       final folderId = await repo.createFolder('Work');
-      final inFolder = await repo.createConversation(folderId: folderId);
-      await repo.createConversation();
+      final inFolder = await repo.createConversation(
+        title: 'f',
+        folderId: folderId,
+      );
+      await repo.createConversation(title: 'o');
 
       final list = await repo.listConversations(folderId: folderId);
       expect(list.map((c) => c.id), [inFolder]);
@@ -298,8 +301,8 @@ void main() {
 
     test('onlyUnfiled returns conversations with no folder', () async {
       final folderId = await repo.createFolder('Work');
-      await repo.createConversation(folderId: folderId);
-      final unfiled = await repo.createConversation();
+      await repo.createConversation(title: 'f', folderId: folderId);
+      final unfiled = await repo.createConversation(title: 'u');
 
       final list = await repo.listConversations(onlyUnfiled: true);
       expect(list.map((c) => c.id), [unfiled]);

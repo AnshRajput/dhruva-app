@@ -12,16 +12,24 @@ import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/format/when.dart';
+import '../../../core/markdown/safe_markdown.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart' show ItemSource;
 import '../../vision/widgets/image_lightbox.dart';
-import '../../voice/widgets/tts_button.dart';
+import '../../voice/state/voice_playback_controller.dart';
 import '../state/message_info_x.dart';
+import 'answer_source_chips.dart';
 import 'reasoning_block.dart';
 import 'sources_block.dart';
+
+/// How long the "copied" check stays (a confirmation needs time to be read;
+/// a motion token is not a timeout).
+const _copiedHold = Duration(milliseconds: 1200);
 
 class MessageBubble extends StatelessWidget {
   final MessageInfo message;
@@ -37,9 +45,25 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final VoidCallback? onEdit;
 
+  /// "Action: Draft a reply": the label over a user message that started an
+  /// Action chat (the instruction itself is in the system layer).
+  final String? actionLabel;
+
   /// Opens the report flow for this (assistant) reply. Null hides the
   /// action (e.g. previews/tests that don't wire it).
   final VoidCallback? onReport;
+
+  /// Keeps this reply in the Library (Saved). Null hides the action.
+  final Future<void> Function()? onSave;
+
+  /// How many open to-dos this reply holds (the "Extract to-dos" output) and
+  /// the tap that adds them to the Library. Zero / null hides the action.
+  final int todoCount;
+  final Future<void> Function()? onAddTodos;
+
+  /// Opens a cited connector item (the chip under a grounded answer). Null
+  /// hides the chips (previews/tests that don't wire it).
+  final ValueChanged<ItemSource>? onOpenItemSource;
 
   const MessageBubble({
     super.key,
@@ -50,7 +74,12 @@ class MessageBubble extends StatelessWidget {
     this.attachedImage,
     this.onRegenerate,
     this.onEdit,
+    this.actionLabel,
     this.onReport,
+    this.onSave,
+    this.todoCount = 0,
+    this.onAddTodos,
+    this.onOpenItemSource,
   });
 
   @override
@@ -97,6 +126,17 @@ class MessageBubble extends StatelessWidget {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isUser && actionLabel != null)
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.xs),
+                child: Text(
+                  actionLabel!,
+                  key: const ValueKey('action-label'),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
             Container(
               padding: EdgeInsets.all(tokens.spacing.md),
               decoration: BoxDecoration(
@@ -144,12 +184,23 @@ class MessageBubble extends StatelessWidget {
             ),
             if (!isUser && !isStreaming && message.sources.isNotEmpty)
               SourcesBlock(sources: message.sources),
+            if (!isUser &&
+                !isStreaming &&
+                onOpenItemSource != null &&
+                message.itemSources.isNotEmpty)
+              AnswerSourceChips(
+                sources: message.itemSources,
+                onOpen: onOpenItemSource!,
+              ),
             if (!isUser) ...[
               SizedBox(height: tokens.spacing.xs),
               _MetadataRow(
                 message: message,
                 onRegenerate: onRegenerate,
                 onReport: onReport,
+                onSave: onSave,
+                todoCount: todoCount,
+                onAddTodos: onAddTodos,
               ),
             ],
             if (isUser && onEdit != null) ...[
@@ -253,25 +304,50 @@ class _SystemBanner extends StatelessWidget {
   }
 }
 
-class _MetadataRow extends StatefulWidget {
+/// Under a reply: when it was written and how fast, then Copy and Regenerate
+/// (the two things almost everyone wants), then one overflow menu holding Read
+/// aloud, Save to Library, Add to to-dos and Report. One line, never wrapping.
+class _MetadataRow extends ConsumerStatefulWidget {
   final MessageInfo message;
   final VoidCallback? onRegenerate;
   final VoidCallback? onReport;
+  final Future<void> Function()? onSave;
+  final int todoCount;
+  final Future<void> Function()? onAddTodos;
 
-  const _MetadataRow({required this.message, this.onRegenerate, this.onReport});
+  const _MetadataRow({
+    required this.message,
+    this.onRegenerate,
+    this.onReport,
+    this.onSave,
+    this.todoCount = 0,
+    this.onAddTodos,
+  });
 
   @override
-  State<_MetadataRow> createState() => _MetadataRowState();
+  ConsumerState<_MetadataRow> createState() => _MetadataRowState();
 }
 
-class _MetadataRowState extends State<_MetadataRow> {
+class _MetadataRowState extends ConsumerState<_MetadataRow> {
   bool _copied = false;
+  bool _saved = false;
+  bool _todosAdded = false;
+
+  Future<void> _save() async {
+    await widget.onSave?.call();
+    if (mounted) setState(() => _saved = true);
+  }
+
+  Future<void> _addTodos() async {
+    await widget.onAddTodos?.call();
+    if (mounted) setState(() => _todosAdded = true);
+  }
 
   Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.message.content));
     if (!mounted) return;
     setState(() => _copied = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    await Future<void>.delayed(_copiedHold);
     if (mounted) setState(() => _copied = false);
   }
 
@@ -287,60 +363,140 @@ class _MetadataRowState extends State<_MetadataRow> {
         message.tokCount != null && message.genMs != null && message.genMs! > 0
         ? (message.tokCount! / (message.genMs! / 1000)).toStringAsFixed(1)
         : null;
+    // Read aloud keeps its one-shot error snackbar (it moved into the menu
+    // with the speaker button).
+    ref.listen(voicePlaybackControllerProvider, (previous, next) {
+      if (next.lastErrorMessageId == message.id &&
+          next.lastErrorMessageForId != null &&
+          next.lastErrorMessageForId != previous?.lastErrorMessageForId) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(next.lastErrorMessageForId!)));
+      }
+    });
+    final playback = ref.watch(voicePlaybackControllerProvider);
+    final playing = playback.isPlaying(message.id);
+    final speaking = playback.isSynthesizing(message.id);
+    final hasText = message.content.isNotEmpty;
+    final canSave = widget.onSave != null && hasText;
+    final canTodos = widget.onAddTodos != null && widget.todoCount > 0;
+    final canReport = widget.onReport != null && hasText;
+    final hasMenu = hasText || canSave || canTodos || canReport;
+
+    Widget action({
+      required VoidCallback? onPressed,
+      required String tooltip,
+      required IconData icon,
+      Color? iconColor,
+      bool animateSwap = false,
+    }) => IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: animateSwap
+          // Copy -> check: a short cross-fade so the confirmation reads.
+          ? AnimatedSwitcher(
+              duration:
+                  tokens.motion.instant + const Duration(milliseconds: 20),
+              child: Icon(
+                icon,
+                key: ValueKey(icon),
+                size: 16,
+                color: iconColor ?? color,
+              ),
+            )
+          : Icon(icon, size: 16, color: iconColor ?? color),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      visualDensity: VisualDensity.compact,
+    );
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(_relativeTime(message.createdAt), style: style),
-        if (tokPerSec != null) Text(' · $tokPerSec tok/s', style: style),
-        if (message.content.isNotEmpty) ...[
+        Flexible(
+          child: Text(
+            '${timeAgo(message.createdAt)}'
+            '${tokPerSec != null ? ' · $tokPerSec tok/s' : ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
+        if (hasText) ...[
           SizedBox(width: tokens.spacing.xs),
-          TtsButton(messageId: message.id, text: message.content),
-        ],
-        // WS3: copy is a universal quick action on every assistant reply
-        // with content — discoverable next to regenerate, not gated to the
-        // vision "Extract text" preset it started life as (Loop 7).
-        if (message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          IconButton(
+          action(
             onPressed: _copy,
             tooltip: _copied ? 'Copied' : 'Copy text',
-            icon: Icon(
-              _copied ? Icons.check : Icons.copy,
-              size: 16,
-              color: _copied ? tokens.success : color,
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
+            icon: _copied ? Icons.check : Icons.copy,
+            iconColor: _copied ? tokens.success : null,
+            animateSwap: true,
           ),
         ],
-        if (widget.onReport != null && message.content.isNotEmpty) ...[
-          SizedBox(width: tokens.spacing.xs),
-          // Play AI-Generated Content policy: in-app report on every reply.
-          IconButton(
-            onPressed: widget.onReport,
-            tooltip: 'Report this reply',
-            icon: Icon(Icons.flag_outlined, size: 16, color: color),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-        if (onRegenerate != null) ...[
-          SizedBox(width: tokens.spacing.xs),
-          // Designer BLOCKING #2: a bare InkWell+Icon here was a ~16px hit
-          // area with no tooltip/semantic label. IconButton gives both for
-          // free (native widget, ladder rung 4) plus an explicit >=44px
-          // tappable box without inflating the icon's visual size.
-          IconButton(
+        if (onRegenerate != null)
+          action(
             onPressed: onRegenerate,
             tooltip: 'Regenerate response',
-            icon: Icon(Icons.refresh, size: 16, color: color),
+            icon: Icons.refresh,
+          ),
+        if (hasMenu)
+          PopupMenuButton<String>(
+            key: const ValueKey('reply-more'),
+            tooltip: 'More actions',
+            icon: Icon(Icons.more_vert, size: 16, color: color),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
+            onSelected: (v) {
+              switch (v) {
+                case 'speak':
+                  unawaited(
+                    ref
+                        .read(voicePlaybackControllerProvider.notifier)
+                        .toggle(message.id, message.content),
+                  );
+                case 'save':
+                  unawaited(_save());
+                case 'todos':
+                  unawaited(_addTodos());
+                case 'report':
+                  widget.onReport?.call();
+              }
+            },
+            itemBuilder: (context) => [
+              if (hasText)
+                PopupMenuItem(
+                  key: const ValueKey('reply-speak'),
+                  value: 'speak',
+                  enabled: !speaking,
+                  child: Text(playing ? 'Stop reading' : 'Read aloud'),
+                ),
+              if (canSave)
+                PopupMenuItem(
+                  key: const ValueKey('save-reply'),
+                  value: 'save',
+                  enabled: !_saved,
+                  child: Text(_saved ? 'Saved to Library' : 'Save to Library'),
+                ),
+              if (canTodos)
+                PopupMenuItem(
+                  key: const ValueKey('add-todos'),
+                  value: 'todos',
+                  enabled: !_todosAdded,
+                  child: Text(
+                    _todosAdded
+                        ? 'Added to to-dos'
+                        : 'Add ${widget.todoCount} to your to-dos',
+                  ),
+                ),
+              if (canReport)
+                // Play AI-Generated Content policy: in-app report on every
+                // reply, one tap away in the menu.
+                const PopupMenuItem(
+                  key: ValueKey('reply-report'),
+                  value: 'report',
+                  child: Text('Report this reply'),
+                ),
+            ],
           ),
-        ],
       ],
     );
   }
@@ -398,14 +554,6 @@ class _EditAffordance extends StatelessWidget {
       ),
     );
   }
-}
-
-String _relativeTime(DateTime time) {
-  final diff = DateTime.now().difference(time);
-  if (diff.inSeconds < 60) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  return '${diff.inDays}d ago';
 }
 
 class _MarkdownBody extends StatelessWidget {
@@ -468,23 +616,14 @@ class _MarkdownBody extends StatelessWidget {
       selectable: true,
       styleSheet: styleSheet,
       builders: {'pre': _CodeBlockBuilder(tokens: tokens, theme: theme)},
-      // N4 (staff review): links were rendered underlined/styled as links
-      // (the `a:` style above) but not actually tappable. External,
-      // user-initiated per Rule 5 — no confirmation dialog (not asked
-      // for), but the link's own underline+secondary-color styling is
-      // what makes tapping it "obvious," and only http(s) hrefs are
-      // honored (a model emitting a `javascript:`/`file:`/`intent:` href
-      // is a trust-boundary case, not a legitimate link to open).
-      onTapLink: (linkText, href, title) => _openMarkdownLink(href),
+      // Security (F1): model text may be steered by untrusted sources, so
+      // markdown never fetches an image, and a link opens only after the
+      // user confirms the full URL (core/markdown/safe_markdown.dart).
+      imageBuilder: safeMarkdownImageBuilder,
+      onTapLink: (linkText, href, title) =>
+          unawaited(confirmAndOpenMarkdownLink(context, href)),
     );
   }
-}
-
-void _openMarkdownLink(String? href) {
-  if (href == null) return;
-  final uri = Uri.tryParse(href);
-  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return;
-  unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
 }
 
 /// chat-spec.md §2.3: full-width code well, language label, copy-to-
@@ -544,7 +683,7 @@ class _CodeBlockState extends State<_CodeBlock> {
     await Clipboard.setData(ClipboardData(text: widget.code));
     if (!mounted) return;
     setState(() => _copied = true);
-    await Future<void>.delayed(widget.tokens.motion.moderate);
+    await Future<void>.delayed(_copiedHold);
     if (mounted) setState(() => _copied = false);
   }
 
@@ -604,10 +743,16 @@ class _CodeBlockState extends State<_CodeBlock> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              _copied ? Icons.check : Icons.copy,
-                              size: 13,
-                              color: copyColor,
+                            AnimatedSwitcher(
+                              duration:
+                                  tokens.motion.instant +
+                                  const Duration(milliseconds: 20),
+                              child: Icon(
+                                _copied ? Icons.check : Icons.copy,
+                                key: ValueKey(_copied),
+                                size: 13,
+                                color: copyColor,
+                              ),
                             ),
                             SizedBox(width: tokens.spacing.xs),
                             Text(

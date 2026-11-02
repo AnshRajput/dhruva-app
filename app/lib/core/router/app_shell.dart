@@ -1,23 +1,15 @@
-/// Bottom-nav shell for the five top-level destinations (Loop 4 + Amendment
-/// 4b + Loop 5 + the UI-PARITY Playground tab). Not specified by chat-spec.md
-/// (it only covers the chat screens themselves) — per the Loop-4 brief's
-/// fallback, a plain `NavigationBar`. `/chat` is app home per chat-spec.md §1;
-/// characters, models hub, playground, and settings are the second through
-/// fifth destinations. Detail
-/// routes (`/chat/:id`, `/characters/:id`, `/models/repo/:id`,
-/// `/models/downloads`) are pushed as siblings of this shell (see
-/// `app_router.dart`), so they cover the nav bar full-screen rather than
-/// nesting inside it.
+/// Bottom-nav shell for the daily-assistant tabs: Today · Inbox · Ask ·
+/// Library. The Inbox tab is hidden until an inbox source exists
+/// (`inboxAvailableProvider`); Today carries a "Set up your inbox" card
+/// meanwhile. Settings is NOT a tab: it opens full-screen from the gear on
+/// Today. Detail routes (`/chat/:id`, `/settings/*`, `/models/*`, ...) are
+/// pushed as siblings of this shell (see `app_router.dart`), so they cover the
+/// nav bar full-screen rather than nesting inside it, and they must never push
+/// a shell-branch route (the 0.6.0 blank-page bug).
 ///
-/// Amendment 4b: the Models destination carries a live badge whenever any
-/// download is active (queued/running/paused/verifying) — reuses
-/// `DownloadsController`'s existing progress-stream accumulation rather than
-/// standing up a second subscription to `DownloadManager.progress`. This is
-/// the app's one composition root that's allowed to import feature code
-/// directly (`app_router.dart` already imports every top-level screen the
-/// same way), so reaching into `features/models_hub`'s provider here doesn't
-/// breach ADR-002's cross-feature-import rule the way a features/settings ->
-/// features/chat import would.
+/// This always-mounted composition root is the one place allowed to import
+/// feature code directly (ADR-002), so reaching into `features/models_hub`'s
+/// download provider here doesn't breach the cross-feature-import rule.
 library;
 
 import 'dart:async';
@@ -38,6 +30,19 @@ import '../../features/models_hub/state/speed_test_controller.dart';
 import '../../features/models_hub/state/storage_controller.dart';
 import '../../features/playground/state/playground_installed_models_provider.dart'
     as playground_installed;
+import '../../features/today/state/brief_controller.dart';
+import '../di/connector_actions.dart';
+import '../settings/what_moved.dart';
+import '../widgets/platform_chrome.dart';
+import 'inbox_availability.dart';
+
+/// Branch indexes in the shell (order of `StatefulShellRoute` branches).
+abstract final class ShellBranch {
+  static const today = 0;
+  static const inbox = 1;
+  static const ask = 2;
+  static const library = 3;
+}
 
 class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -61,6 +66,8 @@ class AppShell extends ConsumerWidget {
       ref.invalidate(char_installed.installedModelsProvider);
       ref.invalidate(playground_installed.playgroundInstalledModelsProvider);
       ref.invalidate(storageControllerProvider);
+      // Today's brief re-reads whether a model can write it now.
+      ref.invalidate(briefControllerProvider);
 
       // A5: an unmissable confirmation that ties the loop back to chatting —
       // but only for chat-usable GGUF models that are FULLY ready. Voice
@@ -111,6 +118,10 @@ class AppShell extends ConsumerWidget {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
+              // A snackbar with an action stays until dismissed by default;
+              // this notice is a courtesy, not a task.
+              persist: false,
+              duration: const Duration(seconds: 4),
               content: Text(
                 '${friendlyModelName(model.repoId)} is ready — start chatting.',
               ),
@@ -135,53 +146,58 @@ class AppShell extends ConsumerWidget {
       }
     });
 
-    final downloads = ref.watch(downloadsControllerProvider).value ?? const {};
-    final hasActiveDownload = downloads.values.any(_isActive);
+    final inboxAvailable = ref.watch(inboxAvailableProvider);
+    final glass = useGlassChrome(context, ref);
+
+    // Visible tabs -> shell branch indexes. With the Inbox hidden, branch 1
+    // is unreachable from the bar; if a deep link lands there, Today is
+    // highlighted (the Inbox screen then shows its connect state).
+    final branches = <int>[
+      ShellBranch.today,
+      if (inboxAvailable) ShellBranch.inbox,
+      ShellBranch.ask,
+      ShellBranch.library,
+    ];
+    final selected = branches.indexOf(navigationShell.currentIndex);
 
     return Scaffold(
-      body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
-        ),
+      // iOS glass: content scrolls under the translucent tab bar.
+      extendBody: glass,
+      body: WhatMovedGate(child: navigationShell),
+      bottomNavigationBar: AdaptiveTabBar(
+        selectedIndex: selected < 0 ? 0 : selected,
+        onSelected: (index) {
+          // The Inbox branch stays mounted (indexedStack), so its initState
+          // runs once: drain on every tap of the tab instead.
+          if (branches[index] == ShellBranch.inbox) {
+            unawaited(ref.read(connectorActionsProvider).drainNotifications());
+          }
+          navigationShell.goBranch(
+            branches[index],
+            initialLocation: branches[index] == navigationShell.currentIndex,
+          );
+        },
         destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.wb_sunny_outlined),
+            selectedIcon: Icon(Icons.wb_sunny),
+            label: 'Today',
+          ),
+          if (inboxAvailable)
+            const NavigationDestination(
+              icon: Icon(Icons.inbox_outlined),
+              selectedIcon: Icon(Icons.inbox),
+              label: 'Inbox',
+            ),
           const NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Chat',
+            label: 'Ask',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.theater_comedy_outlined),
-            selectedIcon: Icon(Icons.theater_comedy),
-            label: 'Characters',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: hasActiveDownload,
-              smallSize: 8,
-              child: const Icon(Icons.widgets_outlined),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: hasActiveDownload,
-              smallSize: 8,
-              child: const Icon(Icons.widgets),
-            ),
-            label: 'Models',
-            tooltip: hasActiveDownload
-                ? 'Models — download in progress'
-                : 'Models',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.science_outlined),
-            selectedIcon: Icon(Icons.science),
-            label: 'Playground',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
+            icon: Icon(Icons.local_library_outlined),
+            selectedIcon: Icon(Icons.local_library),
+            label: 'Library',
           ),
         ],
       ),
@@ -208,7 +224,7 @@ Future<void> _openChatWith(
   if (id != null) {
     unawaited(context.push('/chat/new', extra: id));
   } else {
-    navigationShell.goBranch(0);
+    navigationShell.goBranch(ShellBranch.ask);
   }
 }
 
@@ -218,13 +234,3 @@ Set<String> _completedTaskIds(
     .where((e) => e.value.state == DownloadState.complete)
     .map((e) => e.key)
     .toSet();
-
-bool _isActive(DownloadProgress progress) => switch (progress.state) {
-  DownloadState.queued ||
-  DownloadState.running ||
-  DownloadState.paused ||
-  DownloadState.verifying => true,
-  DownloadState.complete ||
-  DownloadState.failed ||
-  DownloadState.canceled => false,
-};

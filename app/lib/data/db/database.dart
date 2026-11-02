@@ -71,8 +71,10 @@ class Folders extends Table {
 /// so reordering these values is a breaking schema change.
 enum MessageRole { user, assistant, system }
 
-/// Terminal state of a `Messages` row once generation stops.
-enum MessageStatus { complete, cancelled, error }
+/// Terminal state of a `Messages` row once generation stops. Index-based like
+/// [MessageRole]: only ever append. `truncated` = the reply hit its answer
+/// length limit (`maxTokens`); no schema change, the column is a plain int.
+enum MessageStatus { complete, cancelled, error, truncated }
 
 /// A chat thread.
 ///
@@ -253,6 +255,98 @@ class DocumentChunks extends Table {
   TextColumn get body => text()();
 }
 
+/// What kind of thing an [Items] row is. Stored as text (`textEnum`) so adding
+/// a kind (a later connector) never renumbers existing rows.
+enum ItemKind { mail, event, contact, file, notification }
+
+/// One connector's standing with the user (v7): at most one row per connector
+/// id. Presence means the user opted in; `status`/`lastError` mirror the last
+/// sync outcome for the Settings card. `configJson` carries small per-
+/// connector settings (excluded calendars, the granted folder, excluded
+/// notification apps). Credentials never live here.
+@DataClassName('ConnectorAccountRow')
+class ConnectorAccounts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get connector => text().unique()();
+  TextColumn get status => text()();
+  TextColumn get label => text().nullable()();
+  TextColumn get configJson => text().nullable()();
+  TextColumn get lastError => text().nullable()();
+  DateTimeColumn get connectedAt => dateTime()();
+  DateTimeColumn get lastSyncAt => dateTime().nullable()();
+}
+
+/// A piece of the user's own data pulled in by a connector (v7): a calendar
+/// event, a notification, a contact, one section of a file. Untrusted text:
+/// it only ever reaches a prompt inside a delimited sources block. `body` is
+/// capped at 8 KB by the writer. (source, externalId) is unique, which is what
+/// makes re-syncing idempotent.
+@DataClassName('ItemRow')
+class Items extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get source => text()();
+  TextColumn get externalId => text()();
+  TextColumn get kind => textEnum<ItemKind>()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get body => text().withDefault(const Constant(''))();
+
+  /// JSON list of `{name, email}` objects (attendees, sender).
+  TextColumn get peopleJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get startsAt => dateTime().nullable()();
+  DateTimeColumn get sentAt => dateTime().nullable()();
+
+  /// JSON object of small per-kind facts (all-day, package, mime, ...).
+  TextColumn get flagsJson => text().withDefault(const Constant('{}'))();
+  TextColumn get summary => text().nullable()();
+  TextColumn get summaryModel => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {source, externalId},
+  ];
+}
+
+/// The privacy ledger (v7): what a connector read, how much, when. Content is
+/// never stored here, only counts. Revoking wipes a connector's content rows
+/// and leaves one `revoke` row.
+@DataClassName('LedgerRow')
+class Ledger extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get connector => text()();
+  TextColumn get action => text()();
+  IntColumn get count => integer().withDefault(const Constant(0))();
+  DateTimeColumn get at => dateTime()();
+}
+
+/// A reply the user chose to keep (v8): the Library's "Saved" list. Plain text
+/// copy; `conversationId` is only a hint for "open the chat" and deliberately
+/// has no foreign key, so deleting the chat never deletes what the user saved.
+class SavedAnswers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get content => text()();
+  IntColumn get conversationId => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Connector ids the source conversation cited when this was saved, as
+  /// `,calendar,notifications,` (empty when none). Derived data: revoking one
+  /// of these connectors, or clearing all chat history, deletes this row
+  /// (v9; see `LibraryStore`). `content` is unique via an index (v9).
+  TextColumn get sourceConnectors => text().withDefault(const Constant(''))();
+}
+
+/// A to-do the user added from an "Extract to-dos" reply (v8): the Library's
+/// "To-dos" list.
+class Todos extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get task => text()();
+  BoolColumn get done => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Same meaning as [SavedAnswers.sourceConnectors] (v9).
+  TextColumn get sourceConnectors => text().withDefault(const Constant(''))();
+}
+
 @DriftDatabase(
   tables: [
     InstalledModels,
@@ -263,6 +357,11 @@ class DocumentChunks extends Table {
     ContentReports,
     AttachedDocuments,
     DocumentChunks,
+    ConnectorAccounts,
+    Items,
+    Ledger,
+    SavedAnswers,
+    Todos,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -270,7 +369,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -278,6 +377,8 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
       await _createMessagesConversationIndex();
       await _createDocumentChunksIndex();
+      await _createConnectorIndexes();
+      await _createSavedAnswersIndex();
     },
     onUpgrade: (m, from, to) async {
       // v1 -> v2 (Loop 4): chat data layer. installed_models is untouched.
@@ -328,11 +429,42 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(messages, messages.sourcesJson);
         }
       }
+      // v6 -> v7: connectors (accounts, ingested items, privacy ledger).
+      // Additive only: nothing existing is touched.
+      if (from < 7) {
+        await m.createTable(connectorAccounts);
+        await m.createTable(items);
+        await m.createTable(ledger);
+        await _createConnectorIndexes();
+      }
+      // v7 -> v8: Library (saved answers, to-dos). Additive only.
+      if (from < 8) {
+        await m.createTable(savedAnswers);
+        await m.createTable(todos);
+      }
+      // v8 -> v9: where a saved answer / to-do came from (for revoke and
+      // clear-history), and one saved row per text. Tables created just above
+      // (from < 8) already have the new columns.
+      if (from == 8) {
+        await m.addColumn(savedAnswers, savedAnswers.sourceConnectors);
+        await m.addColumn(todos, todos.sourceConnectors);
+      }
+      if (from < 9) {
+        // A double-tap could have saved the same text twice: keep the oldest.
+        await customStatement(
+          'DELETE FROM saved_answers WHERE id NOT IN '
+          '(SELECT MIN(id) FROM saved_answers GROUP BY content)',
+        );
+        await _createSavedAnswersIndex();
+      }
     },
     beforeOpen: (details) async {
       // SQLite foreign keys are opt-in per connection — required for the
       // onDelete: setNull/cascade behavior declared above to actually fire.
       await customStatement('PRAGMA foreign_keys = ON');
+      // The background sync opens a second connection; wait for the other
+      // writer instead of failing with "database is locked".
+      await customStatement('PRAGMA busy_timeout = 5000');
     },
   );
 
@@ -348,6 +480,22 @@ class AppDatabase extends _$AppDatabase {
     'CREATE INDEX IF NOT EXISTS idx_document_chunks_document '
     'ON document_chunks (document_id)',
   );
+
+  Future<void> _createSavedAnswersIndex() => customStatement(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_answers_content '
+    'ON saved_answers (content)',
+  );
+
+  Future<void> _createConnectorIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_items_kind_starts '
+      'ON items (kind, starts_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_ledger_connector_at '
+      'ON ledger (connector, at)',
+    );
+  }
 
   static QueryExecutor _defaultExecutor() => driftDatabase(name: 'dhruva');
 

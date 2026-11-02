@@ -3,6 +3,7 @@
 /// failure reads the same way on every models_hub screen.
 library;
 
+import '../identity/app_identity.dart';
 import 'app_failure.dart';
 
 /// Renders any [AppFailure] leaf to a short, honest, user-facing sentence.
@@ -15,7 +16,7 @@ String friendlyFailureMessage(AppFailure failure) {
     NetworkRateLimitFailure() =>
       'Hugging Face is rate-limiting requests — wait a moment and retry.',
     NetworkGatedFailure() =>
-      'This repo requires Hugging Face sign-in, which Dhruva doesn\'t '
+      'This repo requires Hugging Face sign-in, which ${AppIdentity.shortName} doesn\'t '
           'support yet.',
     NetworkHttpFailure(:final statusCode) =>
       'Hugging Face returned an error (HTTP $statusCode).',
@@ -40,6 +41,12 @@ String friendlyFailureMessage(AppFailure failure) {
 /// Generic fallback used when we have nothing specific to say. Exposed so UI
 /// (e.g. `ErrorStateView`) can avoid stacking it under an identical title.
 const String kGenericFailureMessage = 'Something went wrong.';
+
+/// Plain words for "the phone has no connection". Shared by the HF client (a
+/// request that never connected) and the download backend (a transfer that
+/// lost its connection), so a download card reads the same either way.
+const String kNoConnectionMessage =
+    'No connection. Check your internet and tap retry.';
 
 /// For an arbitrary caught [Object] (e.g. from `AsyncValue.error`, which
 /// isn't statically known to carry an [AppFailure]): the typed message when

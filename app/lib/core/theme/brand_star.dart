@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
 import 'dhruva_theme_extension.dart';
+import 'motion_loop.dart';
 
 /// One star glyph, [size] logical pixels square.
 class DhruvaStar extends StatelessWidget {
@@ -115,7 +116,7 @@ class _DhruvaLoaderState extends State<DhruvaLoader>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: TokenMotionDuration.pulseSlow,
-  )..repeat();
+  );
 
   @override
   void didChangeDependencies() {
@@ -123,6 +124,9 @@ class _DhruvaLoaderState extends State<DhruvaLoader>
     _controller.duration = Theme.of(
       context,
     ).extension<DhruvaTokens>()!.motion.pulseSlow;
+    // Reduced motion: no breathing, the star rests fully visible (0.25 of the
+    // cycle is the sine peak).
+    _controller.loop(context, rest: 0.25);
   }
 
   @override

@@ -55,8 +55,16 @@ void main() {
               Text('thread:${state.pathParameters['id']}'),
         ),
         GoRoute(
-          path: '/models',
+          path: '/models/hub',
           builder: (context, state) => const Text('models hub'),
+        ),
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const Text('actions stand-in'),
+        ),
+        GoRoute(
+          path: '/personas',
+          builder: (context, state) => const Text('personas stand-in'),
         ),
       ],
     );
@@ -145,18 +153,22 @@ void main() {
   );
 
   testWidgets(
-    'UX-hardening A4: FAB with no installed models gives a guided CTA — a '
-    '"download a model" snackbar — then routes to Models, not a silent bounce',
+    'no model and no chats: one "get a model" screen with none of the chat '
+    'chrome, and its button routes to Models',
     (tester) async {
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pump(); // let _startNewChat resolve + show the snackbar
-      await tester.pump(); // build the snackbar frame
+      expect(find.text('No model installed yet'), findsOneWidget);
+      // Nothing that cannot work yet: no New chat button, folders, quick
+      // actions or Talk. The Actions / Personas doors stay.
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text('All'), findsNothing);
+      expect(find.text('Quick actions'), findsNothing);
+      expect(find.text('Talk'), findsNothing);
+      expect(find.byTooltip('Actions'), findsOneWidget);
 
-      expect(find.text('Download a model to start chatting.'), findsOneWidget);
-
+      await tester.tap(find.text('Browse models'));
       await tester.pumpAndSettle();
       expect(find.text('models hub'), findsOneWidget);
     },
@@ -210,4 +222,48 @@ void main() {
       expect(find.text('thread:$id'), findsOneWidget);
     },
   );
+
+  testWidgets('Actions and Personas are labelled entry points, not bare '
+      'icons, and still carry tooltips', (tester) async {
+    await insertModel();
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Visible text labels (a chip's label is real text, not just a tooltip).
+    final actions = find.widgetWithText(ActionChip, 'Actions');
+    final personas = find.widgetWithText(ActionChip, 'Personas');
+    expect(actions, findsOneWidget);
+    expect(personas, findsOneWidget);
+    expect(find.byTooltip('Actions'), findsOneWidget);
+    expect(find.byTooltip('Personas'), findsOneWidget);
+    // The old icon-only app-bar buttons are gone.
+    expect(
+      find.widgetWithIcon(IconButton, Icons.auto_awesome_outlined),
+      findsNothing,
+    );
+    expect(
+      find.widgetWithIcon(IconButton, Icons.theater_comedy_outlined),
+      findsNothing,
+    );
+
+    await tester.tap(personas);
+    await tester.pumpAndSettle();
+    expect(find.text('personas stand-in'), findsOneWidget);
+  });
+
+  testWidgets('the entry points also show on a narrow phone with big text', (
+    tester,
+  ) async {
+    await insertModel();
+    await tester.binding.setSurfaceSize(const Size(300, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.widgetWithText(ActionChip, 'Actions'), findsOneWidget);
+    expect(find.widgetWithText(ActionChip, 'Personas'), findsOneWidget);
+  });
 }

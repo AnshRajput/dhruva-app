@@ -17,15 +17,19 @@
 /// discipline (`DhruvaTokens.motion`) as the rest of the app.
 library;
 
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/theme/motion_loop.dart';
 import '../state/handsfree_controller.dart';
 
 class HandsFreeScreen extends ConsumerStatefulWidget {
@@ -37,11 +41,46 @@ class HandsFreeScreen extends ConsumerStatefulWidget {
   ConsumerState<HandsFreeScreen> createState() => _HandsFreeScreenState();
 }
 
-class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
+class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from system Settings after granting the microphone: start without
+  /// making the user find a retry button.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if (lifecycle == AppLifecycleState.resumed &&
+        ref.read(handsFreeControllerProvider).phase ==
+            HandsFreePhase.permissionDenied) {
+      unawaited(_retry());
+    }
+  }
+
+  /// D15: the permission fix lives in system Settings. If it will not open,
+  /// say where to go instead of failing silently.
+  Future<void> _openSettings() async {
+    final opened = await ref.read(openAppSettingsProvider)();
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't open Settings. Open your phone's Settings, then Apps, "
+            'then allow the microphone.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _start() => ref
@@ -96,6 +135,7 @@ class _HandsFreeScreenState extends ConsumerState<HandsFreeScreen> {
             ),
             HandsFreePhase.permissionDenied => _PermissionDeniedView(
               onExit: _exit,
+              onOpenSettings: _openSettings,
             ),
             _ => _ConversationView(state: state, onExit: _exit),
           },
@@ -272,37 +312,41 @@ class _VoiceOrbState extends State<_VoiceOrb>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: _rawDurationFor(widget.phase),
-  )..repeat(reverse: true);
+  );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _controller.duration = _durationFor(context, widget.phase);
+    _retune();
   }
 
   @override
   void didUpdateWidget(covariant _VoiceOrb oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.phase != widget.phase) {
-      _controller.duration = _durationFor(context, widget.phase);
-    }
+    if (oldWidget.phase != widget.phase) _retune();
+  }
+
+  /// New cadence takes effect at once (a bare `duration` change on a running
+  /// controller lags up to a full cycle). Reduced motion: a static orb.
+  void _retune() {
+    final period = _durationFor(context, widget.phase);
+    _controller.duration = period;
+    _controller.loop(context, period: period, reverse: true, rest: 0);
   }
 
   static Duration _rawDurationFor(HandsFreePhase phase) => switch (phase) {
-    HandsFreePhase.listening => TokenMotionDuration.pulseSlow,
     HandsFreePhase.thinking => TokenMotionDuration.pulseMedium,
-    // Same cadence as chat's typing indicator (`motion.moderate`) — both
-    // mark "the AI is actively outputting."
-    HandsFreePhase.speaking => TokenMotionDuration.moderate,
+    // 900 ms breathing, not the 300 ms flicker the typing dots used to have:
+    // 3 Hz reads as jitter.
+    HandsFreePhase.speaking => TokenMotionDuration.pulseMedium,
     _ => TokenMotionDuration.pulseSlow,
   };
 
   static Duration _durationFor(BuildContext context, HandsFreePhase phase) {
     final motion = Theme.of(context).extension<DhruvaTokens>()!.motion;
     return switch (phase) {
-      HandsFreePhase.listening => motion.pulseSlow,
       HandsFreePhase.thinking => motion.pulseMedium,
-      HandsFreePhase.speaking => motion.moderate,
+      HandsFreePhase.speaking => motion.pulseMedium,
       _ => motion.pulseSlow,
     };
   }
@@ -322,6 +366,18 @@ class _VoiceOrbState extends State<_VoiceOrb>
       HandsFreePhase.speaking => scheme.primary,
       _ => scheme.primary,
     };
+    // Phase colour eases over 200 ms instead of cutting (the one hard jump on
+    // an otherwise smooth screen).
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: color),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : TokenMotionDuration.base,
+      builder: (context, animated, _) => _orb(scheme, animated ?? color),
+    );
+  }
+
+  Widget _orb(ColorScheme scheme, Color color) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -398,7 +454,7 @@ class _VoiceWaveformState extends State<_VoiceWaveform>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: TokenMotionDuration.pulseMedium,
-  )..repeat();
+  );
 
   @override
   void didChangeDependencies() {
@@ -406,6 +462,23 @@ class _VoiceWaveformState extends State<_VoiceWaveform>
     _controller.duration = Theme.of(
       context,
     ).extension<DhruvaTokens>()!.motion.pulseMedium;
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VoiceWaveform oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active) _sync();
+  }
+
+  /// Runs only while [_VoiceWaveform.active] (and never under reduced motion):
+  /// 15 bars rebuilding every frame while idle was wasted battery.
+  void _sync() {
+    if (widget.active) {
+      _controller.loop(context, rest: 0);
+    } else {
+      _controller.stop();
+    }
   }
 
   @override
@@ -576,7 +649,13 @@ class _NoModelView extends StatelessWidget {
 
 class _PermissionDeniedView extends StatelessWidget {
   final VoidCallback onExit;
-  const _PermissionDeniedView({required this.onExit});
+
+  /// D15: the fix lives in system Settings; one tap gets the user there.
+  final VoidCallback onOpenSettings;
+  const _PermissionDeniedView({
+    required this.onExit,
+    required this.onOpenSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -599,15 +678,20 @@ class _PermissionDeniedView extends StatelessWidget {
           ),
           SizedBox(height: tokens.spacing.sm),
           Text(
-            'Dhruva needs the microphone to hear you. Enable it in your '
-            'device\'s app settings, then try again.',
+            '${AppIdentity.shortName} needs the microphone to hear you. Turn it '
+            'on in ${AppIdentity.shortName}\'s settings, then come back.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           SizedBox(height: tokens.spacing.lg),
-          FilledButton(onPressed: onExit, child: const Text('Close')),
+          FilledButton(
+            onPressed: onOpenSettings,
+            child: const Text('Open settings'),
+          ),
+          SizedBox(height: tokens.spacing.sm),
+          TextButton(onPressed: onExit, child: const Text('Close')),
         ],
       ),
     );

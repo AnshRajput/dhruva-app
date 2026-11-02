@@ -23,12 +23,18 @@ class ModelChip extends StatelessWidget {
   /// into memory — the chip shows a spinner + "Loading…" so the wait for the
   /// first token reads as "the model is warming up," not "nothing happened."
   final bool loading;
+
+  /// A model is downloading right now and none is installed yet: the chip is
+  /// a neutral "Model downloading", not the red "Pick a model" (nothing is
+  /// wrong, there is just nothing to pick yet).
+  final bool downloading;
   final VoidCallback onTap;
 
   const ModelChip({
     super.key,
     required this.model,
     this.loading = false,
+    this.downloading = false,
     required this.onTap,
   });
 
@@ -37,14 +43,17 @@ class ModelChip extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final noModel = model == null;
-    final background = noModel
+    final waiting = noModel && downloading;
+    final background = noModel && !waiting
         ? theme.colorScheme.errorContainer
         : theme.colorScheme.surfaceContainerHighest;
-    final foreground = noModel
+    final foreground = noModel && !waiting
         ? theme.colorScheme.error
         : theme.colorScheme.onSurfaceVariant;
 
-    final label = noModel
+    final label = waiting
+        ? 'Model downloading'
+        : noModel
         ? 'Pick a model'
         : loading
         ? 'Loading…'
@@ -65,7 +74,7 @@ class ModelChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (loading && !noModel) ...[
+            if ((loading && !noModel) || waiting) ...[
               DhruvaLoader(size: 12, color: theme.colorScheme.primary),
               SizedBox(width: tokens.spacing.xs),
             ],

@@ -47,9 +47,61 @@ void main() {
     await tester.tap(run);
     await tester.pumpAndSettle();
 
+    // The user's own words are the prompt; the instruction rides in the
+    // system prompt, never in the user's bubble.
     final workflow = workflowCatalog.firstWhere((w) => w.id == 'translate');
-    final rendered = renderWorkflowPrompt(workflow, 'good morning', 'Hindi');
-    expect(find.text('chat prompt=${Uri.encodeComponent(rendered)}'), findsOne);
+    final expected = workflowChatLocation((
+      workflow: workflow,
+      text: 'good morning',
+      option: 'Hindi',
+    ));
+    final q = Uri.parse(expected).queryParameters;
+    expect(q['prompt'], 'good morning');
+    expect(q['asys'], startsWith('Action: Translate\n'));
+    expect(q['asys'], contains('Translate the text into Hindi.'));
+    expect(q['asys'], isNot(contains('good morning')));
+    expect(find.text('chat ${Uri.parse(expected).query}'), findsOne);
+  });
+
+  testWidgets('a verb that needs more text says so instead of running', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.scrollUntilVisible(find.text('Quiz me'), 200);
+    await tester.tap(find.text('Quiz me'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'Can we move tomorrow standup to 10?',
+    );
+    await tester.pump();
+    final run = find.widgetWithText(FilledButton, 'Run');
+    expect(find.byKey(const ValueKey('workflow-too-short')), findsOne);
+    expect(tester.widget<FilledButton>(run).onPressed, isNull);
+
+    await tester.enterText(find.byType(TextField), 'word ' * 20);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('workflow-too-short')), findsNothing);
+    expect(tester.widget<FilledButton>(run).onPressed, isNotNull);
+  });
+
+  testWidgets('Draft a reply carries the source app through to the chat', (
+    tester,
+  ) async {
+    final loc = workflowChatLocation(
+      (
+        workflow: workflowCatalog.firstWhere((w) => w.id == 'draft_reply'),
+        text: 'Ravi: can you approve?',
+        option: 'Warm',
+      ),
+      sourcePackage: 'com.whatsapp',
+      sourceApp: 'WhatsApp',
+    );
+    final q = Uri.parse(loc).queryParameters;
+    expect(q['pkg'], 'com.whatsapp');
+    expect(q['app'], 'WhatsApp');
+    expect(q['asys'], startsWith('Action: Draft a reply\n'));
+    expect(q['asys'], contains('Write a Warm reply'));
   });
 
   testWidgets('shared text prefills the sheet', (tester) async {

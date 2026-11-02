@@ -1,11 +1,11 @@
-/// Model detail screen (T5 §3, reworked): license + gated status shown BEFORE
-/// any download affordance, then ONE prominent "Recommended download" card
-/// (the device-appropriate default quant + verdict + a single big Download
-/// button), and finally a COLLAPSED "All quantizations (advanced)" section
-/// with the full per-quant list for power users. The wall-of-quants each with
-/// its own Download + red "Not recommended" badge is gone: the primary flow is
-/// one obvious download of the right files; picking a specific quant is
-/// clearly secondary.
+/// Model detail screen (T5 §3, reworked; D5/D6 daily-assistant pass): the
+/// human model name is the title with the repo id as a caption, then ONE
+/// prominent "Recommended download" card (the device-appropriate default quant
+/// in plain words, verdict, a single big Download button) BEFORE the license
+/// details, and finally a COLLAPSED "Other versions (advanced)" section with
+/// the full per-file list, where the technical labels (Q4_K_M and friends)
+/// live. A gated repo has no download to lead with, so its explanation leads
+/// instead.
 library;
 
 import 'package:flutter/material.dart';
@@ -16,6 +16,7 @@ import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/failures/failure_message.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
@@ -39,7 +40,10 @@ class ModelDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(modelDetailProvider(repoId));
     return Scaffold(
-      appBar: AppBar(title: Text(repoId, overflow: TextOverflow.ellipsis)),
+      // D5: the human name, not the raw repo id (that is the caption below).
+      appBar: AppBar(
+        title: Text(humanModelName(repoId), overflow: TextOverflow.ellipsis),
+      ),
       body: switch (detail) {
         AsyncData(:final value) => _DetailBody(repoId: repoId, data: value),
         AsyncError(:final error) => ErrorStateView(
@@ -64,51 +68,71 @@ class _DetailBody extends StatelessWidget {
     // agree. Null only when the repo has no recognizable GGUF quant.
     final recommended = pickDefaultQuant(data.quants);
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Rule: license + gated status appear before any download affordance.
-        Text(
-          'License & access',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          children: [
-            LicenseChip(license: data.license.license),
-            GatedBadge(status: data.license.gatedStatus),
-          ],
-        ),
-        if (data.license.requiresAuth)
-          Padding(
+    final gated = data.license.requiresAuth;
+    final theme = Theme.of(context);
+
+    final licenseSection = <Widget>[
+      Text('License & access', style: theme.textTheme.titleMedium),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        children: [
+          LicenseChip(license: data.license.license),
+          GatedBadge(status: data.license.gatedStatus),
+        ],
+      ),
+    ];
+    final gatedNotice = gated
+        ? Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Card(
-              color: Theme.of(context).colorScheme.errorContainer,
+              color: theme.colorScheme.errorContainer,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   'This repo is gated on Hugging Face — it requires signing '
-                  "in and accepting the license there. Dhruva doesn't "
+                  "in and accepting the license there. ${AppIdentity.shortName} doesn't "
                   "support Hugging Face sign-in yet, so this repo's files "
                   "can't be downloaded from here.",
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
                 ),
               ),
             ),
-          ),
-        const SizedBox(height: 24),
-        if (data.quants.isEmpty)
-          const EmptyStateView(
-            message: 'No recognizable GGUF quant files in this repo.',
           )
-        else ...[
-          // PRIMARY flow: one obvious download of the right files. Skipped for
-          // a gated repo (the block above already explains why nothing here is
-          // downloadable).
-          if (recommended != null && !data.license.requiresAuth)
+        : null;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // D5: title block. The human name is the headline, the repo id a
+        // small caption underneath.
+        Text(humanModelName(repoId), style: theme.textTheme.headlineSmall),
+        const SizedBox(height: 4),
+        SelectableText(
+          repoId,
+          key: const ValueKey('repo-id-caption'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (data.quants.isEmpty) ...[
+          const EmptyStateView(
+            message: 'No downloadable model files in this repo.',
+          ),
+          const SizedBox(height: 24),
+          ...licenseSection,
+          ?gatedNotice,
+        ] else ...[
+          // A gated repo has nothing downloadable: its explanation leads.
+          if (gated) ...[
+            ...licenseSection,
+            ?gatedNotice,
+            const SizedBox(height: 24),
+          ],
+          // PRIMARY flow: one obvious download of the right file, ahead of
+          // the license details.
+          if (recommended != null && !gated)
             _RecommendedDownloadCard(
               repoId: repoId,
               quant: recommended,
@@ -116,8 +140,9 @@ class _DetailBody extends StatelessWidget {
               memory: data.memory,
             ),
           const SizedBox(height: 16),
-          // SECONDARY flow: the full per-quant list, collapsed so the screen
-          // isn't a wall. Power users expand it to pick a specific quant.
+          // Details: license sits after the action, not before it.
+          if (!gated) ...[...licenseSection, const SizedBox(height: 16)],
+          // SECONDARY flow: every file, collapsed; jargon labels live here.
           _AdvancedQuants(repoId: repoId, data: data),
         ],
       ],
@@ -182,9 +207,11 @@ class _RecommendedDownloadCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               quant.isVision
-                  ? '${quant.label} · ${_formatBytes(quant.file.sizeBytes)} '
-                        '+ ${_formatBytes(mmprojSizeBytes)} vision'
-                  : '${quant.label} · ${_formatBytes(quant.file.sizeBytes)}',
+                  ? '${plainQuantName(quant.label)} · '
+                        '${_formatBytes(quant.file.sizeBytes)} '
+                        '+ ${_formatBytes(mmprojSizeBytes)} for photos'
+                  : '${plainQuantName(quant.label)} · '
+                        '${_formatBytes(quant.file.sizeBytes)}',
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 8),
@@ -230,9 +257,10 @@ class _RecommendedDownloadCard extends StatelessWidget {
   }
 }
 
-/// The collapsed "All quantizations (advanced)" section: an [ExpansionTile]
-/// (closed by default) wrapping the full per-quant list. This is the secondary
-/// path — a power user opens it to pick a specific quant.
+/// The collapsed "Other versions (advanced)" section: an [ExpansionTile]
+/// (closed by default) wrapping the full per-file list. This is the secondary
+/// path — a power user opens it to pick a specific version, and it is the one
+/// place the technical labels (Q4_K_M, quantization) appear.
 class _AdvancedQuants extends StatelessWidget {
   final String repoId;
   final ModelDetailData data;
@@ -244,10 +272,12 @@ class _AdvancedQuants extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         title: Text(
-          'All quantizations (advanced)',
+          'Other versions (advanced)',
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        subtitle: Text('${data.quants.length} files'),
+        subtitle: Text(
+          '${data.quants.length} files · for people who know their way around',
+        ),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         children: data.quants
             .map(

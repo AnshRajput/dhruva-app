@@ -22,7 +22,28 @@
          Their absence was the 0.2.2 "app crashes when a download starts" regression. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Connectors (daily assistant, Wave 2A). READ ONLY: the calendar and
+         contacts connectors never write, so only the READ permissions are
+         declared; there is deliberately no WRITE_CALENDAR / WRITE_CONTACTS and
+         no MANAGE_EXTERNAL_STORAGE (the Files folder goes through the system
+         folder picker). Each is requested only when the user taps Connect. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <!-- Morning brief (Settings > Notifications, off by default): local
+         notifications scheduled on the phone, no network. Inexact alarms, so no
+         exact-alarm permission. BOOT_COMPLETED lets the plugin put the next
+         mornings back after a reboot; opening the app tops them up too. The
+         notification text is a constant and never carries the user's data. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Backup lockdown (daily-assistant spec B1): chats, the model index and,
+         later, connector data must never leave the phone via Google backup or
+         a device-to-device transfer. allowBackup/fullBackupContent cover
+         Android 11 and below; dataExtractionRules (excluding every domain, for
+         both cloud-backup and device-transfer) covers Android 12+. -->
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="Dhruva AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
@@ -43,6 +64,14 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Keeps the launch drawable (navy/paper + star) painted OVER the
+                 Flutter surface until the first Flutter frame. Without it the
+                 surface shows black on launches that skip the system splash,
+                 which is what a widget or Quick Settings tile tap does. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.SplashScreenDrawable"
+              android:resource="@drawable/launch_background"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -60,20 +89,24 @@
                 android:resource="@xml/shortcuts"/>
         </activity>
         <!-- Text-selection menu: "Ask Dhruva AI" shows up next to Copy/Paste in
-             every app. An alias (not a second filter on MainActivity) gives the
-             menu its own label; it forwards to MainActivity, which reads
-             EXTRA_PROCESS_TEXT. -->
-        <activity-alias
-            android:name=".ProcessTextAlias"
-            android:targetActivity=".MainActivity"
+             every app. A UI-less trampoline (NOT a Flutter activity: it must not
+             boot a second engine/app in this process). It forwards the text to
+             MainActivity and stays standard-launch-mode in the calling app's
+             task so an editable field can still get "Replace selected text"
+             back via setResult(EXTRA_PROCESS_TEXT). -->
+        <activity
+            android:name=".ProcessTextActivity"
             android:label="Ask Dhruva AI"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="standard"
+            android:excludeFromRecents="true"
+            android:theme="@style/TrampolineTheme">
             <intent-filter>
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
-        </activity-alias>
+        </activity>
         <!-- Quick Settings tile "Ask Dhruva": opens a new chat via the same
              `route` intent the launcher shortcuts use. BIND_QUICK_SETTINGS_TILE
              restricts binding to the system. -->
@@ -101,6 +134,38 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/dhruva_widget_info"/>
         </receiver>
+        <!-- Notification digest listener (Android only, off by default). Exported
+             because the system must bind it, but ONLY the system can: the
+             BIND_NOTIFICATION_LISTENER_SERVICE permission is signature-level.
+             It records nothing until the user grants notification access in
+             system settings AND turns the connector on in the app; it writes
+             title/text/app/time to an app-private queue file and never touches
+             the database or the network. See NotificationCaptureService. -->
+        <service
+            android:name="tech.appuinside.dhruva.connectors.NotificationCaptureService"
+            android:exported="true"
+            android:label="Dhruva AI"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
+        <!-- flutter_local_notifications: fires the scheduled morning brief and
+             re-schedules it after a reboot. Not exported: only the plugin's own
+             alarms and the system's boot broadcast reach them. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false"/>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- background_downloader runs its download via a WorkManager worker that
              promotes itself to a foreground service (Config.runInForeground). On
              API 34+, WorkManager's SystemForegroundService starts foreground with
@@ -127,6 +192,13 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <!-- Inbox "Open app": launch the app a notification came from. Lets us
+             see launchable apps (and open one by package name) without
+             QUERY_ALL_PACKAGES. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

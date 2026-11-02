@@ -38,6 +38,15 @@ const _pngCharaKeyword = 'chara';
 const _exampleDialogueSeparator = '<START>';
 const _dhruvaExtensionKey = 'dhruva';
 
+/// Longest persona kept from an imported card (matches `maxItemBodyChars`);
+/// it rides in every system prompt, so an unbounded one would eat the context.
+const maxPersonaChars = 8 * 1024;
+
+/// Context-length bounds of the in-app "Memory for this chat" slider. A card
+/// is untrusted input: it must not ask the engine for more than the UI allows.
+const minCardContextLength = 512;
+const maxCardContextLength = 8192;
+
 /// A parsed/about-to-be-serialized `chara_card_v2` document. Only the
 /// fields this codebase's mapping touches are modeled — unknown top-level
 /// `data` keys are silently dropped on import (nothing here claims to be a
@@ -197,12 +206,19 @@ String _joinMesExample(List<String> dialogues) =>
 /// content at all (name is already validated by [CharacterCardV2.fromJson]/
 /// `.parse`).
 ImportedCharacterFields cardToCharacterFields(CharacterCardV2 card) {
-  final persona = composePersonaSystemPrompt(
+  var persona = composePersonaSystemPrompt(
     systemPrompt: card.systemPrompt,
     description: card.description,
     personality: card.personality,
     scenario: card.scenario,
   );
+  if (persona.length > maxPersonaChars) {
+    var end = maxPersonaChars;
+    // Never cut between a surrogate pair: a lone high surrogate makes Text throw.
+    final last = persona.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    persona = persona.substring(0, end).trimRight();
+  }
   if (persona.isEmpty) {
     throw const ValidationFailure(
       'character card has no persona content '
@@ -217,8 +233,16 @@ ImportedCharacterFields cardToCharacterFields(CharacterCardV2 card) {
     if (emoji is String) avatarEmoji = emoji;
     final sampling = dhruvaExt['samplingParams'];
     if (sampling is Map) {
-      samplingParams = SamplingParams.fromJson(
+      final parsed = SamplingParams.fromJson(
         Map<String, dynamic>.from(sampling),
+      );
+      final ctx = parsed.contextLength.clamp(
+        minCardContextLength,
+        maxCardContextLength,
+      );
+      samplingParams = parsed.copyWith(
+        contextLength: ctx,
+        maxTokens: parsed.maxTokens > ctx ? ctx : parsed.maxTokens,
       );
     }
   }

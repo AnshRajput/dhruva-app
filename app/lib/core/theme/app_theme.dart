@@ -17,9 +17,24 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 import 'design_tokens.dart';
 import 'dhruva_theme_extension.dart';
+import 'page_transitions.dart';
+
+/// System bar style driven by the theme, so the clock/battery stay readable on
+/// every screen in both modes. `statusBarBrightness` is the iOS half (the
+/// brightness of the app's own content under the bar), `statusBarIconBrightness`
+/// the Android half (the icons themselves, so inverted).
+SystemUiOverlayStyle overlayStyleFor(Brightness theme) {
+  final dark = theme == Brightness.dark;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarBrightness: theme,
+    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+  );
+}
 
 abstract final class AppTheme {
   static ThemeData get dark => _build(Brightness.dark, darkTokenColors);
@@ -69,10 +84,11 @@ abstract final class AppTheme {
       fontFamilyFallback: const [tokenUiDevanagariFamily],
       textTheme: textTheme,
       primaryTextTheme: textTheme,
-      splashFactory: InkSparkle.splashFactory,
+      // InkRipple, not the long decorative sparkle: this runs on every tap.
+      splashFactory: InkRipple.splashFactory,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.android: DhruvaPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
         },
@@ -84,6 +100,10 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: tokenElevation[1].dp,
         titleTextStyle: textTheme.titleLarge,
+        systemOverlayStyle: overlayStyleFor(brightness),
+        // Left-aligned on every platform: iOS centred some bars (Library) and
+        // left-aligned others (Today, Ask).
+        centerTitle: false,
       ),
       cardTheme: CardThemeData(
         elevation: tokenElevation[1].dp,
@@ -150,6 +170,49 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radius.full),
           ),
+        ),
+      ),
+      // Rule 6 (Android, Material 3 Expressive): pill/stadium shapes come from
+      // the radius token `full`, never per-widget magic numbers. The nav
+      // indicator, chips, buttons (above), segmented control and FABs all
+      // share it. iOS chrome (translucent bars) lives in
+      // `core/widgets/platform_chrome.dart`, which branches on
+      // `Theme.of(context).platform`.
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: c.primaryContainer,
+        indicatorShape: const StadiumBorder(),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => textTheme.labelMedium?.copyWith(
+            color: states.contains(WidgetState.selected)
+                ? c.onSurface
+                : c.onSurfaceVariant,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? c.onPrimaryContainer
+                : c.onSurfaceVariant,
+          ),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radius.full),
+          ),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: const StadiumBorder(),
+        extendedPadding: EdgeInsetsDirectional.symmetric(
+          horizontal: const TokenSpacingScale().lg,
         ),
       ),
       dividerTheme: DividerThemeData(color: c.outlineVariant, thickness: 1),

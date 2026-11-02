@@ -71,7 +71,16 @@ void main() {
     );
 
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
-    await tester.tap(find.byTooltip('Delete'));
+    // Labelled overflow + confirmation, not a bare trash icon.
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsNothing);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(deleted, isFalse);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
     expect(deleted, isTrue);
   });
 

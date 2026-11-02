@@ -3,6 +3,8 @@
 /// is the caller's `url_launcher` call (always user-initiated).
 library;
 
+import '../identity/app_identity.dart';
+
 const developerEmail = 'rithiksingh92119211@gmail.com';
 
 /// `mailto:` URI with percent-encoded (not `+`) spaces, which every mail
@@ -31,7 +33,7 @@ Uri reportMailto({
     ..writeln('Reported reply:')
     ..write(excerpt);
   return developerMailto(
-    subject: 'Dhruva AI content report',
+    subject: '${AppIdentity.productName} content report',
     body: body.toString(),
   );
 }

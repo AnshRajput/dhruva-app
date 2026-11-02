@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/safety/report_mail.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/safety/report_repository.dart';
@@ -34,7 +35,7 @@ class SafetyScreen extends ConsumerWidget {
           Padding(
             padding: EdgeInsets.all(tokens.spacing.md),
             child: Text(
-              'Dhruva generates every reply on your phone with the model you '
+              '${AppIdentity.shortName} generates every reply on your phone with the model you '
               'chose. Models can be wrong, and can sometimes produce '
               'offensive or unsafe text. Use the flag on any reply to report '
               'it.',
@@ -67,7 +68,7 @@ class SafetyScreen extends ConsumerWidget {
               tokens.spacing.sm,
             ),
             child: Text(
-              "We use reports to improve Dhruva's default safety rules.",
+              "We use reports to improve ${AppIdentity.shortName}'s default safety rules.",
               style: muted,
             ),
           ),
@@ -78,7 +79,7 @@ class SafetyScreen extends ConsumerWidget {
             subtitle: const Text(developerEmail),
             onTap: () => unawaited(
               launchUrl(
-                developerMailto(subject: 'Dhruva AI'),
+                developerMailto(subject: AppIdentity.productName),
                 mode: LaunchMode.externalApplication,
               ).catchError((_) => false),
             ),

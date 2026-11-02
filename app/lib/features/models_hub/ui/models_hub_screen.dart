@@ -6,26 +6,25 @@
 /// `core/router/app_shell.dart`).
 library;
 
-import 'dart:io';
-
 // Deliberate, documented exception to ADR-002's "no plugin imports in
 // features/": file picking is a pure UI/platform concern with no business
 // logic — the picked `XFile`'s path is handed straight to
 // `StorageController.importLocal`, which is the only place that touches
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
 // concern, out of scope").
-import 'package:file_selector/file_selector.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
-import '../../../data/downloads/storage_manager.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
+import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../voice/voice_model_catalog.dart'
     show VoiceModelRole, voiceBundleEntries;
 import '../state/recommended_models_provider.dart';
@@ -33,8 +32,48 @@ import '../state/speed_test_controller.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
 import '../widgets/curated_tab.dart';
+import '../widgets/installed_model_menu.dart';
 import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
+
+/// An app-bar action with a visible label (the bare globe and arrow read as
+/// nothing), plus a tooltip and the same words for screen readers. With large
+/// system text there is no room for the words, so it falls back to the icon
+/// alone (still tooltipped and labelled).
+class _BarAction extends StatelessWidget {
+  const _BarAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final large = MediaQuery.textScalerOf(context).scale(14) > 18;
+    if (large) {
+      return IconButton(
+        icon: Icon(icon),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      );
+    }
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
 
 class ModelsHubScreen extends StatelessWidget {
   /// Which tab to open on. Deep-linked callers (e.g. hands-free's "Set up
@@ -54,22 +93,80 @@ class ModelsHubScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Models'),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.download_outlined),
+            // Parity row 37: advanced Hugging Face search must be findable
+            // without scrolling to the foot of Discover.
+            _BarAction(
+              key: const ValueKey('models-hf-search'),
+              icon: Icons.travel_explore,
+              label: 'Search',
+              tooltip: 'Search all of Hugging Face (advanced)',
+              onPressed: () => context.push('/models/search'),
+            ),
+            _BarAction(
+              icon: Icons.download_outlined,
+              label: 'Downloads',
               tooltip: 'Downloads',
               onPressed: () => context.push('/models/downloads'),
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Discover'),
-              Tab(text: 'Installed'),
-              Tab(text: 'Voice'),
-            ],
-          ),
+          // Rule 6: Material underline tabs on Android, a segmented control
+          // on iOS.
+          bottom: isCupertinoChrome(context)
+              ? const _CupertinoTabs()
+              : const TabBar(
+                  tabs: [
+                    Tab(text: 'Discover'),
+                    Tab(text: 'Installed'),
+                    Tab(text: 'Voice'),
+                  ],
+                ),
         ),
         body: const TabBarView(
           children: [CuratedTab(), _InstalledTab(), _VoiceTab()],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three tabs as an iOS segmented control, driven by the same
+/// `DefaultTabController` the `TabBarView` reads.
+class _CupertinoTabs extends StatelessWidget implements PreferredSizeWidget {
+  const _CupertinoTabs();
+
+  static const _labels = ['Discover', 'Installed', 'Voice'];
+
+  @override
+  Size get preferredSize => const Size.fromHeight(52);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: AnimatedBuilder(
+        animation: controller.animation!,
+        builder: (context, _) => CupertinoSlidingSegmentedControl<int>(
+          key: const ValueKey('models-tabs'),
+          groupValue: controller.index,
+          thumbColor: theme.colorScheme.primaryContainer,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          children: {
+            for (final (i, label) in _labels.indexed)
+              i: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+          },
+          onValueChanged: (i) {
+            if (i != null) controller.animateTo(i);
+          },
         ),
       ),
     );
@@ -92,21 +189,45 @@ class _VoiceTab extends ConsumerWidget {
       AsyncData(:final value) => ListView(
         children: [
           _VoiceBundleCard(states: value, onInstall: notifier.downloadBundle),
-          for (final role in VoiceModelRole.values) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                _roleLabel(role),
-                style: Theme.of(context).textTheme.labelLarge,
+          // The technical parts (model names, quantization, voice engines)
+          // live under Advanced; the primary surface stays plain words.
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('voice-advanced'),
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: Text(
+                'Advanced',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
+              subtitle: Text(
+                'Pick or remove individual voice models',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                for (final role in VoiceModelRole.values) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _roleLabel(role),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                  ),
+                  for (final s in value.where((s) => s.entry.role == role))
+                    VoiceModelTile(
+                      state: s,
+                      onDownload: () => notifier.download(s.entry),
+                      onDelete: () => notifier.delete(s.entry),
+                    ),
+                ],
+              ],
             ),
-            for (final s in value.where((s) => s.entry.role == role))
-              VoiceModelTile(
-                state: s,
-                onDownload: () => notifier.download(s.entry),
-                onDelete: () => notifier.delete(s.entry),
-              ),
-          ],
+          ),
         ],
       ),
       AsyncError(:final error) => ErrorStateView(
@@ -118,9 +239,9 @@ class _VoiceTab extends ConsumerWidget {
   }
 
   String _roleLabel(VoiceModelRole role) => switch (role) {
-    VoiceModelRole.vad => 'Turn-taking (required)',
-    VoiceModelRole.asr => 'Speech-to-text',
-    VoiceModelRole.tts => 'Text-to-speech voices',
+    VoiceModelRole.vad => 'Knows when you stop talking (required)',
+    VoiceModelRole.asr => 'Listens to you',
+    VoiceModelRole.tts => 'Speaks the answers',
   };
 }
 
@@ -178,7 +299,7 @@ class _VoiceBundleCard extends StatelessWidget {
                 SizedBox(width: tokens.spacing.sm),
                 Expanded(
                   child: Text(
-                    'Hands-free voice',
+                    'Talk hands-free',
                     style: theme.textTheme.titleMedium,
                   ),
                 ),
@@ -187,10 +308,9 @@ class _VoiceBundleCard extends StatelessWidget {
             SizedBox(height: tokens.spacing.xs),
             Text(
               allInstalled
-                  ? 'Everything hands-free needs is installed. You\'re ready '
-                        'to talk.'
-                  : 'Turn-taking, speech-to-text, and a voice — installed '
-                        'together in one tap.',
+                  ? 'Everything you need to talk is installed. You\'re ready.'
+                  : 'Talk to ${AppIdentity.shortName} and hear it answer, all on '
+                        'your phone. One tap installs everything.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -219,9 +339,9 @@ class _VoiceBundleCard extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: () => context.go('/chat'),
+                      onPressed: () => context.go('/ask'),
                       icon: const Icon(Icons.record_voice_over_outlined),
-                      label: const Text('Go to Chats to talk'),
+                      label: const Text('Go to Ask to talk'),
                     ),
                   ),
                 ],
@@ -286,10 +406,16 @@ class _InstalledBody extends ConsumerWidget {
       onRefresh: () => ref.read(storageControllerProvider.notifier).refresh(),
       child: ListView(
         children: [
+          // D11: a Wrap, not a Row, so on a narrow phone (or a big text scale)
+          // the "N installed" line and the Import button stack with a
+          // 16 px gutter instead of colliding.
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 16,
+              runSpacing: 8,
               children: [
                 Text(
                   '${state.installed.length} installed · '
@@ -297,7 +423,7 @@ class _InstalledBody extends ConsumerWidget {
                 ),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('Import .gguf file'),
+                  label: const Text('Import a model file'),
                   onPressed: state.importingName != null
                       ? null
                       : () => _importFile(context, ref),
@@ -349,7 +475,7 @@ class _InstalledBody extends ConsumerWidget {
               child: EmptyStateView(
                 message:
                     'No models installed yet. Pick one from Discover or import '
-                    'a local GGUF.',
+                    'a model file from your phone.',
                 icon: Icons.folder_open,
               ),
             )
@@ -368,29 +494,23 @@ class _InstalledBody extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${m.quant ?? m.fileName} · ${_formatBytes(m.sizeBytes)}',
+                      '${plainQuantName(m.quant)} · ${_formatBytes(m.sizeBytes)}',
                     ),
                     SpeedTestRow(model: m),
                   ],
                 ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Designer Phase B nit: the Installed tab was delete-only.
-                    // Add Chat (consistent with the Search tab's installed row)
-                    // carrying the model — `extra: <drift row id>` →
-                    // ChatRouteArgs.initialModelId — so it opens a LOADED chat.
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      tooltip: 'Chat',
-                      onPressed: () => context.push('/chat/new', extra: m.id),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete',
-                      onPressed: () => _confirmDelete(context, ref, m),
-                    ),
-                  ],
+                // A LABELLED overflow instead of two bare icons side by side
+                // (wave 4: "chat" and "trash" next to each other, unlabelled).
+                // Chat carries the model (`extra: <drift row id>` →
+                // ChatRouteArgs.initialModelId) so it opens a LOADED chat.
+                trailing: InstalledModelMenu(
+                  key: ValueKey('installed-menu-${m.id}'),
+                  onChat: () => context.push('/chat/new', extra: m.id),
+                  onDelete: () =>
+                      ref.read(storageControllerProvider.notifier).delete(m.id),
+                  deleteMessage:
+                      'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) '
+                      'from this device.',
                 ),
               ),
             ),
@@ -399,49 +519,18 @@ class _InstalledBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    InstalledModelInfo m,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete model?'),
-        content: Text(
-          'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) from '
-          'this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await ref.read(storageControllerProvider.notifier).delete(m.id);
-    }
-  }
-
   Future<void> _importFile(BuildContext context, WidgetRef ref) async {
-    const typeGroup = XTypeGroup(label: 'GGUF', extensions: ['gguf']);
-    final picked = await openFile(acceptedTypeGroups: [typeGroup]);
-    if (picked == null) return;
     final notifier = ref.read(storageControllerProvider.notifier);
-    if (await notifier.importExists(p.basename(picked.path))) {
+    final picked = await notifier.pickModelFile();
+    if (picked == null) return;
+    if (await notifier.importExists(picked.name)) {
       if (!context.mounted) return;
       final replace = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Model already imported'),
           content: Text(
-            '${p.basename(picked.path)} is already on this device. Replace '
+            '${picked.name} is already on this device. Replace '
             'it with the selected file?',
           ),
           actions: [
@@ -458,7 +547,7 @@ class _InstalledBody extends ConsumerWidget {
       );
       if (replace != true) return;
     }
-    await notifier.importLocal(File(picked.path));
+    await notifier.importLocal(picked);
   }
 }
 

@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
 import '../../../support/mock_hf_client.dart';
 
 const _fakeDeviceInfo = FakeDeviceInfoService(
@@ -78,7 +79,11 @@ void main() {
     expect(find.text('Llama 3.2 1B Instruct'), findsOneWidget);
     expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsNothing);
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    // Chat and Delete live in a labelled overflow, not as bare icons.
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
     expect(find.text('Delete model?'), findsOneWidget);
@@ -95,5 +100,54 @@ void main() {
     expect(find.text('Llama 3.2 1B Instruct'), findsNothing);
     expect(await db.select(db.installedModels).get(), isEmpty);
     expect(modelFile.existsSync(), isFalse);
+  });
+
+  testWidgets('D11: on a narrow phone the "installed" line and the Import '
+      'button stack instead of colliding; labels are plain', (tester) async {
+    // 280 dp wide at a large text scale: the worst case for the old Row.
+    await tester.binding.setSurfaceSize(const Size(280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+          hfApiClientProvider.overrideWithValue(
+            mockHfClient(
+              MockClient((request) async => http.Response('[]', 200)),
+            ),
+          ),
+        ],
+        child: MaterialApp(theme: AppTheme.dark, home: const ModelsHubScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Installed'));
+    await tester.pumpAndSettle();
+
+    // No overflow exception was thrown while laying this out.
+    expect(tester.takeException(), isNull);
+    final summary = find.textContaining('1 installed');
+    final button = find.widgetWithText(OutlinedButton, 'Import a model file');
+    expect(summary, findsOneWidget);
+    expect(button, findsOneWidget);
+    final a = tester.getRect(summary);
+    final b = tester.getRect(button);
+    expect(
+      a.overlaps(b),
+      isFalse,
+      reason: 'summary and Import must not collide',
+    );
+    // Stacked: the button sits below the summary text, with a gutter.
+    if (a.bottom <= b.top) {
+      expect(b.top - a.bottom, greaterThanOrEqualTo(8));
+    }
+
+    // Jargon-free row: Balanced, not Q4_K_M / .gguf.
+    expect(find.textContaining('Balanced'), findsOneWidget);
+    expect(find.textContaining('Q4_K_M'), findsNothing);
+    expect(find.textContaining('.gguf'), findsNothing);
   });
 }

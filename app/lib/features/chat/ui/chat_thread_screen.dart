@@ -9,26 +9,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/actions/action_prompt.dart';
 import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/di/ask_providers.dart';
+import '../../../core/di/library_providers.dart';
+import '../../../core/di/model_download.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/process_text.dart';
+import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
+import '../../../data/connectors/ask_sources.dart';
+import '../../../data/library/todo_parser.dart';
+import '../state/answer_guard.dart';
+import '../state/ask_selection.dart';
 import '../state/character_info_provider.dart';
 import '../state/chat_controller.dart';
 import '../state/installed_models_provider.dart';
 import '../state/lighter_model.dart';
 import '../state/message_info_x.dart';
-import '../widgets/brand_motif.dart';
+import '../widgets/answer_source_chips.dart';
 import '../widgets/chat_error.dart';
 import '../widgets/composer.dart';
+import '../widgets/draft_reply_sheet.dart';
 import '../widgets/empty_states.dart';
 import '../widgets/heat_banner.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/model_chip.dart';
+import '../widgets/model_downloading_view.dart';
+import '../widgets/reply_status.dart';
 import '../widgets/report_sheet.dart';
+import '../widgets/search_in_chips.dart';
 import 'model_picker_sheet.dart';
 import 'sampling_settings_sheet.dart';
 import 'voice_launch.dart';
@@ -52,6 +68,22 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final _scrollCtrl = ScrollController();
   var _pinnedToBottom = true;
   var _requestedLoad = false;
+
+  /// Draft reply: the sheet opens by itself once per finished reply, and not
+  /// while it is already open (it rewrites through this same thread).
+  final _draftShownFor = <int>{};
+  var _draftSheetOpen = false;
+
+  void _openDraftSheet() {
+    if (_draftSheetOpen || !mounted) return;
+    _draftSheetOpen = true;
+    unawaited(
+      showDraftReplySheet(
+        context,
+        widget.args,
+      ).whenComplete(() => _draftSheetOpen = false),
+    );
+  }
 
   @override
   void initState() {
@@ -96,11 +128,41 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     final asyncState = ref.watch(provider);
     final controller = ref.read(provider.notifier);
 
+    // Opened (Prep / Plan my day) while the first model was still
+    // downloading: when the download ends, rebuild the thread so it picks the
+    // new model and sends the saved question.
+    ref.listen(modelDownloadProvider, (prev, next) {
+      if (prev?.value != null &&
+          next.value == null &&
+          asyncState.value?.model == null) {
+        ref.invalidate(provider);
+      }
+    });
+
     ref.listen(provider, (previous, next) {
       final prevLen = previous?.value?.messages.length ?? 0;
       final nextLen = next.value?.messages.length ?? 0;
       if (nextLen != prevLen || (next.value?.isGenerating ?? false)) {
         _maybeAutoScroll();
+      }
+      // A Draft reply just finished: its result is an editable draft, not a
+      // chat bubble to copy from.
+      final was = previous?.value;
+      final now = next.value;
+      if (was != null &&
+          now != null &&
+          was.isGenerating &&
+          !now.isGenerating &&
+          isDraftReplyChat(now.systemPrompt)) {
+        final reply = latestReply(now);
+        if (reply != null &&
+            reply.status == MessageStatus.complete &&
+            reply.content.trim().isNotEmpty &&
+            _draftShownFor.add(reply.id)) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _openDraftSheet(),
+          );
+        }
       }
     });
 
@@ -138,6 +200,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           scrollCtrl: _scrollCtrl,
           pinnedToBottom: _pinnedToBottom,
           onScrollToBottom: _scrollToBottom,
+          onEditDraft: _openDraftSheet,
         );
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
@@ -159,6 +222,7 @@ class _ThreadScaffold extends ConsumerWidget {
   final ScrollController scrollCtrl;
   final bool pinnedToBottom;
   final VoidCallback onScrollToBottom;
+  final VoidCallback onEditDraft;
 
   const _ThreadScaffold({
     required this.args,
@@ -167,13 +231,20 @@ class _ThreadScaffold extends ConsumerWidget {
     required this.scrollCtrl,
     required this.pinnedToBottom,
     required this.onScrollToBottom,
+    required this.onEditDraft,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final download = state.model == null
+        ? ref.watch(modelDownloadProvider).value
+        : null;
     final visible = state.visibleMessages;
+    // Android text-selection round trip: true when this launch came from an
+    // editable field and the result can be handed back.
+    final canReplaceSelection = ref.watch(processTextSessionProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -194,6 +265,7 @@ class _ThreadScaffold extends ConsumerWidget {
               child: ModelChip(
                 model: state.model,
                 loading: state.modelLoading,
+                downloading: download != null,
                 onTap: () => _pickModel(context),
               ),
             ),
@@ -214,16 +286,28 @@ class _ThreadScaffold extends ConsumerWidget {
               tooltip: 'Talk hands-free',
               onPressed: () => _openHandsFree(context, ref),
             ),
+          // Chat settings lives here, not in the composer: the composer keeps
+          // attach, mic and send (and the one sources chip) only.
           PopupMenuButton<String>(
-            onSelected: (value) => _export(context, ref, value == 'markdown'),
-            itemBuilder: (context) => const [
+            onSelected: (value) => value == 'settings'
+                ? showSamplingSettingsSheet(context, args)
+                : _export(context, ref, value == 'markdown'),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'settings',
+                child: Text('Chat settings'),
+              ),
               PopupMenuItem(
                 value: 'markdown',
-                child: Text('Export as Markdown'),
+                enabled: state.conversationId != null,
+                child: const Text('Export as Markdown'),
               ),
-              PopupMenuItem(value: 'json', child: Text('Export as JSON')),
+              PopupMenuItem(
+                value: 'json',
+                enabled: state.conversationId != null,
+                child: const Text('Export as JSON'),
+              ),
             ],
-            enabled: state.conversationId != null,
           ),
         ],
       ),
@@ -236,9 +320,17 @@ class _ThreadScaffold extends ConsumerWidget {
                     state.modelLoadError == null
                 ? Center(
                     child: state.model == null
-                        ? NoModelInstalledView(
-                            onBrowseModels: () => context.push('/models/hub'),
-                          )
+                        ? (download != null
+                              ? ModelDownloadingView(
+                                  progress: download,
+                                  pendingPrompt: args.initialPrompt,
+                                  onOpenDownloads: () =>
+                                      context.push('/models/downloads'),
+                                )
+                              : NoModelInstalledView(
+                                  onBrowseModels: () =>
+                                      context.push('/models/hub'),
+                                ))
                         : SuggestedPrompts(
                             onSelect: (prompt) {
                               onScrollToBottom();
@@ -265,7 +357,9 @@ class _ThreadScaffold extends ConsumerWidget {
                                 false,
                             onGetVisionModel: () => context.push('/models/hub'),
                             onSwitchModel: () => _pickModel(context),
-                            onOpenWorkflows: () => context.push('/workflows'),
+                            onOpenWorkflows: () => context.push('/actions'),
+                            onOpenConnect: () =>
+                                context.push('/settings/connectors'),
                           ),
                   )
                 : Stack(
@@ -275,7 +369,7 @@ class _ThreadScaffold extends ConsumerWidget {
                         padding: EdgeInsets.all(tokens.spacing.md),
                         itemCount:
                             visible.length +
-                            (state.awaitingFirstToken ? 1 : 0) +
+                            (_warming ? 1 : 0) +
                             (state.modelLoadError != null ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i < visible.length) {
@@ -288,25 +382,20 @@ class _ThreadScaffold extends ConsumerWidget {
                                 ref,
                                 visible,
                                 i,
+                                canReplaceSelection: canReplaceSelection,
                               ),
                             );
                           }
                           var index = i - visible.length;
-                          if (state.awaitingFirstToken) {
-                            if (index == 0) {
-                              return const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: TypingIndicator(),
-                                ),
-                              );
-                            }
+                          if (_warming) {
+                            if (index == 0) return _buildWarmUp();
                             index -= 1;
                           }
                           return ChatErrorCard(
                             content: chatErrorContentFor(
                               state.modelLoadError!.runtimeType.toString(),
+                              modelSizeBytes: state.model?.sizeBytes,
+                              detail: state.modelLoadError!.message,
                             ),
                             onAction: (action) =>
                                 _handleModelLoadError(context, ref, action),
@@ -326,17 +415,28 @@ class _ThreadScaffold extends ConsumerWidget {
                         child: Center(
                           child: IgnorePointer(
                             ignoring: pinnedToBottom,
-                            child: AnimatedOpacity(
-                              opacity: pinnedToBottom ? 0 : 1,
+                            // Fade plus an ~8 px rise (fade only when motion is
+                            // reduced).
+                            child: AnimatedSlide(
+                              offset:
+                                  pinnedToBottom &&
+                                      !MediaQuery.disableAnimationsOf(context)
+                                  ? const Offset(0, 0.2)
+                                  : Offset.zero,
                               duration: tokens.motion.fast,
                               curve: tokens.motion.standard,
-                              child: FilledButton.icon(
-                                onPressed: onScrollToBottom,
-                                icon: const Icon(
-                                  Icons.arrow_downward,
-                                  size: 16,
+                              child: AnimatedOpacity(
+                                opacity: pinnedToBottom ? 0 : 1,
+                                duration: tokens.motion.fast,
+                                curve: tokens.motion.standard,
+                                child: FilledButton.icon(
+                                  onPressed: onScrollToBottom,
+                                  icon: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 16,
+                                  ),
+                                  label: const Text('New message'),
                                 ),
-                                label: const Text('New message'),
                               ),
                             ),
                           ),
@@ -345,7 +445,10 @@ class _ThreadScaffold extends ConsumerWidget {
                     ],
                   ),
           ),
-          if (state.modelLoading) const LinearProgressIndicator(),
+          // The in-thread "Warming up" row covers a send; the bar is only for
+          // the screen-open load, before any turn exists.
+          if (state.modelLoading && state.warmingSince == null)
+            const LinearProgressIndicator(),
           if (state.isGenerating &&
               DeviceGuardPolicy.thermalAction(
                     ref.watch(deviceHealthProvider.select((h) => h.thermal)),
@@ -378,19 +481,54 @@ class _ThreadScaffold extends ConsumerWidget {
               documents: state.documents,
               extractingDocName: state.extractingDocName,
               documentError: state.documentError,
+              // Ask: "Search in" chips (not for persona/roleplay threads).
+              header: state.characterId != null
+                  ? null
+                  : _SearchInRow(
+                      args: args,
+                      hasDocuments: state.documents.isNotEmpty,
+                      isAction: actionTitleOf(state.systemPrompt) != null,
+                    ),
+              initialText: args.initialDraft,
+              onChanged: (text) =>
+                  ref.read(askSelectionProvider(args).notifier).setDraft(text),
               onAttachDocument: controller.attachDocument,
               onRemoveDocument: controller.removeDocument,
               onDismissDocumentError: controller.dismissDocumentError,
+              onCancelDocumentRead: controller.cancelDocumentRead,
               beforeSend: () => _confirmStart(context, ref),
               onSend: (text, imageBytes) {
                 onScrollToBottom();
                 controller.sendMessage(text, imageBytes: imageBytes);
               },
               onCancel: controller.cancel,
-              onOpenSettings: () => showSamplingSettingsSheet(context, args),
             ),
         ],
       ),
+    );
+  }
+
+  bool get _warming => state.warmingSince != null || state.awaitingFirstToken;
+
+  /// The row under the user's message while the reply has not started:
+  /// "Warming up (model) · 4 s", or the plain-words timeout card.
+  Widget _buildWarmUp() {
+    final searching = state.searchingLabel;
+    if (searching != null) return SearchingStatus(label: searching);
+    final since = state.warmingSince ?? DateTime.now();
+    if (state.firstTokenTimedOut) {
+      return StalledTurnCard(
+        seconds: DateTime.now().difference(since).inSeconds,
+        onStop: () => unawaited(controller.cancel()),
+        onTryAgain: () => unawaited(controller.retryStalled()),
+      );
+    }
+    return WarmUpStatus(
+      modelName: state.model == null
+          ? null
+          : modelShortLabel(state.model!.repoId),
+      loading: state.modelLoading,
+      since: since,
     );
   }
 
@@ -398,13 +536,59 @@ class _ThreadScaffold extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<MessageInfo> visible,
-    int index,
-  ) {
-    final message = visible[index];
+    int index, {
+    bool canReplaceSelection = false,
+  }) {
+    var message = visible[index];
+    // Render-time scaffold guard: a reply that parrots the sources prompt
+    // (saved before the guard, or reopened) shows the plain notice, not the
+    // app's own instructions or a raw dump.
+    // In an Action chat that is a failed result (retry card): the notice must
+    // never be offered to Replace / Copy into the user's own field.
     if (message.role == MessageRole.assistant &&
-        message.status == MessageStatus.error) {
+        message.status != MessageStatus.error &&
+        isScaffoldEcho(message.content)) {
+      message = actionTitleOf(state.systemPrompt) != null
+          ? message.copyWith(
+              content: '',
+              status: MessageStatus.error,
+              errorKind: actionEchoErrorKind,
+            )
+          : message.copyWith(
+              content: echoNotice,
+              status: MessageStatus.complete,
+            );
+    }
+    // Same for an Action reply that is its own instruction (saved before the
+    // live guard): a retry card, so no Replace / Edit draft / Copy is offered.
+    if (message.role == MessageRole.assistant &&
+        message.id != state.streamingMessageId &&
+        message.status != MessageStatus.error &&
+        isActionEcho(
+          message.content,
+          state.systemPrompt,
+          userText: visible
+              .firstWhere(
+                (m) => m.role == MessageRole.user,
+                orElse: () => message,
+              )
+              .content,
+        )) {
+      message = message.copyWith(
+        content: '',
+        status: MessageStatus.error,
+        errorKind: actionEchoErrorKind,
+      );
+    }
+    if (message.role == MessageRole.assistant &&
+        message.status == MessageStatus.error &&
+        message.content.trim().isEmpty) {
       return ChatErrorCard(
-        content: chatErrorContentFor(message.errorKind),
+        content: chatErrorContentFor(
+          message.errorKind,
+          modelSizeBytes: state.model?.sizeBytes,
+          detail: controller.errorDetailsFor(message.id),
+        ),
         onAction: (action) =>
             _handleMessageError(context, ref, message, action),
       );
@@ -416,14 +600,68 @@ class _ThreadScaffold extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final canAct = !state.isGenerating;
+    final finishedReply =
+        message.role == MessageRole.assistant &&
+        !isStreamingMessage &&
+        message.status != MessageStatus.error &&
+        message.content.trim().isNotEmpty;
+    // "Extract to-dos" replies: offer to add the tasks to the Library. A tap,
+    // never automatic.
+    final todos = finishedReply
+        ? parseTodos(message.content)
+        : const <String>[];
+    // An Action chat labels the user's first message ("Action: Draft a
+    // reply"); the instruction itself lives in the system layer.
+    final actionTitle = actionTitleOf(state.systemPrompt);
+    final isFirstUser =
+        message.role == MessageRole.user &&
+        visible.indexWhere((m) => m.role == MessageRole.user) == index;
     final bubble = MessageBubble(
       message: message,
+      actionLabel: isFirstUser && actionTitle != null
+          ? 'Action: $actionTitle'
+          : null,
+      onSave: finishedReply
+          ? () async {
+              await ref
+                  .read(libraryStoreProvider)
+                  .saveAnswer(
+                    message.content,
+                    conversationId: state.conversationId,
+                  );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Saved to Library.')),
+                );
+              }
+            }
+          : null,
+      todoCount: todos.length,
+      onAddTodos: todos.isEmpty
+          ? null
+          : () async {
+              final added = await ref
+                  .read(libraryStoreProvider)
+                  .addTodos(todos, conversationId: state.conversationId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      added == 0
+                          ? 'Those are already in your to-dos.'
+                          : 'Added $added to your to-dos in Library.',
+                    ),
+                  ),
+                );
+              }
+            },
       isStreaming: isStreamingMessage,
       reasoningDurationMs: state.reasoningDurationMs[message.id],
       reasoningOpen:
           isStreamingMessage &&
           !state.reasoningDurationMs.containsKey(message.id),
       attachedImage: state.attachedImages[message.id],
+      onOpenItemSource: (source) => unawaited(_openSource(context, source)),
       onRegenerate: message.role == MessageRole.assistant && canAct
           ? () => unawaited(
               _confirmStart(context, ref).then((ok) {
@@ -446,11 +684,117 @@ class _ThreadScaffold extends ConsumerWidget {
             )
           : null,
     );
-    if (!state.heatStoppedMessageIds.contains(message.id)) return bubble;
+    if (message.role != MessageRole.assistant || isStreamingMessage) {
+      return bubble;
+    }
+    // Draft reply: the newest finished reply reopens as an editable draft.
+    if (isDraftReplyChat(state.systemPrompt) &&
+        canAct &&
+        index == visible.length - 1 &&
+        message.status == MessageStatus.complete &&
+        message.content.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: Theme.of(context).extension<DhruvaTokens>()!.spacing.sm,
+            ),
+            child: FilledButton.icon(
+              key: const ValueKey('edit-draft'),
+              onPressed: onEditDraft,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit draft'),
+            ),
+          ),
+        ],
+      );
+    }
+    // "Replace selected text": only on the newest finished reply, only when
+    // the selection menu came from an editable field, only on the user's tap.
+    final end = _replyEnd(message);
+    if (canReplaceSelection &&
+        canAct &&
+        index == visible.length - 1 &&
+        end == null &&
+        message.content.trim().isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          bubble,
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: Theme.of(context).extension<DhruvaTokens>()!.spacing.sm,
+            ),
+            child: FilledButton.icon(
+              key: const ValueKey('replace-selected-text'),
+              onPressed: () =>
+                  unawaited(_replaceSelection(context, ref, message)),
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Replace selected text'),
+            ),
+          ),
+        ],
+      );
+    }
+    // D1: a reply that did not finish says why and can be resumed (only the
+    // newest reply, and only while nothing else is running).
+    if (end == null) return bubble;
+    final canContinue = canAct && index == visible.length - 1;
+    final empty = message.content.trim().isEmpty;
+    final note = ReplyStatusNote(
+      end: end,
+      onContinue: !canContinue
+          ? null
+          : empty
+          ? () => unawaited(controller.regenerate(message.id))
+          : () => unawaited(
+              _confirmStart(context, ref).then((ok) {
+                if (ok) unawaited(controller.continueMessage(message.id));
+              }),
+            ),
+      actionLabel: empty ? 'Try again' : 'Continue',
+    );
+    // An empty stopped reply has no text worth a bubble: the note alone.
+    if (empty) return note;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [bubble, const HeatStoppedNote()],
+      children: [bubble, note],
     );
+  }
+
+  /// A source chip under an answer: loads the live item and shows it. A chip
+  /// whose item is gone opens a plain "no longer on this phone" sheet.
+  Future<void> _openSource(BuildContext context, ItemSource source) async {
+    final item = await controller.loadSourceItem(source);
+    if (!context.mounted) return;
+    await showSourceSheet(context, source: source, item: item);
+  }
+
+  Future<void> _replaceSelection(
+    BuildContext context,
+    WidgetRef ref,
+    MessageInfo message,
+  ) async {
+    final failure = await ref
+        .read(processTextBridgeProvider)
+        .returnResult(message.content);
+    if (failure != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(processTextFailureMessage(failure))),
+      );
+    }
+  }
+
+  ReplyEnd? _replyEnd(MessageInfo m) {
+    if (state.heatStoppedMessageIds.contains(m.id)) return ReplyEnd.tooHot;
+    return switch (m.status) {
+      MessageStatus.cancelled => ReplyEnd.stopped,
+      MessageStatus.truncated => ReplyEnd.cutShort,
+      MessageStatus.error => ReplyEnd.failed,
+      MessageStatus.complete => null,
+    };
   }
 
   /// Battery guard, before a generation starts: a low-battery warning is a
@@ -564,6 +908,7 @@ class _ThreadScaffold extends ConsumerWidget {
           context,
           selectedModelId: state.modelId,
           smallerModelsOnly: true,
+          smallerThanBytes: state.model?.sizeBytes,
         );
         if (picked != null) {
           await controller.switchModel(picked);
@@ -605,6 +950,7 @@ class _ThreadScaffold extends ConsumerWidget {
           context,
           selectedModelId: state.modelId,
           smallerModelsOnly: true,
+          smallerThanBytes: state.model?.sizeBytes,
         );
         if (picked != null) await controller.switchModel(picked);
       case ChatRecoveryAction.redownload:
@@ -645,7 +991,176 @@ class _ThreadScaffold extends ConsumerWidget {
     await SharePlus.instance.share(
       ShareParams(
         text: content,
-        subject: state.title.isEmpty ? 'Dhruva conversation' : state.title,
+        subject: state.title.isEmpty
+            ? '${AppIdentity.shortName} conversation'
+            : state.title,
+      ),
+    );
+  }
+}
+
+/// What the sources chip and its sheet both read: the thread's selection, the
+/// connectors' live state and the contact names, and what Auto would search for
+/// the text typed so far.
+({
+  AskSourceSelection selection,
+  Set<AskSource> resolved,
+  List<({AskSource source, AskChipAvailability availability})> chips,
+  List<String> focusTitles,
+  AskSelectionNotifier notifier,
+})
+_searchInData(
+  WidgetRef ref,
+  ChatRouteArgs args,
+  bool hasDocuments, {
+  bool isAction = false,
+}) {
+  var picked = ref.watch(askSelectionProvider(args));
+  // An Action never auto-grounds (the controller skips it): its chip reads
+  // "None" until the user pins a source themselves.
+  if (isAction && picked.selection.auto) {
+    picked = AskSelectionState(
+      selection: const AskSourceSelection(auto: false),
+      draft: picked.draft,
+    );
+  }
+  final connectors = ref.watch(askConnectorsProvider);
+  final names = ref.watch(askContactNamesProvider).value ?? const <String>[];
+  final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
+  final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
+  // One chip per file, however many sections it was split into.
+  final about = sanitizeAskAbout(args.about);
+  final focusTitles = <String>[
+    ?about,
+    for (final t in {
+      for (final i in focus)
+        i.title.trim().isEmpty ? i.kind.name : i.title.trim(),
+    })
+      t,
+  ];
+  final ready = {
+    for (final c in chips)
+      if (c.availability == AskChipAvailability.ready) c.source,
+  };
+  final resolved = picked.selection
+      .resolve(
+        question: picked.draft,
+        contactNames: names,
+        hasDocuments: hasDocuments,
+      )
+      .intersection(ready);
+  return (
+    selection: picked.selection,
+    resolved: resolved,
+    chips: chips,
+    focusTitles: focusTitles,
+    notifier: ref.read(askSelectionProvider(args).notifier),
+  );
+}
+
+/// The ONE sources chip inside the composer ("Sources: Auto"). It opens
+/// [_SearchInSheet], which holds the toggles; the selection state is the same
+/// canonical one `/ask/new` pins into.
+class _SearchInRow extends ConsumerWidget {
+  final ChatRouteArgs args;
+  final bool hasDocuments;
+  final bool isAction;
+  const _SearchInRow({
+    required this.args,
+    required this.hasDocuments,
+    this.isAction = false,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final d = _searchInData(ref, args, hasDocuments, isAction: isAction);
+    if (d.chips.isEmpty && d.focusTitles.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SourcesChip(
+        key: const ValueKey('sources-chip'),
+        label: sourcesChipLabel(
+          selection: d.selection,
+          resolved: d.resolved,
+          focusTitles: d.focusTitles,
+        ),
+        onTap: () => unawaited(
+          showDhruvaSheet<void>(
+            context: context,
+            showDragHandle: true,
+            useSafeArea: true,
+            builder: (_) => _SearchInSheet(
+              args: args,
+              hasDocuments: hasDocuments,
+              isAction: isAction,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The sources sheet: "Search in" with Auto and one toggle per source.
+class _SearchInSheet extends ConsumerWidget {
+  final ChatRouteArgs args;
+  final bool hasDocuments;
+  final bool isAction;
+  const _SearchInSheet({
+    required this.args,
+    required this.hasDocuments,
+    this.isAction = false,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final d = _searchInData(ref, args, hasDocuments, isAction: isAction);
+    return SingleChildScrollView(
+      key: const ValueKey('sources-sheet'),
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.lg,
+        0,
+        tokens.spacing.lg,
+        tokens.spacing.lg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            header: true,
+            child: Text('Search in', style: theme.textTheme.titleLarge),
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            isAction
+                ? 'This works on your text only. Tap a source to add it '
+                      'yourself.'
+                : 'Auto picks from your question. Tap sources to choose them '
+                      'yourself.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          SearchInChips(
+            selection: d.selection,
+            focusTitles: d.focusTitles,
+            resolved: d.resolved,
+            chips: d.chips,
+            onAuto: d.notifier.chooseAuto,
+            onToggle: (s) =>
+                d.notifier.toggle(s, currentlyResolved: d.resolved),
+            onConnect: (s) {
+              Navigator.of(context).pop();
+              unawaited(context.push(connectRouteFor(s)));
+            },
+          ),
+        ],
       ),
     );
   }

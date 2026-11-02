@@ -1,4 +1,4 @@
-/// Characters gallery (Loop 5) — the `/characters` tab: a grid of built-in +
+/// Personas gallery (Loop 5, formerly the Characters tab; now `/personas`, reached from Ask): a grid of built-in +
 /// user characters, a "+ Create" affordance, and a file → parse → preview →
 /// save import entry point for community character cards.
 library;
@@ -14,6 +14,7 @@ import '../../../core/failures/app_failure.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../../../data/characters/character_card.dart';
 import '../../../data/characters/character_repository.dart';
 import '../state/characters_controller.dart';
@@ -29,8 +30,15 @@ class CharactersGalleryScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Characters'),
+        title: const Text('Personas'),
         actions: [
+          // iOS chrome has no floating action button: Create is a bar action.
+          if (isCupertinoChrome(context))
+            IconButton(
+              tooltip: 'Create',
+              icon: const Icon(Icons.add),
+              onPressed: () => context.push('/characters/new'),
+            ),
           PopupMenuButton<bool>(
             tooltip: 'Import a character card',
             icon: const Icon(Icons.file_upload_outlined),
@@ -50,11 +58,19 @@ class CharactersGalleryScreen extends ConsumerWidget {
         ),
         _ => const Center(child: DhruvaLoader()),
       },
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/characters/new'),
-        icon: const Icon(Icons.add),
-        label: const Text('Create'),
-      ),
+      // D8: ONE Create CTA. The empty gallery already carries its own
+      // "Create a persona" button, so the FAB only appears once there is
+      // something in the grid.
+      floatingActionButton: switch (state) {
+        AsyncData(:final value)
+            when value.characters.isNotEmpty && !isCupertinoChrome(context) =>
+          FloatingActionButton.extended(
+            onPressed: () => context.push('/characters/new'),
+            icon: const Icon(Icons.add),
+            label: const Text('Create'),
+          ),
+        _ => null,
+      },
     );
   }
 
@@ -125,7 +141,7 @@ class _GalleryBody extends ConsumerWidget {
               DhruvaStar(size: 72, color: theme.colorScheme.primary),
               SizedBox(height: tokens.spacing.lg),
               Text(
-                'No characters yet',
+                'No personas yet',
                 style: theme.textTheme.headlineSmall,
                 textAlign: TextAlign.center,
               ),
@@ -140,7 +156,7 @@ class _GalleryBody extends ConsumerWidget {
               SizedBox(height: tokens.spacing.lg),
               FilledButton(
                 onPressed: () => context.push('/characters/new'),
-                child: const Text('Create a character'),
+                child: const Text('Create a persona'),
               ),
             ],
           ),
@@ -148,25 +164,49 @@ class _GalleryBody extends ConsumerWidget {
       );
     }
 
+    // "Yours" first, then the starter pack under its own heading: built-in is a
+    // section, not a pill on every card.
+    final mine = [
+      for (final c in characters)
+        if (!c.isBuiltIn) c,
+    ];
+    final builtIn = [
+      for (final c in characters)
+        if (c.isBuiltIn) c,
+    ];
+    Widget row(CharacterInfo c) => Padding(
+      padding: EdgeInsets.only(bottom: tokens.spacing.sm),
+      child: CharacterTile(
+        character: c,
+        onTap: () => context.push('/characters/${c.id}'),
+      ),
+    );
+    Widget heading(String text) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.xs,
+        tokens.spacing.md,
+        tokens.spacing.xs,
+        tokens.spacing.sm,
+      ),
+      child: Text(text, style: theme.textTheme.titleMedium),
+    );
+
     return RefreshIndicator(
       onRefresh: () =>
           ref.read(charactersControllerProvider.notifier).refresh(),
-      child: GridView.builder(
-        padding: EdgeInsets.all(tokens.spacing.md),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: characters.length,
-        itemBuilder: (context, i) {
-          final character = characters[i];
-          return CharacterTile(
-            character: character,
-            onTap: () => context.push('/characters/${character.id}'),
-          );
-        },
+      child: ListView(
+        // Bottom room so the extended Create FAB never covers the last row.
+        padding: EdgeInsets.all(tokens.spacing.md).copyWith(bottom: 96),
+        children: [
+          if (mine.isNotEmpty) ...[
+            heading('Yours'),
+            for (final c in mine) row(c),
+          ],
+          if (builtIn.isNotEmpty) ...[
+            heading('Built-in'),
+            for (final c in builtIn) row(c),
+          ],
+        ],
       ),
     );
   }

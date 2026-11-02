@@ -2,7 +2,7 @@ import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/core/update/shorebird_update_banner.dart';
 import 'package:dhruva/core/update/shorebird_update_service.dart';
 import 'package:dhruva/features/settings/app_info.dart';
-import 'package:dhruva/features/settings/ui/settings_screen.dart';
+import 'package:dhruva/features/settings/ui/about_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -295,16 +295,12 @@ void main() {
     });
   });
 
-  group('settings', () {
+  group('about', () {
     testWidgets('unavailable row + version line + copy', (tester) async {
       tester.view.physicalSize = const Size(800, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await pump(
-        tester,
-        const SettingsScreen(),
-        u: FakeUpdater(available: false),
-      );
+      await pump(tester, const AboutScreen(), u: FakeUpdater(available: false));
       expect(find.text('Check for updates'), findsOneWidget);
       expect(
         find.text("Updates aren't available in this build"),
@@ -336,7 +332,7 @@ void main() {
 
     testWidgets('idle row shows patch and tap forces a check', (tester) async {
       final u = FakeUpdater(status: UpdateStatus.upToDate);
-      await pump(tester, const SettingsScreen(), u: u);
+      await pump(tester, const AboutScreen(), u: u);
       expect(find.text('Patch 3'), findsOneWidget);
       final before = u.checks;
       await tester.tap(find.byKey(const ValueKey('update-row')));
@@ -347,7 +343,7 @@ void main() {
 
     testWidgets('available row tap downloads', (tester) async {
       final u = FakeUpdater();
-      await pump(tester, const SettingsScreen(), u: u);
+      await pump(tester, const AboutScreen(), u: u);
       expect(find.text('Update available'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('update-row')));
       await tester.pump(_ms);

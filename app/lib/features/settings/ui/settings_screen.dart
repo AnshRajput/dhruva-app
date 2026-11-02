@@ -1,8 +1,10 @@
-/// Settings screen (Amendment 4b, lands the credit-row shortcut from
-/// Amendment 2b): Storage summary + link to the Models hub's Installed tab,
-/// Data (clear all chat history behind a double confirmation), About (a
-/// slim tile to the dedicated `/settings/about` keepsake page + the credit
-/// row shortcut — the About page is the canonical home for the rest).
+/// Settings home (opened from the gear on Today). Grouped in the visual
+/// language of the Connectors comp: big title, grouped rounded surfaces, an
+/// icon tile + title + one plain line per row. Order: Connectors, About me,
+/// Models, Appearance, Notifications, Privacy, Safety & reports, Crash
+/// reports, About. Everything that used to sit inline here now lives one tap
+/// away with its topic: theme -> Appearance, clear history -> Privacy,
+/// update check -> About.
 library;
 
 import 'package:flutter/material.dart';
@@ -10,12 +12,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
-import '../../../core/di/providers.dart';
-import '../../../core/theme/dhruva_theme_extension.dart';
-import '../../../core/update/shorebird_update_banner.dart' show updIosReady;
-import '../../../core/update/shorebird_update_service.dart';
+import '../../../core/identity/app_identity.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
+import '../privacy_facts.dart';
 import '../state/storage_summary_provider.dart';
+import '../widgets/appearance_section.dart';
 import '../widgets/credit_row.dart';
+import '../widgets/settings_widgets.dart';
 import '../widgets/version_text.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -23,265 +26,185 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
-        children: const [
-          _SectionHeader('Storage'),
-          _StorageTile(),
-          _SectionHeader('Data'),
-          _ClearHistoryTile(),
-          _SectionHeader('Device'),
-          _DeviceGuardTile(),
-          _SectionHeader('Safety'),
-          _SafetyTile(),
-          _CrashReportsTile(),
-          _SectionHeader('About'),
-          _UpdateTile(),
-          _AboutTile(),
-          CreditRow(),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  const _SectionHeader(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        tokens.spacing.md,
-        tokens.spacing.md,
-        tokens.spacing.md,
-        tokens.spacing.xs,
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.primary,
+    return SettingsPage(
+      title: 'Settings',
+      subtitle:
+          'Choose what ${AppIdentity.shortName} can read, and how it '
+          'behaves.',
+      children: [
+        SettingsGroup(
+          children: [
+            _nav(
+              context,
+              'settings-connectors',
+              Icons.link_outlined,
+              'Connectors',
+              connectorsSummaryFor(Theme.of(context).platform),
+              '/settings/connectors',
+            ),
+            _nav(
+              context,
+              'settings-about-me',
+              Icons.edit_note_rounded,
+              'About me',
+              'Your name, work and writing style, so drafts sound like you',
+              '/settings/about-me',
+            ),
+          ],
         ),
-      ),
+        const SettingsSectionLabel('Models'),
+        SettingsGroup(
+          children: [
+            const _ModelsRow(),
+            _nav(
+              context,
+              'settings-compare',
+              Icons.science_outlined,
+              'Compare models',
+              'Run one prompt through two models',
+              '/settings/models/compare',
+            ),
+            _nav(
+              context,
+              'settings-ai-news',
+              Icons.newspaper_outlined,
+              'AI news',
+              'Small models worth trying (opt-in)',
+              '/settings/models/compare?tab=news',
+            ),
+            _nav(
+              context,
+              'settings-voice',
+              Icons.record_voice_over_outlined,
+              'Voice',
+              'Speech models for talking hands-free',
+              '/settings/models?tab=voice',
+            ),
+            const _DeviceGuardRow(),
+          ],
+        ),
+        const SettingsSectionLabel('This app'),
+        SettingsGroup(
+          children: [
+            // Inline, not a page of its own: one control never earns a screen.
+            const AppearanceRow(key: ValueKey('settings-appearance')),
+            if (isCupertinoChrome(context)) const ReduceTransparencyRow(),
+            _nav(
+              context,
+              'settings-notifications',
+              Icons.notifications_none,
+              'Notifications',
+              'Download alerts and your morning brief',
+              '/settings/notifications',
+            ),
+            _nav(
+              context,
+              'settings-privacy',
+              Icons.lock_outline,
+              'Privacy',
+              'What leaves this phone, what stays, and your data',
+              '/settings/privacy',
+            ),
+          ],
+        ),
+        const SettingsSectionLabel('Trust'),
+        SettingsGroup(
+          children: [
+            _nav(
+              context,
+              'settings-safety',
+              Icons.flag_outlined,
+              'Safety & reports',
+              'Report a reply, see your reports',
+              '/settings/safety',
+            ),
+            _nav(
+              context,
+              'settings-crash-reports',
+              Icons.error_outline,
+              'Crash reports',
+              'Stay on your phone unless you share them',
+              '/settings/crash-reports',
+            ),
+            const _AboutRow(),
+          ],
+        ),
+        const CreditRow(),
+      ],
     );
   }
+
+  static Widget _nav(
+    BuildContext context,
+    String key,
+    IconData icon,
+    String title,
+    String subtitle,
+    String route,
+  ) => SettingsRow(
+    key: ValueKey(key),
+    icon: icon,
+    title: title,
+    subtitle: subtitle,
+    onTap: () => context.push(route),
+  );
 }
 
-class _StorageTile extends ConsumerWidget {
-  const _StorageTile();
+/// "Models & downloads": the one-line description doubles as the storage
+/// summary once it has loaded (the old standalone "Installed models" row).
+class _ModelsRow extends ConsumerWidget {
+  const _ModelsRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summary = ref.watch(storageSummaryProvider);
-    return ListTile(
-      leading: const Icon(Icons.sd_storage_outlined),
-      title: const Text('Installed models'),
+    return SettingsRow(
+      key: const ValueKey('settings-models'),
+      icon: Icons.widgets_outlined,
+      title: 'Models & downloads',
       subtitle: switch (summary) {
-        AsyncData(:final value) => Text(
-          '${value.modelCount} model'
-          '${value.modelCount == 1 ? '' : 's'} · '
-          '${_formatBytes(value.totalBytes)} used',
-        ),
-        AsyncError() => const Text("Couldn't read storage usage"),
-        _ => const Text('Loading…'),
+        AsyncData(:final value) when value.modelCount > 0 =>
+          '${value.modelCount} model${value.modelCount == 1 ? '' : 's'} · '
+              '${_formatBytes(value.totalBytes)} used'
+              '${value.voiceBytes > 0 ? ' · voice ${_formatBytes(value.voiceBytes)}' : ''}',
+        AsyncError() => "Couldn't read storage usage",
+        _ => 'Discover, installed, speed test',
       },
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push('/models'),
+      onTap: () => context.push('/settings/models'),
     );
   }
 }
 
-class _DeviceGuardTile extends ConsumerWidget {
-  const _DeviceGuardTile();
+class _DeviceGuardRow extends ConsumerWidget {
+  const _DeviceGuardRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enabled = ref.watch(deviceGuardEnabledProvider).value ?? true;
-    return SwitchListTile(
+    final enabled = ref.watch(deviceGuardEnabledProvider).value;
+    return SettingsSwitchRow(
       key: const ValueKey('device-guard-switch'),
-      secondary: const Icon(Icons.warning_amber),
-      title: const Text('Battery & heat guard'),
-      subtitle: const Text(
-        'Warns you, and stops a reply, when your phone is low on battery '
-        'or too hot.',
-      ),
-      value: enabled,
+      icon: Icons.warning_amber,
+      title: 'Battery & heat guard',
+      subtitle:
+          'Warns you, and stops a reply, when your phone is low on battery '
+          'or too hot.',
+      value: enabled ?? true,
       onChanged: (v) => ref.read(deviceGuardEnabledProvider.notifier).set(v),
     );
   }
 }
 
-class _ClearHistoryTile extends ConsumerWidget {
-  const _ClearHistoryTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      leading: Icon(Icons.delete_sweep_outlined, color: scheme.error),
-      title: Text(
-        'Clear all chat history',
-        style: TextStyle(color: scheme.error),
-      ),
-      subtitle: const Text('Deletes every conversation and message'),
-      onTap: () => _clearAllHistory(context, ref),
-    );
-  }
-
-  Future<void> _clearAllHistory(BuildContext context, WidgetRef ref) async {
-    final firstConfirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear all chat history?'),
-        content: const Text(
-          'This permanently deletes every conversation and message on '
-          'this device. Downloaded models are NOT affected — they stay '
-          'installed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continue'),
-          ),
-        ],
-      ),
-    );
-    if (firstConfirm != true || !context.mounted) return;
-
-    final secondConfirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Are you sure?'),
-        content: const Text(
-          "This can't be undone — all conversations and messages will be "
-          'gone for good.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Clear all history'),
-          ),
-        ],
-      ),
-    );
-    if (secondConfirm != true || !context.mounted) return;
-
-    await ref.read(chatRepositoryProvider).clearAllHistory();
-    // UX-hardening A2: refresh the kept-alive Chat list immediately (no more
-    // "pull to refresh" instruction) via the shared revision signal — settings
-    // can't import `features/chat`'s controller (ADR-002).
-    ref.read(conversationListRevisionProvider.notifier).bump();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Chat history cleared.')));
-  }
-}
-
-class _SafetyTile extends StatelessWidget {
-  const _SafetyTile();
+class _AboutRow extends StatelessWidget {
+  const _AboutRow();
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.flag_outlined),
-      title: const Text('Safety & reports'),
-      subtitle: const Text('Report a reply, see your reports'),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push('/settings/safety'),
-    );
-  }
-}
-
-class _CrashReportsTile extends StatelessWidget {
-  const _CrashReportsTile();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.error_outline),
-      title: const Text('Crash reports'),
-      subtitle: const Text('Stay on your phone unless you share them'),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () => context.push('/settings/crash-reports'),
-    );
-  }
-}
-
-/// "Check for updates": tap forces a check, or downloads / restarts per phase.
-class _UpdateTile extends ConsumerWidget {
-  const _UpdateTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(shorebirdUpdateProvider);
-    final n = ref.read(shorebirdUpdateProvider.notifier);
-    void say(String m) =>
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-    final (String sub, VoidCallback? tap) = switch (s.phase) {
-      ShorebirdPhase.unavailable => (
-        "Updates aren't available in this build",
-        null,
-      ),
-      ShorebirdPhase.available => ('Update available', n.download),
-      ShorebirdPhase.downloading => ('Downloading update\u2026', null),
-      ShorebirdPhase.readyToRestart =>
-        s.reopenByHand
-            ? (updIosReady, null)
-            : ('Update ready. Tap to restart', n.restart),
-      ShorebirdPhase.failed => ('Update failed. Tap to retry', n.download),
-      ShorebirdPhase.idle => (
-        s.patch == null ? 'Up to date' : 'Patch ${s.patch}',
-        () async {
-          final ok = await n.check(force: true);
-          if (!context.mounted) return;
-          if (!ok) {
-            say("Couldn't check for updates.");
-          } else if (ref.read(shorebirdUpdateProvider).phase ==
-              ShorebirdPhase.idle) {
-            say("You're up to date.");
-          }
-        },
-      ),
-    };
-    return ListTile(
-      key: const ValueKey('update-row'),
-      leading: const Icon(Icons.system_update_alt_rounded),
-      title: const Text('Check for updates'),
-      subtitle: Text(sub),
-      enabled: tap != null || s.phase == ShorebirdPhase.downloading,
-      onTap: tap,
-    );
-  }
-}
-
-class _AboutTile extends StatelessWidget {
-  const _AboutTile();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.info_outline),
-      title: const Text('About Dhruva AI'),
-      subtitle: const VersionText(),
-      trailing: const Icon(Icons.chevron_right),
+    return SettingsRow(
+      key: const ValueKey('settings-about'),
+      icon: Icons.info_outline,
+      title: 'About ${AppIdentity.productName}',
+      subtitle: '',
+      subtitleWidget: const VersionText(),
       onTap: () => context.push('/settings/about'),
     );
   }

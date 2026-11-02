@@ -1,5 +1,7 @@
 import 'package:background_downloader/background_downloader.dart' as bg;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import '../../core/failures/failure_message.dart' show kNoConnectionMessage;
 import 'download_backend.dart';
 import 'download_notifications.dart';
 
@@ -21,7 +23,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
   /// shows, not a crash). Not covered by `flutter test` (needs the plugin's
   /// native side); the config values it applies are asserted in
   /// `download_notifications_test.dart`.
-  Future<void> configureNotifications() async {
+  Future<void> configureNotifications({bool finishAlerts = true}) async {
     // Run model downloads in an Android foreground service so they SURVIVE the
     // app being backgrounded, navigated away from, or the notification tray
     // being opened. Without this, Android's battery optimizer kills the
@@ -32,7 +34,7 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
     await _downloader.configure(
       globalConfig: [(bg.Config.runInForeground, bg.Config.always)],
     );
-    final c = dhruvaDownloadNotificationConfig;
+    final c = downloadNotificationConfig(finishAlerts: finishAlerts);
     _downloader.configureNotification(
       running: c.running,
       complete: c.complete,
@@ -157,7 +159,9 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
         return BackendStatusUpdate(
           update.task.taskId,
           status: _toBackendStatus(update.status),
-          errorMessage: update.exception?.description,
+          errorMessage: update.exception == null
+              ? null
+              : downloadErrorText(update.exception!),
         );
       case bg.TaskProgressUpdate():
         return BackendProgressUpdate(
@@ -187,3 +191,39 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
     bg.TaskStatus.notFound => BackendTaskStatus.notFound,
   };
 }
+
+final _diskFull = RegExp(
+  r'ENOSPC|No space|Insufficient space',
+  caseSensitive: false,
+);
+final _networkDrop = RegExp(
+  r'java\.net\.|javax\.net\.|unexpected end of stream|ECONNRESET|EPIPE|ETIMEDOUT|'
+  r'ENETUNREACH|ECONNABORTED|connection (abort|reset)|timed? ?out|Unable to resolve host',
+  caseSensitive: false,
+);
+
+/// Plain words for a failed download. The plugin's own description is OS
+/// text ("unknown error", NSURLErrorDomain…) that tells a user nothing and
+/// gives them no next step.
+@visibleForTesting
+String downloadErrorText(bg.TaskException e) => switch (e) {
+  bg.TaskHttpException(httpResponseCode: 404) =>
+    'This file is no longer on Hugging Face.',
+  bg.TaskHttpException(httpResponseCode: 401 || 403) =>
+    'Hugging Face refused this download. Pick another model.',
+  bg.TaskHttpException(:final httpResponseCode) when httpResponseCode > 0 =>
+    'Hugging Face had a problem (error $httpResponseCode). Tap retry.',
+  bg.TaskConnectionException() => kNoConnectionMessage,
+  // The plugin (TaskRunner.setTaskException) labels EVERY java IOException
+  // that isn't a SocketException "fileSystem" — so a dropped transfer
+  // (UnknownHost, SocketTimeout, SSL, "unexpected end of stream") lands here
+  // with the java exception in `description`. Only the description can
+  // tell a full disk from a dead network.
+  bg.TaskFileSystemException(:final description) =>
+    _diskFull.hasMatch(description)
+        ? "Couldn't save the file. Free up some space and tap retry."
+        : _networkDrop.hasMatch(description)
+        ? kNoConnectionMessage
+        : "Couldn't save the file. Tap retry.",
+  _ => "The download couldn't start. Tap retry.",
+};

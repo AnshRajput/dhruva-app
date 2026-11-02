@@ -132,6 +132,44 @@ void main() {
   });
 
   group('cardToCharacterFields', () {
+    test('caps an oversized persona at maxPersonaChars', () {
+      final card = CharacterCardV2(
+        name: 'Big',
+        systemPrompt: 'a' * (maxPersonaChars * 4),
+      );
+      expect(
+        cardToCharacterFields(card).personaSystemPrompt.length,
+        lessThanOrEqualTo(maxPersonaChars),
+      );
+    });
+
+    test('persona cut never splits a surrogate pair', () {
+      final card = CharacterCardV2(
+        name: 'Emoji',
+        systemPrompt: '${'a' * (maxPersonaChars - 1)}\u{1F600}tail',
+      );
+      final out = cardToCharacterFields(card).personaSystemPrompt;
+      final last = out.codeUnitAt(out.length - 1);
+      expect(last >= 0xD800 && last <= 0xDBFF, isFalse);
+      expect(out.length, lessThanOrEqualTo(maxPersonaChars));
+    });
+
+    test('clamps an imported contextLength to the in-app range', () {
+      final card = CharacterCardV2(
+        name: 'Ctx',
+        systemPrompt: 'p',
+        extensions: {
+          'dhruva': {
+            'samplingParams': {'contextLength': 131072, 'maxTokens': 100000},
+          },
+        },
+      );
+      final sp = cardToCharacterFields(card).samplingParams!;
+      expect(sp.contextLength, maxCardContextLength);
+      expect(sp.maxTokens, lessThanOrEqualTo(sp.contextLength));
+      sp.validate();
+    });
+
     test(
       'a card with only system_prompt uses it verbatim as personaSystemPrompt',
       () {

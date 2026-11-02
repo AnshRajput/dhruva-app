@@ -22,6 +22,7 @@ import '../../data/docs/document_extractor.dart';
 import '../../data/docs/document_repository.dart';
 import '../../data/downloads/background_downloader_backend.dart';
 import '../../data/downloads/download_manager.dart';
+import '../../data/downloads/model_file_channel.dart';
 import '../../data/downloads/storage_manager.dart';
 import '../../data/hf_api/hf_api_client.dart';
 import '../../data/safety/report_repository.dart';
@@ -36,6 +37,7 @@ import '../../voice/voice_model_installer.dart';
 import '../../voice/voice_player.dart';
 import '../../voice/voice_service.dart';
 import '../device_info/device_info_service.dart';
+import '../settings/bool_pref.dart';
 
 /// The on-device inference engine. `LlamaEngineService` in production;
 /// override with `FakeEngineService` in tests/widget previews.
@@ -100,8 +102,20 @@ final documentPickerProvider = Provider<DocumentPicker>((ref) {
 /// Reads a picked document into chunks off the root isolate. Override with a
 /// synchronous fake in widget tests (an `Isolate.run` can't complete under
 /// `testWidgets`' fake clock).
+///
+/// The watchdog's memory limit scales with the device's RAM
+/// ([extractionRssLimitFor]); an unreadable RAM figure keeps the ceiling.
 final documentExtractorProvider = Provider<DocumentExtractor>((ref) {
-  return extractDocumentFile;
+  return (path, name) async {
+    var limit = maxExtractionRssGrowth;
+    try {
+      final mem = await ref.read(deviceInfoServiceProvider).getMemoryInfo();
+      limit = extractionRssLimitFor(mem.totalBytes);
+    } on Object {
+      // Keep the ceiling.
+    }
+    return extractDocumentFile(path, name, rssGrowthLimit: limit);
+  };
 });
 
 /// Resolves + extracts downloaded voice-model bundles under `models/voice/`.
@@ -134,6 +148,11 @@ final deviceInfoServiceProvider = Provider<DeviceInfoService>((ref) {
   return PluginDeviceInfoService();
 });
 
+/// Native picker + streaming copy for sideloaded GGUFs.
+final modelFileChannelProvider = Provider<ModelFileChannel>(
+  (ref) => ModelFileChannel(),
+);
+
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);
@@ -160,7 +179,14 @@ final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
   final backend = BackgroundDownloaderBackend();
   // D4: register the OS notification (progress bar + POST_NOTIFICATIONS
   // request) once, before any enqueue. Mobile-only; harmless on desktop.
-  await backend.configureNotifications();
+  final alerts = ref.read(downloadNotificationsProvider);
+  await backend.configureNotifications(finishAlerts: alerts.value ?? true);
+  // Settings > Notifications: re-apply when the switch changes (no manager
+  // rebuild, so no in-flight download is touched).
+  ref.listen(downloadNotificationsProvider, (_, next) {
+    final v = next.value;
+    if (v != null) unawaited(backend.configureNotifications(finishAlerts: v));
+  });
   final manager = DownloadManager(
     backend: backend,
     db: ref.watch(appDatabaseProvider),
@@ -218,9 +244,8 @@ class ConversationListRevision extends Notifier<int> {
 
 final characterRepositoryProvider = Provider<CharacterRepository>((ref) {
   final repo = CharacterRepository(db: ref.watch(appDatabaseProvider));
-  // Fire-and-forget: idempotent, tolerates the starter-pack asset being
-  // absent (see CharacterRepository.seedBuiltInsIfPresent), so there's
-  // nothing worth blocking provider construction on.
-  unawaited(repo.seedBuiltInsIfPresent());
+  // Idempotent, tolerates the starter-pack asset being absent. Started here;
+  // list consumers await repo.ensureSeeded() so they never read before it.
+  unawaited(repo.ensureSeeded());
   return repo;
 });

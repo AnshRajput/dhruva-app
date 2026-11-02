@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../core/failures/app_failure.dart';
+import '../connectors/ask_sources.dart';
 import '../db/database.dart';
 import '../docs/grounding.dart';
 import 'chat_export.dart';
@@ -76,6 +77,10 @@ final class MessageInfo {
   /// empty for an ordinary reply.
   final List<DocSource> sources;
 
+  /// Connector citations (calendar, contacts, files, mail) this reply was
+  /// grounded in (Ask); empty for an ungrounded reply.
+  final List<ItemSource> itemSources;
+
   const MessageInfo({
     required this.id,
     required this.conversationId,
@@ -90,6 +95,7 @@ final class MessageInfo {
     this.parentMessageId,
     this.reported = false,
     this.sources = const [],
+    this.itemSources = const [],
   });
 }
 
@@ -262,6 +268,22 @@ final class ChatRepository {
     bool onlyUnfiled = false,
   }) async {
     final query = _db.select(_db.conversations);
+    // A character chat inserts its row (+ greeting) the moment it opens
+    // (chat_controller `_buildFromCharacter`), so leaving without sending
+    // used to leave an untitled stub in the list. A conversation only
+    // "exists" for the user once it has a title or a user message.
+    query.where(
+      (t) =>
+          t.title.equals('').not() |
+          existsQuery(
+            _db.selectOnly(_db.messages)
+              ..addColumns([_db.messages.id])
+              ..where(
+                _db.messages.conversationId.equalsExp(t.id) &
+                    _db.messages.role.equalsValue(MessageRole.user),
+              ),
+          ),
+    );
     if (onlyUnfiled) {
       query.where((t) => t.folderId.isNull());
     } else if (folderId != null) {
@@ -437,14 +459,24 @@ final class ChatRepository {
     await _touchUpdatedAt(message.conversationId);
   }
 
-  /// Records the document citations behind a grounded reply (shown as the
-  /// bubble's "Sources" row).
-  Future<void> setSources(int messageId, List<DocSource> sources) {
+  /// Records the citations behind a grounded reply: document pages (the
+  /// bubble's "Sources" row) and connector items (the source chips).
+  Future<void> setSources(
+    int messageId,
+    List<DocSource> sources, {
+    List<ItemSource> items = const [],
+  }) {
     return (_db.update(
       _db.messages,
     )..where((t) => t.id.equals(messageId))).write(
       MessagesCompanion(
-        sourcesJson: Value(sources.isEmpty ? null : encodeSources(sources)),
+        sourcesJson: Value(
+          sources.isEmpty && items.isEmpty
+              ? null
+              : encodeAnswerSources([
+                  for (final s in sources) s.toJson(),
+                ], items),
+        ),
       ),
     );
   }
@@ -469,7 +501,22 @@ final class ChatRepository {
   /// downloaded files are untouched — this is the Settings screen's "Clear
   /// all chat history" action (Amendment 4b), and that boundary is exactly
   /// what its confirmation copy promises.
-  Future<void> clearAllHistory() => _db.delete(_db.conversations).go();
+  ///
+  /// Library saved answers and to-dos that quote connector data (calendar,
+  /// contacts, notifications, files) are derived from those chats, so they go
+  /// too, in the same transaction. Ones that cite no connector are kept (the
+  /// confirmation copy says so). Rule: `encodeConnectors` in library_store.dart.
+  Future<void> clearAllHistory() => _db.transaction(() async {
+    await _db.delete(_db.conversations).go();
+    await _db.customUpdate(
+      "DELETE FROM saved_answers WHERE source_connectors <> ''",
+      updates: {_db.savedAnswers},
+    );
+    await _db.customUpdate(
+      "DELETE FROM todos WHERE source_connectors <> ''",
+      updates: {_db.todos},
+    );
+  });
 
   // ---- Search ---------------------------------------------------------
 
@@ -644,5 +691,6 @@ final class ChatRepository {
     parentMessageId: row.parentMessageId,
     reported: row.reported,
     sources: decodeSources(row.sourcesJson),
+    itemSources: decodeItemSources(row.sourcesJson),
   );
 }

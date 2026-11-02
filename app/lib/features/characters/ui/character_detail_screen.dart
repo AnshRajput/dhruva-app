@@ -19,6 +19,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/characters/character_repository.dart';
 import '../state/characters_controller.dart';
@@ -35,9 +36,9 @@ class CharacterDetailScreen extends ConsumerWidget {
       data: (character) {
         if (character == null) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Character')),
+            appBar: AppBar(title: const Text('Persona')),
             body: const EmptyStateView(
-              message: 'Character not found.',
+              message: 'Persona not found.',
               icon: Icons.person_off_outlined,
             ),
           );
@@ -46,7 +47,7 @@ class CharacterDetailScreen extends ConsumerWidget {
       },
       loading: () => const Scaffold(body: Center(child: DhruvaLoader())),
       error: (error, stack) => Scaffold(
-        appBar: AppBar(title: const Text('Character')),
+        appBar: AppBar(title: const Text('Persona')),
         body: ErrorStateView(
           error: error,
           onRetry: () => ref.invalidate(characterByIdProvider(characterId)),
@@ -213,7 +214,7 @@ class _DetailBody extends ConsumerWidget {
   }
 
   Future<void> _showExportSheet(BuildContext context, WidgetRef ref) async {
-    final format = await showModalBottomSheet<_ExportFormat>(
+    final format = await showDhruvaSheet<_ExportFormat>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(

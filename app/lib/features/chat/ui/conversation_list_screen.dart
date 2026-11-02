@@ -1,4 +1,4 @@
-/// Conversation list (chat-spec.md §6.2) — the app's `/chat` home tab.
+/// Conversation list (chat-spec.md §6.2) — now the Ask tab (`/ask`).
 /// Pinned-first ordering straight from `ChatRepository.listConversations`,
 /// folder chip filter, swipe/menu actions, FAB new-chat
 /// flow (model picker if multiple installed / auto if one / models-hub CTA
@@ -46,7 +46,7 @@ class _ConversationListScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Download a model to start chatting.')),
       );
-      unawaited(context.push('/models'));
+      unawaited(context.push('/models/hub'));
       return;
     }
     int modelId;
@@ -73,7 +73,7 @@ class _ConversationListScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Download a model to talk hands-free.')),
       );
-      unawaited(context.push('/models'));
+      unawaited(context.push('/models/hub'));
       return;
     }
     int modelId;
@@ -103,25 +103,24 @@ class _ConversationListScreenState
     // installed → Browse models" empty state shows on a fresh install, instead
     // of a "New chat" CTA whose FAB immediately bounces to /models.
     final hasAnyModel = modelsAsync.value?.isNotEmpty ?? false;
+    // No model and nothing to list: one "get a model" screen, without the chat
+    // chrome that cannot work yet (folders, quick actions, Talk, New chat).
+    final bare = !hasAnyModel && (state.value?.conversations.isEmpty ?? false);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chats'),
+        title: const Text('Ask'),
         actions: [
-          const ChatSearchAction(),
+          if (!bare) const ChatSearchAction(),
           // WS5: a labelled, always-present voice entry — not an unlabelled
           // waveform glyph. Visible on every state of the home (empty or full),
           // so voice is findable before any conversation exists.
-          TextButton.icon(
-            onPressed: _startVoice,
-            icon: const Icon(Icons.record_voice_over_outlined, size: 18),
-            label: const Text('Talk'),
-          ),
-          IconButton(
-            tooltip: 'Workflows',
-            onPressed: () => context.push('/workflows'),
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
+          if (!bare)
+            TextButton.icon(
+              onPressed: _startVoice,
+              icon: const Icon(Icons.record_voice_over_outlined, size: 18),
+              label: const Text('Talk'),
+            ),
           SizedBox(width: tokens.spacing.xs),
         ],
       ),
@@ -144,10 +143,12 @@ class _ConversationListScreenState
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _startNewChat,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: bare
+          ? null
+          : FloatingActionButton(
+              onPressed: _startNewChat,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }
@@ -168,6 +169,20 @@ class _ConversationBody extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
 
+    if (state.conversations.isEmpty && !hasAnyModel) {
+      // The two labelled doors stay (they are how people find Actions and
+      // Personas); folders, quick actions, Talk and New chat wait for a model.
+      return Column(
+        children: [
+          const AskEntryPoints(),
+          Expanded(
+            child: NoModelInstalledView(
+              onBrowseModels: () => context.push('/models/hub'),
+            ),
+          ),
+        ],
+      );
+    }
     return RefreshIndicator(
       onRefresh: () =>
           ref.read(conversationListControllerProvider.notifier).refresh(),
@@ -210,13 +225,14 @@ class _ConversationBody extends ConsumerWidget {
           ),
           const ShorebirdUpdateBanner(),
           const CrashReportBanner(),
+          const AskEntryPoints(),
           const WorkflowStrip(),
           Expanded(
             child: state.conversations.isEmpty
                 ? (hasAnyModel
                       ? NoConversationsView(onNewChat: onNewChat)
                       : NoModelInstalledView(
-                          onBrowseModels: () => context.push('/models'),
+                          onBrowseModels: () => context.push('/models/hub'),
                         ))
                 : ListView.builder(
                     itemCount: state.conversations.length,
@@ -255,6 +271,44 @@ class _ConversationBody extends ConsumerWidget {
           .read(conversationListControllerProvider.notifier)
           .createFolder(name);
     }
+  }
+}
+
+/// Labelled doors to the two things that used to hide behind icon-only
+/// buttons: Actions (one-tap text jobs) and Personas (ready-made assistants).
+/// Text labels always; the tooltip carries the one-line explanation.
+class AskEntryPoints extends StatelessWidget {
+  const AskEntryPoints({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.md,
+        tokens.spacing.xs,
+        tokens.spacing.md,
+        0,
+      ),
+      child: Wrap(
+        spacing: tokens.spacing.sm,
+        runSpacing: tokens.spacing.xs,
+        children: [
+          ActionChip(
+            tooltip: 'Actions',
+            avatar: const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: const Text('Actions'),
+            onPressed: () => context.push('/actions'),
+          ),
+          ActionChip(
+            tooltip: 'Personas',
+            avatar: const Icon(Icons.theater_comedy_outlined, size: 18),
+            label: const Text('Personas'),
+            onPressed: () => context.push('/personas'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

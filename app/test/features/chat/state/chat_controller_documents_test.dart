@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
@@ -25,7 +26,11 @@ void main() {
   late FakeEngineService engine;
   var failExtract = false;
 
+  /// When set, the fake extractor waits on it (a read that is still running).
+  Completer<void>? gate;
+
   setUp(() {
+    gate = null;
     db = AppDatabase(NativeDatabase.memory());
     picker = FakeDocumentPicker()
       ..next = const PickedDocument(name: 'terms.txt', path: '/fake/terms.txt');
@@ -57,6 +62,7 @@ void main() {
 
   // Synchronous stand-in for the isolate extractor.
   Future<ExtractedDocument> fakeExtract(String path, String name) async {
+    await gate?.future;
     if (failExtract) {
       throw const DocumentException(
         DocumentFailureKind.noText,
@@ -98,6 +104,43 @@ void main() {
 
   ChatThreadState stateOf(ProviderContainer c, ChatRouteArgs args) =>
       c.read(chatControllerProvider(args)).value!;
+
+  test('Cancel on the Reading chip clears it and attaches nothing when the '
+      'read finishes', () async {
+    final modelId = await insertModel();
+    final args = ChatRouteArgs(initialModelId: modelId);
+    final c = build();
+    final ctrl = await open(c, args);
+    gate = Completer<void>();
+
+    final reading = ctrl.attachDocument();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(stateOf(c, args).extractingDocName, 'terms.txt');
+
+    ctrl.cancelDocumentRead();
+    expect(stateOf(c, args).extractingDocName, isNull);
+
+    gate!.complete(); // the isolate finishes after all
+    await reading;
+    final s = stateOf(c, args);
+    expect(s.documents, isEmpty);
+    expect(s.extractingDocName, isNull);
+    expect(s.documentError, isNull);
+
+    // And the user can attach again straight away.
+    gate = null;
+    await ctrl.attachDocument();
+    expect(stateOf(c, args).documents, hasLength(1));
+  });
+
+  test('Cancel with nothing being read does nothing', () async {
+    final modelId = await insertModel();
+    final args = ChatRouteArgs(initialModelId: modelId);
+    final c = build();
+    final ctrl = await open(c, args);
+    ctrl.cancelDocumentRead();
+    expect(stateOf(c, args).extractingDocName, isNull);
+  });
 
   test(
     'a draft chat holds the document, then stores it on first send',

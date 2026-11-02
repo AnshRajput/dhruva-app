@@ -22,6 +22,7 @@
 /// For a text-only model the button opens the document picker directly.
 library;
 
+import 'dart:async' show unawaited;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -30,14 +31,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/providers.dart';
+import '../../../core/identity/app_identity.dart';
+import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
+import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
 import '../../voice/state/voice_input_controller.dart';
 import '../../voice/widgets/mic_button.dart';
 import '../state/image_downscale.dart';
 import '../state/vision_presets.dart';
-import 'brand_motif.dart';
 
 class Composer extends ConsumerStatefulWidget {
   final bool isGenerating;
@@ -53,13 +57,15 @@ class Composer extends ConsumerStatefulWidget {
   /// (battery guard's "confirm before starting"). Null = always send.
   final Future<bool> Function()? beforeSend;
   final VoidCallback onCancel;
-  final VoidCallback onOpenSettings;
 
   /// Opens the document picker; null hides document attach (the pre-docs
   /// behavior every existing caller keeps).
   final VoidCallback? onAttachDocument;
   final void Function(int documentId)? onRemoveDocument;
   final VoidCallback? onDismissDocumentError;
+
+  /// "Cancel" on the Reading chip; null shows the chip without one.
+  final VoidCallback? onCancelDocumentRead;
 
   /// Documents already attached to this conversation.
   final List<DocumentInfo> documents;
@@ -70,20 +76,34 @@ class Composer extends ConsumerStatefulWidget {
   /// Plain-language reason the last attach failed, or null.
   final String? documentError;
 
+  /// Shown inside the composer surface above the input row (Ask's "Search in"
+  /// chips).
+  final Widget? header;
+
+  /// Text the field starts with (a prefilled `/ask/new?q=...`); never sent
+  /// until the user taps send.
+  final String? initialText;
+
+  /// Called whenever the field's text changes (Auto source preview).
+  final ValueChanged<String>? onChanged;
+
   const Composer({
     super.key,
     required this.isGenerating,
     this.onAttachDocument,
     this.onRemoveDocument,
     this.onDismissDocumentError,
+    this.onCancelDocumentRead,
     this.documents = const [],
     this.extractingDocName,
     this.documentError,
+    this.header,
+    this.initialText,
+    this.onChanged,
     this.isMultimodal = false,
     required this.onSend,
     this.beforeSend,
     required this.onCancel,
-    required this.onOpenSettings,
   });
 
   @override
@@ -98,9 +118,16 @@ class _ComposerState extends ConsumerState<Composer> {
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialText;
+    if (initial != null && initial.isNotEmpty) {
+      _controller.text = initial;
+      _controller.selection = TextSelection.collapsed(offset: initial.length);
+      _hasText = initial.trim().isNotEmpty;
+    }
     _controller.addListener(() {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
+      widget.onChanged?.call(_controller.text);
     });
   }
 
@@ -112,8 +139,8 @@ class _ComposerState extends ConsumerState<Composer> {
 
   Future<void> _submit() async {
     if (widget.isGenerating || (!_hasText && _attachedImage == null)) return;
-    final gate = widget.beforeSend;
-    if (gate != null && !(await gate()) || !mounted) return;
+    // D3: the input clears the instant send is tapped (not after the battery
+    // check or the model load); a declined check puts the draft back.
     final text = _controller.text;
     final image = _attachedImage;
     _controller.clear();
@@ -121,6 +148,13 @@ class _ComposerState extends ConsumerState<Composer> {
       _hasText = false;
       _attachedImage = null;
     });
+    final gate = widget.beforeSend;
+    if (gate != null && !(await gate())) {
+      if (!mounted) return;
+      _controller.text = text;
+      setState(() => _attachedImage = image);
+      return;
+    }
     widget.onSend(text, image);
   }
 
@@ -184,7 +218,7 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   void _openAttachSheet() {
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
@@ -239,14 +273,69 @@ class _ComposerState extends ConsumerState<Composer> {
     );
   }
 
-  void _onNoModel() => context.push('/models/hub?tab=voice');
+  /// No voice bundle yet: say what voice needs and why, in place, before
+  /// sending the user anywhere (not a bounce to a list of speech-model parts).
+  Future<void> _onNoModel() async {
+    final go = await showDhruvaSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final tokens = theme.extension<DhruvaTokens>()!;
+        return SafeArea(
+          child: Padding(
+            key: const ValueKey('voice-setup-sheet'),
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.lg,
+              0,
+              tokens.spacing.lg,
+              tokens.spacing.lg,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Talk to your phone', style: theme.textTheme.titleLarge),
+                SizedBox(height: tokens.spacing.sm),
+                Text(
+                  'Voice needs a one-time download: speech recognition to '
+                  'hear you and a voice to read answers aloud. Both run on '
+                  'this phone. Nothing is uploaded.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.lg),
+                FilledButton(
+                  key: const ValueKey('voice-setup-go'),
+                  onPressed: () => Navigator.of(sheetContext).pop(true),
+                  child: const Text('Set up voice'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(false),
+                  child: const Text('Not now'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (go == true && mounted) {
+      unawaited(context.push('/models/hub?tab=voice'));
+    }
+  }
 
   void _onPermissionDenied() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Microphone access is required for voice input — enable it in '
-          "your device's app settings.",
+      SnackBar(
+        content: const Text(
+          'Microphone access is off, so voice input cannot '
+          'hear you.',
+        ),
+        action: SnackBarAction(
+          label: 'Open settings',
+          onPressed: () => unawaited(ref.read(openAppSettingsProvider)()),
         ),
       ),
     );
@@ -276,15 +365,15 @@ class _ComposerState extends ConsumerState<Composer> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Center(child: TrustMark()),
-              SizedBox(height: tokens.spacing.sm),
               _DocumentArea(
                 documents: widget.documents,
                 extractingName: widget.extractingDocName,
                 error: widget.documentError,
                 onRemove: widget.onRemoveDocument,
                 onDismissError: widget.onDismissDocumentError,
+                onCancelReading: widget.onCancelDocumentRead,
               ),
+              if (widget.header != null) widget.header!,
               if (_attachedImage != null) ...[
                 _AttachedImageChip(
                   imageBytes: _attachedImage!,
@@ -296,11 +385,6 @@ class _ComposerState extends ConsumerState<Composer> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(
-                    tooltip: 'System prompt & sampling',
-                    icon: const Icon(Icons.tune),
-                    onPressed: widget.onOpenSettings,
-                  ),
                   if (widget.isMultimodal || widget.onAttachDocument != null)
                     IconButton(
                       tooltip: !widget.isMultimodal
@@ -331,7 +415,7 @@ class _ComposerState extends ConsumerState<Composer> {
                             decoration: InputDecoration(
                               filled: false,
                               border: InputBorder.none,
-                              hintText: 'Message Dhruva…',
+                              hintText: 'Message ${AppIdentity.shortName}…',
                               hintStyle: theme.textTheme.bodyLarge?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -340,7 +424,7 @@ class _ComposerState extends ConsumerState<Composer> {
                   ),
                   MicButton(
                     onFinalized: _appendFinalized,
-                    onNoModel: _onNoModel,
+                    onNoModel: () => unawaited(_onNoModel()),
                     onPermissionDenied: _onPermissionDenied,
                   ),
                   SizedBox(width: tokens.spacing.sm),
@@ -354,12 +438,6 @@ class _ComposerState extends ConsumerState<Composer> {
                     onCancel: widget.onCancel,
                   ),
                 ],
-              ),
-              Text(
-                'AI can be wrong. Everything runs on your phone.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
               ),
             ],
           ),
@@ -377,6 +455,7 @@ class _DocumentArea extends StatelessWidget {
   final String? error;
   final void Function(int documentId)? onRemove;
   final VoidCallback? onDismissError;
+  final VoidCallback? onCancelReading;
 
   const _DocumentArea({
     required this.documents,
@@ -384,6 +463,7 @@ class _DocumentArea extends StatelessWidget {
     required this.error,
     required this.onRemove,
     required this.onDismissError,
+    required this.onCancelReading,
   });
 
   @override
@@ -423,6 +503,8 @@ class _DocumentArea extends StatelessWidget {
                         title: extractingName!,
                         subtitle: 'Reading document…',
                         busy: true,
+                        onRemove: onCancelReading,
+                        removeTooltip: 'Cancel reading $extractingName',
                       ),
                     if (error != null)
                       _DocumentErrorChip(
@@ -446,12 +528,16 @@ class _DocumentChip extends StatelessWidget {
   final bool busy;
   final VoidCallback? onRemove;
 
+  /// Tooltip / spoken label of the close button; defaults to "Remove title".
+  final String? removeTooltip;
+
   const _DocumentChip({
     super.key,
     required this.title,
     required this.subtitle,
     this.busy = false,
     this.onRemove,
+    this.removeTooltip,
   });
 
   @override
@@ -530,7 +616,7 @@ class _DocumentChip extends StatelessWidget {
               if (onRemove != null)
                 IconButton(
                   onPressed: onRemove,
-                  tooltip: 'Remove $title',
+                  tooltip: removeTooltip ?? 'Remove $title',
                   iconSize: 18,
                   constraints: const BoxConstraints(
                     minWidth: 48,
@@ -718,9 +804,23 @@ class _SendStopButton extends StatelessWidget {
       width: 40,
       height: 40,
       child: AnimatedSwitcher(
-        duration: tokens.motion.fast,
-        switchInCurve: tokens.motion.standard,
-        switchOutCurve: tokens.motion.standard,
+        // Send <-> Stop reads as ONE control morphing: a small scale from
+        // 0.85 with the fade (two coloured discs cross-fading looked muddy).
+        // 120 ms in, 90 ms out; reduced motion falls back to the plain fade.
+        duration: tokens.motion.instant + const Duration(milliseconds: 20),
+        reverseDuration: const Duration(milliseconds: 90),
+        switchInCurve: tokens.motion.decelerate,
+        switchOutCurve: tokens.motion.decelerate,
+        transitionBuilder: (child, animation) =>
+            MediaQuery.disableAnimationsOf(context)
+            ? FadeTransition(opacity: animation, child: child)
+            : FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
+                  child: child,
+                ),
+              ),
         child: isGenerating
             ? _RoundIconButton(
                 key: const ValueKey('stop'),
@@ -757,13 +857,18 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton.filled(
-      onPressed: onPressed,
-      icon: Icon(icon),
-      style: IconButton.styleFrom(
-        backgroundColor: background,
-        foregroundColor: foreground,
-        shape: const CircleBorder(),
+    // Press-in scale on pointer-down; the scale is the feedback, so no ripple.
+    return PressableScale.passive(
+      passiveEnabled: onPressed != null,
+      child: IconButton.filled(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        style: IconButton.styleFrom(
+          backgroundColor: background,
+          foregroundColor: foreground,
+          shape: const CircleBorder(),
+          splashFactory: NoSplash.splashFactory,
+        ),
       ),
     );
   }

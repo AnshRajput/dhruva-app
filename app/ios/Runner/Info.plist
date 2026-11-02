@@ -28,8 +28,14 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Dhruva reads your calendar to show your day and prepare you for meetings. It only reads, never changes your calendar, and nothing leaves your device.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Dhruva reads your calendar to show your day and prepare you for meetings. It only reads, never changes your calendar, and nothing leaves your device.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Dhruva uses the camera to attach a photo to a chat message with a vision model — nothing leaves your device.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Dhruva looks up the names and photos of people in your meetings. It only reads, looks up one person at a time, and nothing leaves your device.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dhruva uses the microphone for voice chat. Speech is transcribed on your device and never uploaded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -59,6 +65,10 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<!-- The launch screen is navy in both themes: light status bar content
+	     during launch. Flutter takes over the style once it draws. -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>

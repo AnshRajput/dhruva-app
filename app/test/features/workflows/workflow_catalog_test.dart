@@ -45,4 +45,31 @@ void main() {
     );
     expect(out, endsWith('say {option}'));
   });
+
+  test('the instruction is the template without the user text', () {
+    for (final w in workflowCatalog) {
+      final i = workflowInstruction(w);
+      expect(i, isNot(contains('{')), reason: w.id);
+      expect(i, isNot(contains('Text:')), reason: w.id);
+      if (w.id != 'draft_reply') {
+        expect(i, contains('<text> tags'), reason: w.id);
+        expect(i, isNot(contains('next message')), reason: w.id);
+      }
+    }
+    expect(
+      workflowInstruction(byId('translate'), 'French'),
+      contains('Translate the text into French.'),
+    );
+    expect(
+      workflowInstruction(byId('draft_reply'), 'Short'),
+      contains('Write a Short reply to the message inside the <text> tags'),
+    );
+  });
+
+  test('short input is flagged only for verbs that need more text', () {
+    expect(tooShortFor(byId('quiz'), 'Move standup to 10?'), isNotNull);
+    expect(tooShortFor(byId('quiz'), ''), isNull);
+    expect(tooShortFor(byId('quiz'), 'word ' * 12), isNull);
+    expect(tooShortFor(byId('translate'), 'hi'), isNull);
+  });
 }
