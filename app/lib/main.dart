@@ -44,33 +44,35 @@ Future<void> main() async {
       appVersionProvider.overrideWithValue(appVersion),
     ],
   );
-  try {
-    final done = await container.read(onboardingCompleteProvider.future);
-    if (!done) appRouter.go('/onboarding');
-  } catch (_) {
-    // Onboarding is a nicety, not a gate — fall through to Today on any error.
+  // The four startup reads are independent, so they run TOGETHER: first frame
+  // waits for the slowest, not the sum (a widget/tile launch showed a black
+  // frame for seconds). Each failure is swallowed on its own.
+  Future<void> guarded(Future<void> Function() read) async {
+    try {
+      await read();
+    } catch (_) {
+      // Every one of these is a nicety, never a gate on launch.
+    }
   }
-  try {
+
+  await Future.wait([
+    // Onboarding is a nicety, not a gate: fall through to Today on any error.
+    guarded(() async {
+      final done = await container.read(onboardingCompleteProvider.future);
+      if (!done) appRouter.go('/onboarding');
+    }),
     // Load the saved theme mode before the first frame so a user who chose
     // Light/Dark never sees a flash of the system theme.
-    await container.read(themeModeProvider.future);
-  } catch (_) {
-    // Unreadable prefs fall back to following the system.
-  }
-  try {
+    guarded(() => container.read(themeModeProvider.future)),
     // Warm the "About the user" prompt block so the first send has it.
-    await container.read(userContextProvider.future);
-  } catch (_) {
-    // Prompts just go without it.
-  }
-  try {
+    guarded(() => container.read(userContextProvider.future)),
     // "Hide content in app switcher" must be in force before the first frame
     // is ever snapshotted; DhruvaApp keeps it in sync after that.
-    final hidden = await container.read(hideInAppSwitcherProvider.future);
-    await container.read(screenPrivacyProvider).setHidden(hidden);
-  } catch (_) {
-    // Unreadable prefs fall back to off.
-  }
+    guarded(() async {
+      final hidden = await container.read(hideInAppSwitcherProvider.future);
+      await container.read(screenPrivacyProvider).setHidden(hidden);
+    }),
+  ]);
 
   runApp(
     UncontrolledProviderScope(container: container, child: const DhruvaApp()),
