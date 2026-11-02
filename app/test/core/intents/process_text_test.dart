@@ -171,17 +171,21 @@ void main() {
     });
 
     test('native side validates before handing a result back', () {
-      expect(kotlin, contains('open class MainActivity'));
-      expect(kotlin, contains('class ProcessTextActivity : MainActivity()'));
+      // The trampoline is its own plain Activity (see
+      // test/platform/process_text_activity_test.dart); the validation lives
+      // in MainActivity + the bridge.
+      final trampoline = File(
+        'android/app/src/main/kotlin/tech/appuinside/dhruva/ProcessTextActivity.kt',
+      ).readAsStringSync();
+      expect(kotlin, contains('class MainActivity : FlutterActivity()'));
+      expect(trampoline, contains('class ProcessTextActivity : Activity()'));
       // Editable only: the READONLY extra must be present and false, and the
       // launch must have a calling activity (started for a result).
-      expect(kotlin, contains('EXTRA_PROCESS_TEXT_READONLY'));
-      expect(kotlin, contains('callingActivity != null'));
+      expect(trampoline, contains('EXTRA_PROCESS_TEXT_READONLY'));
+      expect(trampoline, contains('callingActivity != null'));
       expect(
-        kotlin,
-        contains(
-          'setResult(RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT',
-        ),
+        trampoline,
+        contains('Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, text)'),
       );
       // Input size validation + the same cap as Dart.
       expect(kotlin, contains('MAX_RESULT_CHARS = 100_000'));

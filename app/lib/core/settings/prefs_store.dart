@@ -27,28 +27,43 @@ final class FilePrefsStore implements PrefsStore {
   File get _file => File(p.join(directory.path, 'app_prefs_v1.json'));
 
   Map<String, String> _load() {
+    final fromMain = _read(_file);
+    if (fromMain != null) return fromMain;
+    // A file left corrupt by an older (non-atomic) write, or a crash between
+    // the temp write and the rename: fall back to the last complete temp.
+    return _read(File('${_file.path}.tmp')) ?? {};
+  }
+
+  /// Null when the file is missing or not valid JSON.
+  Map<String, String>? _read(File f) {
     try {
-      if (!_file.existsSync()) return {};
-      final decoded = jsonDecode(_file.readAsStringSync());
-      if (decoded is! Map) return {};
+      if (!f.existsSync()) return null;
+      final decoded = jsonDecode(f.readAsStringSync());
+      if (decoded is! Map) return null;
       return {
         for (final e in decoded.entries)
           if (e.value is String) e.key.toString(): e.value as String,
       };
     } on Object {
-      return {};
+      return null;
     }
   }
 
   @override
   Future<String?> read(String key) async => _load()[key];
 
+  /// Writes go to a temp file that is then renamed over the real one, so a
+  /// kill mid-write leaves the old file whole instead of truncated JSON (which
+  /// reads as `{}` and silently resets every preference, including "hide in app
+  /// switcher"). Rename is atomic on the same directory.
   @override
   Future<void> write(String key, String value) async {
     final all = _load()..[key] = value;
-    _file
+    final tmp = File('${_file.path}.tmp');
+    tmp
       ..createSync(recursive: true)
-      ..writeAsStringSync(jsonEncode(all));
+      ..writeAsStringSync(jsonEncode(all), flush: true);
+    tmp.renameSync(_file.path);
   }
 }
 

@@ -327,6 +327,12 @@ class SavedAnswers extends Table {
   TextColumn get content => text()();
   IntColumn get conversationId => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+
+  /// Connector ids the source conversation cited when this was saved, as
+  /// `,calendar,notifications,` (empty when none). Derived data: revoking one
+  /// of these connectors, or clearing all chat history, deletes this row
+  /// (v9; see `LibraryStore`). `content` is unique via an index (v9).
+  TextColumn get sourceConnectors => text().withDefault(const Constant(''))();
 }
 
 /// A to-do the user added from an "Extract to-dos" reply (v8): the Library's
@@ -336,6 +342,9 @@ class Todos extends Table {
   TextColumn get task => text()();
   BoolColumn get done => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
+
+  /// Same meaning as [SavedAnswers.sourceConnectors] (v9).
+  TextColumn get sourceConnectors => text().withDefault(const Constant(''))();
 }
 
 @DriftDatabase(
@@ -360,7 +369,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? _defaultExecutor());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -369,6 +378,7 @@ class AppDatabase extends _$AppDatabase {
       await _createMessagesConversationIndex();
       await _createDocumentChunksIndex();
       await _createConnectorIndexes();
+      await _createSavedAnswersIndex();
     },
     onUpgrade: (m, from, to) async {
       // v1 -> v2 (Loop 4): chat data layer. installed_models is untouched.
@@ -432,6 +442,21 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(savedAnswers);
         await m.createTable(todos);
       }
+      // v8 -> v9: where a saved answer / to-do came from (for revoke and
+      // clear-history), and one saved row per text. Tables created just above
+      // (from < 8) already have the new columns.
+      if (from == 8) {
+        await m.addColumn(savedAnswers, savedAnswers.sourceConnectors);
+        await m.addColumn(todos, todos.sourceConnectors);
+      }
+      if (from < 9) {
+        // A double-tap could have saved the same text twice: keep the oldest.
+        await customStatement(
+          'DELETE FROM saved_answers WHERE id NOT IN '
+          '(SELECT MIN(id) FROM saved_answers GROUP BY content)',
+        );
+        await _createSavedAnswersIndex();
+      }
     },
     beforeOpen: (details) async {
       // SQLite foreign keys are opt-in per connection — required for the
@@ -454,6 +479,11 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _createDocumentChunksIndex() => customStatement(
     'CREATE INDEX IF NOT EXISTS idx_document_chunks_document '
     'ON document_chunks (document_id)',
+  );
+
+  Future<void> _createSavedAnswersIndex() => customStatement(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_answers_content '
+    'ON saved_answers (content)',
   );
 
   Future<void> _createConnectorIndexes() async {

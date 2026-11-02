@@ -485,7 +485,22 @@ final class ChatRepository {
   /// downloaded files are untouched — this is the Settings screen's "Clear
   /// all chat history" action (Amendment 4b), and that boundary is exactly
   /// what its confirmation copy promises.
-  Future<void> clearAllHistory() => _db.delete(_db.conversations).go();
+  ///
+  /// Library saved answers and to-dos that quote connector data (calendar,
+  /// contacts, notifications, files) are derived from those chats, so they go
+  /// too, in the same transaction. Ones that cite no connector are kept (the
+  /// confirmation copy says so). Rule: `encodeConnectors` in library_store.dart.
+  Future<void> clearAllHistory() => _db.transaction(() async {
+    await _db.delete(_db.conversations).go();
+    await _db.customUpdate(
+      "DELETE FROM saved_answers WHERE source_connectors <> ''",
+      updates: {_db.savedAnswers},
+    );
+    await _db.customUpdate(
+      "DELETE FROM todos WHERE source_connectors <> ''",
+      updates: {_db.todos},
+    );
+  });
 
   // ---- Search ---------------------------------------------------------
 

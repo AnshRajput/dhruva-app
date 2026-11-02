@@ -13,9 +13,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/format/when.dart';
+import '../../../core/markdown/safe_markdown.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart' show ItemSource;
@@ -551,23 +551,14 @@ class _MarkdownBody extends StatelessWidget {
       selectable: true,
       styleSheet: styleSheet,
       builders: {'pre': _CodeBlockBuilder(tokens: tokens, theme: theme)},
-      // N4 (staff review): links were rendered underlined/styled as links
-      // (the `a:` style above) but not actually tappable. External,
-      // user-initiated per Rule 5 — no confirmation dialog (not asked
-      // for), but the link's own underline+secondary-color styling is
-      // what makes tapping it "obvious," and only http(s) hrefs are
-      // honored (a model emitting a `javascript:`/`file:`/`intent:` href
-      // is a trust-boundary case, not a legitimate link to open).
-      onTapLink: (linkText, href, title) => _openMarkdownLink(href),
+      // Security (F1): model text may be steered by untrusted sources, so
+      // markdown never fetches an image, and a link opens only after the
+      // user confirms the full URL (core/markdown/safe_markdown.dart).
+      imageBuilder: safeMarkdownImageBuilder,
+      onTapLink: (linkText, href, title) =>
+          unawaited(confirmAndOpenMarkdownLink(context, href)),
     );
   }
-}
-
-void _openMarkdownLink(String? href) {
-  if (href == null) return;
-  final uri = Uri.tryParse(href);
-  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return;
-  unawaited(launchUrl(uri, mode: LaunchMode.externalApplication));
 }
 
 /// chat-spec.md §2.3: full-width code well, language label, copy-to-

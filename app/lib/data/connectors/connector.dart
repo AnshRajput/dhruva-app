@@ -69,11 +69,17 @@ final class ConnectorStatus {
   /// "Open settings" instead of asking again.
   final bool needsSettings;
 
+  /// The OS grant or the chosen folder is gone (switched off, revoked,
+  /// unreachable). Unlike a one-off read failure the data may no longer be
+  /// used, so derived copies (the written brief) are dropped.
+  final bool accessRevoked;
+
   const ConnectorStatus(
     this.state, {
     this.detail,
     this.lastSyncAt,
     this.needsSettings = false,
+    this.accessRevoked = false,
   });
 
   static const unsupported = ConnectorStatus(ConnectorState.unsupported);
@@ -82,16 +88,26 @@ final class ConnectorStatus {
   bool get isConnected =>
       state == ConnectorState.connected || state == ConnectorState.syncing;
 
+  /// The source is still opted in and its stored data is still wanted: it is
+  /// connected, or a read failed for now ("Could not read your calendar").
+  /// Derived copies of that data (the written brief) are kept through such a
+  /// blip and dropped only when access is really gone (not connected, or the
+  /// OS permission / folder grant was switched off: [accessRevoked]).
+  bool get holdsData =>
+      isConnected || (state == ConnectorState.needsAttention && !accessRevoked);
+
   ConnectorStatus copyWith({
     ConnectorState? state,
     String? detail,
     DateTime? lastSyncAt,
     bool? needsSettings,
+    bool? accessRevoked,
   }) => ConnectorStatus(
     state ?? this.state,
     detail: detail,
     lastSyncAt: lastSyncAt ?? this.lastSyncAt,
     needsSettings: needsSettings ?? this.needsSettings,
+    accessRevoked: accessRevoked ?? this.accessRevoked,
   );
 
   @override
@@ -100,10 +116,12 @@ final class ConnectorStatus {
       other.state == state &&
       other.detail == detail &&
       other.lastSyncAt == lastSyncAt &&
-      other.needsSettings == needsSettings;
+      other.needsSettings == needsSettings &&
+      other.accessRevoked == accessRevoked;
 
   @override
-  int get hashCode => Object.hash(state, detail, lastSyncAt, needsSettings);
+  int get hashCode =>
+      Object.hash(state, detail, lastSyncAt, needsSettings, accessRevoked);
 
   @override
   String toString() => 'ConnectorStatus($state, $detail, $lastSyncAt)';
@@ -133,7 +151,14 @@ final class SyncResult {
 final class ConnectorException implements Exception {
   final ConnectorState state;
   final String message;
-  const ConnectorException(this.state, this.message);
+
+  /// See [ConnectorStatus.accessRevoked].
+  final bool accessRevoked;
+  const ConnectorException(
+    this.state,
+    this.message, {
+    this.accessRevoked = false,
+  });
 
   @override
   String toString() => 'ConnectorException($state): $message';

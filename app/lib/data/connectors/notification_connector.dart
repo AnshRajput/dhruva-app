@@ -68,6 +68,7 @@ class NotificationConnector extends BaseConnector {
         ConnectorState.needsAttention,
         detail: account.config[_everGranted] == true ? _off : _pending,
         lastSyncAt: account.lastSyncAt,
+        accessRevoked: true,
       );
     }
     if (account.config[_everGranted] != true) {
@@ -112,6 +113,7 @@ class NotificationConnector extends BaseConnector {
     return const ConnectorStatus(
       ConnectorState.needsAttention,
       detail: _pending,
+      accessRevoked: true,
     );
   }
 

@@ -29,7 +29,8 @@ import '../../../core/device_health/device_guard_policy.dart';
 import '../../../core/device_health/device_health.dart';
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/di/ask_providers.dart';
-import '../../../core/di/connector_providers.dart' show connectorStoreProvider;
+import '../../../core/di/connector_providers.dart'
+    show connectorStoreProvider, liveConnectorIdsProvider;
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/profile/user_profile.dart';
@@ -624,10 +625,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   Future<void> ensureModelLoaded() {
     return _loadInFlight ??= () {
       _lease.chatEnter();
-      return _ensureModelLoaded().whenComplete(() {
-        _loadInFlight = null;
-        _lease.chatLeave();
-      });
+      // H1: chat outranks background work (brief writer, inbox summaries):
+      // it is told to stop and given ~1 s to let go of the engine, so a send
+      // never meets "busy" and never starts a second load/generate.
+      return _lease
+          .preemptBackground()
+          .then((_) => _ensureModelLoaded())
+          .whenComplete(() {
+            _loadInFlight = null;
+            _lease.chatLeave();
+          });
     }();
   }
 
@@ -1209,7 +1216,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final wantedConnectors = connectorSourcesOf(wanted);
     final active = wantedConnectors.isEmpty
         ? const <AskSource>{}
-        : wantedConnectors.intersection(await connectedAskSources(store));
+        : wantedConnectors.intersection(
+            await connectedAskSources(
+              store,
+              live: await ref.read(liveConnectorIdsProvider.future),
+            ),
+          );
     // "Ask about this file / notification": the focused items lead the block
     // even when no connector source is selected.
     final focus = await ref.read(askFocusItemsProvider(args).future);

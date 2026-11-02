@@ -501,6 +501,83 @@ void main() {
       );
     });
 
+    todayTest(
+      'M8: a one-off read failure ("needs attention") keeps the written '
+      'brief and its cache',
+      (tester) async {
+        final h = await pumpToday(
+          tester,
+          writer: FakeBriefWriter(output: faithful),
+          seed: _seedDay,
+        );
+        await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+        await settle(tester);
+        expect(
+          _briefText(tester),
+          startsWith('Your day starts with Design sync'),
+        );
+        final cached = h.prefs.values['today_brief_v1'];
+        expect(cached, isNotEmpty);
+
+        h.kit.calendar.failRead = true;
+        await h.kit.hub.calendar.sync().then<void>((_) {}, onError: (_) {});
+        await settle(tester);
+        expect(
+          h.kit.hub.calendar.currentStatus.state,
+          ConnectorState.needsAttention,
+        );
+
+        expect(h.prefs.values['today_brief_v1'], cached);
+        expect(
+          _briefText(tester),
+          startsWith('Your day starts with Design sync'),
+        );
+      },
+    );
+
+    todayTest('M8: access really switched off still forgets the written '
+        'brief', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(h.prefs.values['today_brief_v1'], isNotEmpty);
+
+      h.kit.calendar.perm = DevicePermission.denied;
+      await h.kit.hub.calendar.refreshStatus();
+      await settle(tester);
+
+      expect(h.prefs.values['today_brief_v1'], '');
+    });
+
+    todayTest('M8: notification access revoked in system settings forgets '
+        'the brief that cites a notification', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(h.prefs.values['today_brief_v1'], contains('WhatsApp'));
+
+      h.kit.notifications.granted = false;
+      await h.kit.hub.notifications.refreshStatus();
+      await settle(tester);
+
+      // Revoked grant is needs-attention in the UI, but it holds no data.
+      expect(
+        h.kit.hub.notifications.currentStatus.state,
+        ConnectorState.needsAttention,
+      );
+      expect(h.kit.hub.notifications.currentStatus.holdsData, isFalse);
+      expect(h.prefs.values['today_brief_v1'], '');
+      expect(find.byKey(const ValueKey('today-brief-kept')), findsNothing);
+    });
+
     todayTest('a fabricated rewrite is rejected whole: the checked version '
         'stays and nothing is cached', (tester) async {
       final h = await pumpToday(

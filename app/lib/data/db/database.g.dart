@@ -6177,12 +6177,25 @@ class $SavedAnswersTable extends SavedAnswers
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sourceConnectorsMeta = const VerificationMeta(
+    'sourceConnectors',
+  );
+  @override
+  late final GeneratedColumn<String> sourceConnectors = GeneratedColumn<String>(
+    'source_connectors',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
     content,
     conversationId,
     createdAt,
+    sourceConnectors,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6224,6 +6237,15 @@ class $SavedAnswersTable extends SavedAnswers
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('source_connectors')) {
+      context.handle(
+        _sourceConnectorsMeta,
+        sourceConnectors.isAcceptableOrUnknown(
+          data['source_connectors']!,
+          _sourceConnectorsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6249,6 +6271,10 @@ class $SavedAnswersTable extends SavedAnswers
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      sourceConnectors: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_connectors'],
+      )!,
     );
   }
 
@@ -6263,11 +6289,18 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
   final String content;
   final int? conversationId;
   final DateTime createdAt;
+
+  /// Connector ids the source conversation cited when this was saved, as
+  /// `,calendar,notifications,` (empty when none). Derived data: revoking one
+  /// of these connectors, or clearing all chat history, deletes this row
+  /// (v9; see `LibraryStore`). `content` is unique via an index (v9).
+  final String sourceConnectors;
   const SavedAnswer({
     required this.id,
     required this.content,
     this.conversationId,
     required this.createdAt,
+    required this.sourceConnectors,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6278,6 +6311,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
       map['conversation_id'] = Variable<int>(conversationId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['source_connectors'] = Variable<String>(sourceConnectors);
     return map;
   }
 
@@ -6289,6 +6323,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
           ? const Value.absent()
           : Value(conversationId),
       createdAt: Value(createdAt),
+      sourceConnectors: Value(sourceConnectors),
     );
   }
 
@@ -6302,6 +6337,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
       content: serializer.fromJson<String>(json['content']),
       conversationId: serializer.fromJson<int?>(json['conversationId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      sourceConnectors: serializer.fromJson<String>(json['sourceConnectors']),
     );
   }
   @override
@@ -6312,6 +6348,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
       'content': serializer.toJson<String>(content),
       'conversationId': serializer.toJson<int?>(conversationId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'sourceConnectors': serializer.toJson<String>(sourceConnectors),
     };
   }
 
@@ -6320,6 +6357,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
     String? content,
     Value<int?> conversationId = const Value.absent(),
     DateTime? createdAt,
+    String? sourceConnectors,
   }) => SavedAnswer(
     id: id ?? this.id,
     content: content ?? this.content,
@@ -6327,6 +6365,7 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
         ? conversationId.value
         : this.conversationId,
     createdAt: createdAt ?? this.createdAt,
+    sourceConnectors: sourceConnectors ?? this.sourceConnectors,
   );
   SavedAnswer copyWithCompanion(SavedAnswersCompanion data) {
     return SavedAnswer(
@@ -6336,6 +6375,9 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
           ? data.conversationId.value
           : this.conversationId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      sourceConnectors: data.sourceConnectors.present
+          ? data.sourceConnectors.value
+          : this.sourceConnectors,
     );
   }
 
@@ -6345,13 +6387,15 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
           ..write('id: $id, ')
           ..write('content: $content, ')
           ..write('conversationId: $conversationId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sourceConnectors: $sourceConnectors')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, content, conversationId, createdAt);
+  int get hashCode =>
+      Object.hash(id, content, conversationId, createdAt, sourceConnectors);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6359,7 +6403,8 @@ class SavedAnswer extends DataClass implements Insertable<SavedAnswer> {
           other.id == this.id &&
           other.content == this.content &&
           other.conversationId == this.conversationId &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.sourceConnectors == this.sourceConnectors);
 }
 
 class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
@@ -6367,17 +6412,20 @@ class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
   final Value<String> content;
   final Value<int?> conversationId;
   final Value<DateTime> createdAt;
+  final Value<String> sourceConnectors;
   const SavedAnswersCompanion({
     this.id = const Value.absent(),
     this.content = const Value.absent(),
     this.conversationId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.sourceConnectors = const Value.absent(),
   });
   SavedAnswersCompanion.insert({
     this.id = const Value.absent(),
     required String content,
     this.conversationId = const Value.absent(),
     required DateTime createdAt,
+    this.sourceConnectors = const Value.absent(),
   }) : content = Value(content),
        createdAt = Value(createdAt);
   static Insertable<SavedAnswer> custom({
@@ -6385,12 +6433,14 @@ class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
     Expression<String>? content,
     Expression<int>? conversationId,
     Expression<DateTime>? createdAt,
+    Expression<String>? sourceConnectors,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (content != null) 'content': content,
       if (conversationId != null) 'conversation_id': conversationId,
       if (createdAt != null) 'created_at': createdAt,
+      if (sourceConnectors != null) 'source_connectors': sourceConnectors,
     });
   }
 
@@ -6399,12 +6449,14 @@ class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
     Value<String>? content,
     Value<int?>? conversationId,
     Value<DateTime>? createdAt,
+    Value<String>? sourceConnectors,
   }) {
     return SavedAnswersCompanion(
       id: id ?? this.id,
       content: content ?? this.content,
       conversationId: conversationId ?? this.conversationId,
       createdAt: createdAt ?? this.createdAt,
+      sourceConnectors: sourceConnectors ?? this.sourceConnectors,
     );
   }
 
@@ -6423,6 +6475,9 @@ class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (sourceConnectors.present) {
+      map['source_connectors'] = Variable<String>(sourceConnectors.value);
+    }
     return map;
   }
 
@@ -6432,7 +6487,8 @@ class SavedAnswersCompanion extends UpdateCompanion<SavedAnswer> {
           ..write('id: $id, ')
           ..write('content: $content, ')
           ..write('conversationId: $conversationId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sourceConnectors: $sourceConnectors')
           ..write(')'))
         .toString();
   }
@@ -6489,8 +6545,26 @@ class $TodosTable extends Todos with TableInfo<$TodosTable, Todo> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sourceConnectorsMeta = const VerificationMeta(
+    'sourceConnectors',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, task, done, createdAt];
+  late final GeneratedColumn<String> sourceConnectors = GeneratedColumn<String>(
+    'source_connectors',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    task,
+    done,
+    createdAt,
+    sourceConnectors,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -6528,6 +6602,15 @@ class $TodosTable extends Todos with TableInfo<$TodosTable, Todo> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('source_connectors')) {
+      context.handle(
+        _sourceConnectorsMeta,
+        sourceConnectors.isAcceptableOrUnknown(
+          data['source_connectors']!,
+          _sourceConnectorsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6553,6 +6636,10 @@ class $TodosTable extends Todos with TableInfo<$TodosTable, Todo> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      sourceConnectors: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_connectors'],
+      )!,
     );
   }
 
@@ -6567,11 +6654,15 @@ class Todo extends DataClass implements Insertable<Todo> {
   final String task;
   final bool done;
   final DateTime createdAt;
+
+  /// Same meaning as [SavedAnswers.sourceConnectors] (v9).
+  final String sourceConnectors;
   const Todo({
     required this.id,
     required this.task,
     required this.done,
     required this.createdAt,
+    required this.sourceConnectors,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6580,6 +6671,7 @@ class Todo extends DataClass implements Insertable<Todo> {
     map['task'] = Variable<String>(task);
     map['done'] = Variable<bool>(done);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['source_connectors'] = Variable<String>(sourceConnectors);
     return map;
   }
 
@@ -6589,6 +6681,7 @@ class Todo extends DataClass implements Insertable<Todo> {
       task: Value(task),
       done: Value(done),
       createdAt: Value(createdAt),
+      sourceConnectors: Value(sourceConnectors),
     );
   }
 
@@ -6602,6 +6695,7 @@ class Todo extends DataClass implements Insertable<Todo> {
       task: serializer.fromJson<String>(json['task']),
       done: serializer.fromJson<bool>(json['done']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      sourceConnectors: serializer.fromJson<String>(json['sourceConnectors']),
     );
   }
   @override
@@ -6612,22 +6706,32 @@ class Todo extends DataClass implements Insertable<Todo> {
       'task': serializer.toJson<String>(task),
       'done': serializer.toJson<bool>(done),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'sourceConnectors': serializer.toJson<String>(sourceConnectors),
     };
   }
 
-  Todo copyWith({int? id, String? task, bool? done, DateTime? createdAt}) =>
-      Todo(
-        id: id ?? this.id,
-        task: task ?? this.task,
-        done: done ?? this.done,
-        createdAt: createdAt ?? this.createdAt,
-      );
+  Todo copyWith({
+    int? id,
+    String? task,
+    bool? done,
+    DateTime? createdAt,
+    String? sourceConnectors,
+  }) => Todo(
+    id: id ?? this.id,
+    task: task ?? this.task,
+    done: done ?? this.done,
+    createdAt: createdAt ?? this.createdAt,
+    sourceConnectors: sourceConnectors ?? this.sourceConnectors,
+  );
   Todo copyWithCompanion(TodosCompanion data) {
     return Todo(
       id: data.id.present ? data.id.value : this.id,
       task: data.task.present ? data.task.value : this.task,
       done: data.done.present ? data.done.value : this.done,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      sourceConnectors: data.sourceConnectors.present
+          ? data.sourceConnectors.value
+          : this.sourceConnectors,
     );
   }
 
@@ -6637,13 +6741,14 @@ class Todo extends DataClass implements Insertable<Todo> {
           ..write('id: $id, ')
           ..write('task: $task, ')
           ..write('done: $done, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sourceConnectors: $sourceConnectors')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, task, done, createdAt);
+  int get hashCode => Object.hash(id, task, done, createdAt, sourceConnectors);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6651,7 +6756,8 @@ class Todo extends DataClass implements Insertable<Todo> {
           other.id == this.id &&
           other.task == this.task &&
           other.done == this.done &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.sourceConnectors == this.sourceConnectors);
 }
 
 class TodosCompanion extends UpdateCompanion<Todo> {
@@ -6659,17 +6765,20 @@ class TodosCompanion extends UpdateCompanion<Todo> {
   final Value<String> task;
   final Value<bool> done;
   final Value<DateTime> createdAt;
+  final Value<String> sourceConnectors;
   const TodosCompanion({
     this.id = const Value.absent(),
     this.task = const Value.absent(),
     this.done = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.sourceConnectors = const Value.absent(),
   });
   TodosCompanion.insert({
     this.id = const Value.absent(),
     required String task,
     this.done = const Value.absent(),
     required DateTime createdAt,
+    this.sourceConnectors = const Value.absent(),
   }) : task = Value(task),
        createdAt = Value(createdAt);
   static Insertable<Todo> custom({
@@ -6677,12 +6786,14 @@ class TodosCompanion extends UpdateCompanion<Todo> {
     Expression<String>? task,
     Expression<bool>? done,
     Expression<DateTime>? createdAt,
+    Expression<String>? sourceConnectors,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (task != null) 'task': task,
       if (done != null) 'done': done,
       if (createdAt != null) 'created_at': createdAt,
+      if (sourceConnectors != null) 'source_connectors': sourceConnectors,
     });
   }
 
@@ -6691,12 +6802,14 @@ class TodosCompanion extends UpdateCompanion<Todo> {
     Value<String>? task,
     Value<bool>? done,
     Value<DateTime>? createdAt,
+    Value<String>? sourceConnectors,
   }) {
     return TodosCompanion(
       id: id ?? this.id,
       task: task ?? this.task,
       done: done ?? this.done,
       createdAt: createdAt ?? this.createdAt,
+      sourceConnectors: sourceConnectors ?? this.sourceConnectors,
     );
   }
 
@@ -6715,6 +6828,9 @@ class TodosCompanion extends UpdateCompanion<Todo> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (sourceConnectors.present) {
+      map['source_connectors'] = Variable<String>(sourceConnectors.value);
+    }
     return map;
   }
 
@@ -6724,7 +6840,8 @@ class TodosCompanion extends UpdateCompanion<Todo> {
           ..write('id: $id, ')
           ..write('task: $task, ')
           ..write('done: $done, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('sourceConnectors: $sourceConnectors')
           ..write(')'))
         .toString();
   }

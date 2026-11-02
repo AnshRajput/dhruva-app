@@ -192,8 +192,13 @@ final class LlamaEngineService implements EngineService {
   // supports vision. Reset on unload.
   bool _isMultimodal = false;
 
+  final _loadGate = LoadGate();
+
+  // `_commandPort` is set only once the worker signalled ready, so a model
+  // that is still loading is not "loaded" (H1: nobody generates onto a
+  // half-load).
   @override
-  bool get isLoaded => _isolate != null && !_disposed;
+  bool get isLoaded => _isolate != null && _commandPort != null && !_disposed;
 
   @override
   bool get isMultimodal => isLoaded && _isMultimodal;
@@ -202,7 +207,15 @@ final class LlamaEngineService implements EngineService {
   Future<void> load(
     String modelPath, {
     EngineLoadParams params = const EngineLoadParams(),
-  }) async {
+  }) {
+    _throwIfDisposed();
+    return _loadGate.run(
+      LoadGate.keyFor(modelPath, params),
+      () => _load(modelPath, params),
+    );
+  }
+
+  Future<void> _load(String modelPath, EngineLoadParams params) async {
     _throwIfDisposed();
     // Deterministic, cheap check before spawning an isolate and sniffing
     // native error strings.
@@ -225,7 +238,7 @@ final class LlamaEngineService implements EngineService {
         'kvCacheQuant at f16',
       );
     }
-    if (_isolate != null) await unload();
+    if (_isolate != null) await _unloadNow();
 
     final response = ReceivePort();
     final ready = Completer<_ReadyMsg>();
@@ -459,6 +472,12 @@ final class LlamaEngineService implements EngineService {
 
   @override
   Future<void> unload() async {
+    // A load in flight finishes first, so its isolate is not orphaned.
+    await _loadGate.idle();
+    await _unloadNow();
+  }
+
+  Future<void> _unloadNow() async {
     // Terminate any in-flight generation locally.
     final id = _activeId;
     if (id != null) {

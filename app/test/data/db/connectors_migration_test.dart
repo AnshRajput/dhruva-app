@@ -30,7 +30,7 @@ void main() {
     'v6 -> v7 keeps every existing row and adds the connector tables',
     () async {
       final db = AppDatabase(NativeDatabase(file));
-      expect(db.schemaVersion, 8);
+      expect(db.schemaVersion, 9);
 
       // Existing chat + document data survives untouched.
       final convos = await db.select(db.conversations).get();
@@ -51,7 +51,7 @@ void main() {
           .get();
       expect(real, hasLength(3));
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 8);
+      expect(version.read<int>('user_version'), 9);
 
       // The new tables work.
       final now = DateTime.utc(2026, 11, 1, 8);
