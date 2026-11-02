@@ -103,20 +103,25 @@ class _ConversationListScreenState
     // installed → Browse models" empty state shows on a fresh install, instead
     // of a "New chat" CTA whose FAB immediately bounces to /models.
     final hasAnyModel = modelsAsync.value?.isNotEmpty ?? false;
+    // No model and nothing to list: one "get a model" screen, none of the
+    // chat chrome (folders, Actions, Personas, Talk, New chat) that cannot work
+    // yet.
+    final bare = !hasAnyModel && (state.value?.conversations.isEmpty ?? false);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ask'),
         actions: [
-          const ChatSearchAction(),
+          if (!bare) const ChatSearchAction(),
           // WS5: a labelled, always-present voice entry — not an unlabelled
           // waveform glyph. Visible on every state of the home (empty or full),
           // so voice is findable before any conversation exists.
-          TextButton.icon(
-            onPressed: _startVoice,
-            icon: const Icon(Icons.record_voice_over_outlined, size: 18),
-            label: const Text('Talk'),
-          ),
+          if (!bare)
+            TextButton.icon(
+              onPressed: _startVoice,
+              icon: const Icon(Icons.record_voice_over_outlined, size: 18),
+              label: const Text('Talk'),
+            ),
           SizedBox(width: tokens.spacing.xs),
         ],
       ),
@@ -139,10 +144,12 @@ class _ConversationListScreenState
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _startNewChat,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: bare
+          ? null
+          : FloatingActionButton(
+              onPressed: _startNewChat,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }
@@ -163,6 +170,11 @@ class _ConversationBody extends ConsumerWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
 
+    if (state.conversations.isEmpty && !hasAnyModel) {
+      return NoModelInstalledView(
+        onBrowseModels: () => context.push('/models/hub'),
+      );
+    }
     return RefreshIndicator(
       onRefresh: () =>
           ref.read(conversationListControllerProvider.notifier).refresh(),

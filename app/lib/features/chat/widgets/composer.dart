@@ -271,7 +271,58 @@ class _ComposerState extends ConsumerState<Composer> {
     );
   }
 
-  void _onNoModel() => context.push('/models/hub?tab=voice');
+  /// No voice bundle yet: say what voice needs and why, in place, before
+  /// sending the user anywhere (not a bounce to a list of speech-model parts).
+  Future<void> _onNoModel() async {
+    final go = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final tokens = theme.extension<DhruvaTokens>()!;
+        return SafeArea(
+          child: Padding(
+            key: const ValueKey('voice-setup-sheet'),
+            padding: EdgeInsets.fromLTRB(
+              tokens.spacing.lg,
+              0,
+              tokens.spacing.lg,
+              tokens.spacing.lg,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Talk to your phone', style: theme.textTheme.titleLarge),
+                SizedBox(height: tokens.spacing.sm),
+                Text(
+                  'Voice needs a one-time download: speech recognition to '
+                  'hear you and a voice to read answers aloud. Both run on '
+                  'this phone. Nothing is uploaded.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: tokens.spacing.lg),
+                FilledButton(
+                  key: const ValueKey('voice-setup-go'),
+                  onPressed: () => Navigator.of(sheetContext).pop(true),
+                  child: const Text('Set up voice'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(false),
+                  child: const Text('Not now'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (go == true && mounted) {
+      unawaited(context.push('/models/hub?tab=voice'));
+    }
+  }
 
   void _onPermissionDenied() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -371,7 +422,7 @@ class _ComposerState extends ConsumerState<Composer> {
                   ),
                   MicButton(
                     onFinalized: _appendFinalized,
-                    onNoModel: _onNoModel,
+                    onNoModel: () => unawaited(_onNoModel()),
                     onPermissionDenied: _onPermissionDenied,
                   ),
                   SizedBox(width: tokens.spacing.sm),

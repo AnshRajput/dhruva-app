@@ -262,6 +262,7 @@ class _ThreadScaffold extends ConsumerWidget {
               child: ModelChip(
                 model: state.model,
                 loading: state.modelLoading,
+                downloading: download != null,
                 onTap: () => _pickModel(context),
               ),
             ),

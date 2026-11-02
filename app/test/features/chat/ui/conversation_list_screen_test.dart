@@ -153,18 +153,22 @@ void main() {
   );
 
   testWidgets(
-    'UX-hardening A4: FAB with no installed models gives a guided CTA — a '
-    '"download a model" snackbar — then routes to Models, not a silent bounce',
+    'no model and no chats: one "get a model" screen with none of the chat '
+    'chrome, and its button routes to Models',
     (tester) async {
       await tester.pumpWidget(buildApp());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pump(); // let _startNewChat resolve + show the snackbar
-      await tester.pump(); // build the snackbar frame
+      expect(find.text('No model installed yet'), findsOneWidget);
+      // Nothing that cannot work yet: no New chat button, folders, Actions,
+      // Personas or Talk.
+      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text('All'), findsNothing);
+      expect(find.text('Actions'), findsNothing);
+      expect(find.text('Personas'), findsNothing);
+      expect(find.text('Talk'), findsNothing);
 
-      expect(find.text('Download a model to start chatting.'), findsOneWidget);
-
+      await tester.tap(find.text('Browse models'));
       await tester.pumpAndSettle();
       expect(find.text('models hub'), findsOneWidget);
     },

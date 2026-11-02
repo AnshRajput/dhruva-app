@@ -233,7 +233,8 @@ void main() {
     );
 
     testWidgets(
-      'no voice models installed -> mic press routes to the models hub',
+      'no voice models installed -> mic press explains voice in place, then '
+      'routes to set it up',
       (tester) async {
         // `tmp` is empty — no voice models installed. A plain `tap` (not a
         // held gesture) is enough — `startHold` resolves to `noModel`
@@ -244,6 +245,13 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 50));
 
+        // First a plain-words sheet, not a jump to a parts list.
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('voice-setup-sheet')), findsOneWidget);
+        expect(find.text('models hub stand-in'), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('voice-setup-go')));
+        await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
         expect(find.text('models hub stand-in'), findsOneWidget);
       },
     );
