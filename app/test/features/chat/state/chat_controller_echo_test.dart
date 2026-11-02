@@ -1,4 +1,6 @@
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart'
+    show liveConnectorIdsProvider;
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/chat/models/sampling_params.dart';
@@ -76,6 +78,9 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        liveConnectorIdsProvider.overrideWith(
+          (ref) async => const {'calendar'},
+        ),
       ],
     );
     addTearDown(c.dispose);

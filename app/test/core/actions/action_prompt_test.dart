@@ -47,6 +47,20 @@ void main() {
       expect(omissionNote(source, draft), isNull);
     });
 
+    test('the Inbox "Sender: body" pre-fill drops the sender', () {
+      const inbox =
+          'Ravi Menon: Can you approve the 18.4L marketing line by EOD? '
+          'Also send the signed invoice.';
+      expect(draftOmissions(inbox, 'Ok'), [
+        'approve the 18.4L marketing line by EOD',
+        'send the signed invoice',
+      ]);
+      expect(
+        omissionNote(inbox, 'Approved the marketing line.'),
+        "Didn't cover: send the signed invoice",
+      );
+    });
+
     test('statements are not asks, and the list is capped', () {
       expect(draftOmissions('Reached home. Dinner was great.', 'Ok'), isEmpty);
       const many =

@@ -71,6 +71,8 @@ final _askLead = RegExp(
   caseSensitive: false,
 );
 
+final _senderPrefix = RegExp(r'^[^:\n.?!]{1,40}:\s+');
+
 final _requestWord = RegExp(
   r'\b(?:please|pls|kindly|can you|could you|would you|will you|need you|'
   r'let me know|confirm|approve|review|send|share|call|reply|sign|update)\b',
@@ -130,6 +132,8 @@ List<String> _terms(String s) => [
 /// key words (matched on their first five letters, so "approve" meets
 /// "approved").
 List<String> draftOmissions(String source, String draft, {int max = 3}) {
+  // The Inbox pre-fills "Sender: body"; the sender is not part of any ask.
+  source = source.trimLeft().replaceFirst(_senderPrefix, '');
   final draftTerms = _terms(draft);
   bool uses(String term) {
     final stem = term.length > 5 ? term.substring(0, 5) : term;

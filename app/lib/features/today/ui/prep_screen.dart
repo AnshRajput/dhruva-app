@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/connector_actions.dart';
 import '../../../core/format/when.dart';
 import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
@@ -94,6 +95,11 @@ class _PrepBody extends ConsumerWidget {
     final muted = theme.textTheme.bodyMedium?.copyWith(
       color: scheme.onSurfaceVariant,
     );
+    // "Not in your contacts" is only true when Contacts is connected; until
+    // the connector list loads we say nothing rather than guess.
+    final contactsLoaded = ref.watch(connectorsLoadedProvider);
+    final contactsOn =
+        ref.watch(contactsEntryProvider)?.status.isConnected ?? false;
     return ListView(
       key: const ValueKey('prep-card'),
       padding: EdgeInsets.fromLTRB(
@@ -159,6 +165,7 @@ class _PrepBody extends ConsumerWidget {
             _PersonRow(
               key: ValueKey('prep-person-$i'),
               person: p,
+              contactsOn: contactsOn,
               colorIndex: i,
               onTap: () => unawaited(
                 context.push(
@@ -174,6 +181,21 @@ class _PrepBody extends ConsumerWidget {
               ),
               onOpenMeeting: (m) => unawaited(showEventSheet(context, m)),
             ),
+        if (contactsLoaded && !contactsOn && data.people.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const ValueKey('prep-connect-contacts'),
+              onPressed: () async {
+                final status = await connectAndSync(ref, ConnectorIds.contacts);
+                if (!context.mounted) return;
+                if (status == null || !status.isConnected) {
+                  unawaited(context.push('/settings/connectors'));
+                }
+              },
+              child: const Text("Connect contacts to see who's who"),
+            ),
+          ),
         if (data.files.isNotEmpty) ...[
           SizedBox(height: tokens.spacing.lg),
           SectionHeader(title: 'Notes and files'),
@@ -270,11 +292,13 @@ class _PersonRow extends StatelessWidget {
   const _PersonRow({
     super.key,
     required this.person,
+    required this.contactsOn,
     required this.colorIndex,
     required this.onTap,
     required this.onOpenMeeting,
   });
   final PrepPerson person;
+  final bool contactsOn;
   final int colorIndex;
   final VoidCallback onTap;
   final ValueChanged<ConnectorItem> onOpenMeeting;
@@ -285,7 +309,8 @@ class _PersonRow extends StatelessWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
     final scheme = theme.colorScheme;
     final known = [
-      person.inContacts ? 'In your contacts' : 'Not in your contacts',
+      if (contactsOn)
+        person.inContacts ? 'In your contacts' : 'Not in your contacts',
       ?person.email,
     ].join(' · ');
     return Padding(
@@ -311,14 +336,15 @@ class _PersonRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(person.name, style: theme.textTheme.bodyLarge),
-                        Text(
-                          known,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                        if (known.isNotEmpty)
+                          Text(
+                            known,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),

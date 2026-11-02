@@ -863,6 +863,48 @@ void main() {
       );
     });
 
+    todayTest('Prep without Contacts connected never says "Not in your '
+        'contacts", and offers to connect them', (tester) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('up-next-prep')));
+      await settle(tester);
+      expect(find.text('ravi@x.test'), findsOneWidget);
+      expect(find.textContaining('Not in your contacts'), findsNothing);
+      expect(find.textContaining('In your contacts'), findsNothing);
+      expect(find.text("Connect contacts to see who's who"), findsOneWidget);
+      // The canonical connect path: grant, then the names fill in.
+      await tester.tap(find.byKey(const ValueKey('prep-connect-contacts')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('prep-connect-contacts')), findsNothing);
+      expect(find.text('Not in your contacts · ravi@x.test'), findsOneWidget);
+    });
+
+    todayTest('Prep with Contacts connected says who is in your contacts', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: (h) async {
+          h.kit.contacts.byAddress['ravi@x.test'] = const DeviceContact(
+            id: 'c1',
+            name: 'Ravi Menon',
+          );
+          await h.kit.hub.contacts.connect();
+          await _seedDay(h);
+        },
+      );
+      await tester.tap(find.byKey(const ValueKey('up-next-prep')));
+      await settle(tester);
+      expect(find.text('In your contacts · ravi@x.test'), findsOneWidget);
+      expect(find.text('Not in your contacts · sana@x.test'), findsOneWidget);
+      expect(find.byKey(const ValueKey('prep-connect-contacts')), findsNothing);
+    });
+
     todayTest('a calendar with nothing coming up says so, with an action', (
       tester,
     ) async {
