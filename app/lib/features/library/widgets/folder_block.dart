@@ -13,7 +13,9 @@ import '../../../core/di/connector_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/connector.dart';
+import '../../../data/connectors/connector_store.dart' show FolderFile;
 import '../../../data/connectors/folder_index_status.dart';
+import '../state/library_text.dart';
 
 class FolderBlock extends ConsumerWidget {
   const FolderBlock({super.key});
@@ -168,14 +170,25 @@ class FolderBlock extends ConsumerWidget {
                     key: const ValueKey('library-index-status'),
                     style: theme.textTheme.bodyMedium,
                   ),
-                  Text(
-                    index.detail(indexing: indexing),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                  if (!indexing && index.remaining == 0 && index.unreadable > 0)
+                    // Tapping lists WHICH files, why, and what to do.
+                    const SizedBox.shrink()
+                  else
+                    Text(
+                      index.detail(indexing: indexing),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                 ],
               ),
+              if (!indexing && index.remaining == 0 && index.unreadable > 0)
+                _UnreadableFiles(
+                  files: [
+                    for (final f in files)
+                      if (!f.ready) f,
+                  ],
+                ),
             ],
             SizedBox(height: tokens.spacing.md),
             Wrap(
@@ -219,6 +232,79 @@ class _Tile extends StatelessWidget {
         borderRadius: BorderRadius.circular(tokens.radius.md),
       ),
       child: Icon(Icons.folder_outlined, color: color),
+    );
+  }
+}
+
+/// "3 can't be searched" that opens into the files, the reason for each and the
+/// fix, so the number is never a dead end.
+class _UnreadableFiles extends StatefulWidget {
+  const _UnreadableFiles({required this.files});
+  final List<FolderFile> files;
+
+  @override
+  State<_UnreadableFiles> createState() => _UnreadableFilesState();
+}
+
+class _UnreadableFilesState extends State<_UnreadableFiles> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final n = widget.files.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          key: const ValueKey('library-unreadable-toggle'),
+          borderRadius: BorderRadius.circular(tokens.radius.sm),
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "$n can't be searched",
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                Icon(
+                  _open ? Icons.expand_less : Icons.expand_more,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_open)
+          for (final f in widget.files)
+            Padding(
+              key: ValueKey('library-unreadable-${f.fileId}'),
+              padding: EdgeInsets.only(bottom: tokens.spacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    f.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  Text(
+                    '${unreadableReason(f.problem ?? '')}. '
+                    '${unreadableFix(f.problem ?? '')}',
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ],
+              ),
+            ),
+      ],
     );
   }
 }
