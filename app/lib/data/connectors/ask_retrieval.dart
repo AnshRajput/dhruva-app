@@ -149,12 +149,18 @@ List<ConnectorItem> _focusByRelevance(
 }
 
 /// Connector sources the user has opted into (an account row exists), read
-/// from the local database only: no OS call, so it is safe anywhere.
-Future<Set<AskSource>> connectedAskSources(ConnectorStore store) async {
+/// from the local database only. Pass [live] (the connector ids whose OS access
+/// is on right now) to drop a source the user has since switched off in system
+/// settings: its stored items must not be retrieved or cited (M1).
+Future<Set<AskSource>> connectedAskSources(
+  ConnectorStore store, {
+  Set<String>? live,
+}) async {
   final out = <AskSource>{};
   for (final s in AskSource.values) {
     final id = s.connectorId;
-    if (id != null && await store.account(id) != null) out.add(s);
+    if (id == null || (live != null && !live.contains(id))) continue;
+    if (await store.account(id) != null) out.add(s);
   }
   return out;
 }

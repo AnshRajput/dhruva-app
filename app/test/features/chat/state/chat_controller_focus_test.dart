@@ -5,6 +5,8 @@
 // is visible before sending.
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart'
+    show liveConnectorIdsProvider;
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
@@ -60,6 +62,14 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_deviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        liveConnectorIdsProvider.overrideWith(
+          (ref) async => const {
+            'calendar',
+            'contacts',
+            'notifications',
+            'folder',
+          },
+        ),
         ...deviceHealthTestOverrides(),
       ],
     );

@@ -642,6 +642,19 @@ class ConnectorStore {
     await (_db.delete(
       _db.connectorAccounts,
     )..where((t) => t.connector.equals(connector))).go();
+    // Library items that quote this connector's data go with it (the rule is
+    // documented on `encodeConnectors` in library_store.dart).
+    final like = Variable<String>('%,$connector,%');
+    await _db.customUpdate(
+      'DELETE FROM saved_answers WHERE source_connectors LIKE ?',
+      variables: [like],
+      updates: {_db.savedAnswers},
+    );
+    await _db.customUpdate(
+      'DELETE FROM todos WHERE source_connectors LIKE ?',
+      variables: [like],
+      updates: {_db.todos},
+    );
     await addLedger(connector, LedgerAction.revoke);
   });
 

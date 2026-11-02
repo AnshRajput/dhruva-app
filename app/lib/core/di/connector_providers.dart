@@ -50,6 +50,27 @@ final connectorHubProvider = FutureProvider<ConnectorHub>(
   retry: (_, _) => null,
 );
 
+/// Ids of the connectors whose OS access is on RIGHT NOW (statuses re-read
+/// from the OS first). Ask uses this, like Today does, so a permission turned
+/// off in system settings stops that source being retrieved and cited even
+/// though its account row and stored items remain. A hub that cannot start
+/// means nothing is connected. Not cached: every Ask turn asks again.
+final liveConnectorIdsProvider = FutureProvider.autoDispose<Set<String>>((
+  ref,
+) async {
+  final ConnectorHub hub;
+  try {
+    hub = await ref.watch(connectorHubProvider.future);
+  } catch (_) {
+    return const {};
+  }
+  await Future.wait(hub.all.map((c) => c.refreshStatus()));
+  return {
+    for (final c in hub.all)
+      if (c.currentStatus.isConnected) c.id,
+  };
+});
+
 /// Keyword search over everything the connectors stored. The engine (FTS5, or
 /// the BM25 fallback when SQLite lacks it) is chosen once, here.
 final searchIndexProvider = FutureProvider<SearchIndex>((ref) {
