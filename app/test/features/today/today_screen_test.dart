@@ -1019,6 +1019,25 @@ void main() {
       expect(design, lessThan(budget));
     });
 
+    todayTest('Mark all read on Today also clears the notifications here', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('digest-mark-read')),
+      );
+      await tester.tap(find.byKey(const ValueKey('digest-mark-read')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('today-see-day')));
+      await settle(tester);
+      expect(find.textContaining('Wants your OK'), findsNothing);
+      expect(find.text('Design sync'), findsOneWidget);
+    });
+
     todayTest('overlapping meetings are marked on the rail', (tester) async {
       await pumpToday(
         tester,

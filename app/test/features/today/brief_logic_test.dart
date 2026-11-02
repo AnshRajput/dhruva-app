@@ -135,10 +135,13 @@ void main() {
   });
 
   group('digestGroups', () {
-    test('drops Needs-you apps and anything marked read', () {
+    test('drops Needs-you apps; read ones are dropped upstream', () {
       final d = digestGroups(groups, fixtureNow);
       expect(d.map((g) => g.appLabel), ['Swiggy', 'HDFC']);
-      final afterRead = digestGroups(groups, fixtureNow, readAt: at(6, 30));
+      final afterRead = digestGroups(
+        unreadGroups(groups, at(6, 30)),
+        fixtureNow,
+      );
       expect(afterRead, isEmpty); // pings were 5:10..6:13
     });
   });

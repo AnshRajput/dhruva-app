@@ -40,7 +40,9 @@ class DayTimelineScreen extends ConsumerWidget {
     final loaded = ref.watch(connectorsLoadedProvider);
     final calendar = ref.watch(calendarEntryProvider);
     final events = ref.watch(todayEventsProvider);
-    final groups = ref.watch(notificationGroupsProvider);
+    // Same read-state source as Today and the brief: "Mark all read" hides
+    // notifications here too.
+    final groups = ref.watch(unreadNotificationGroupsProvider);
 
     Widget body(BuildContext context, EdgeInsets inset) {
       if (!loaded || events.isLoading && !events.hasValue) {
@@ -49,7 +51,7 @@ class DayTimelineScreen extends ConsumerWidget {
         final entries = buildTimeline(
           now: clock,
           events: events.value ?? const [],
-          groups: groups.value ?? const [],
+          groups: groups,
         );
         final calendarOn = calendar?.status.isConnected ?? false;
         if (timelineIsEmpty(entries)) {

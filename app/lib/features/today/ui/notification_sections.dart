@@ -149,9 +149,8 @@ class DigestCard extends ConsumerWidget {
 
     final now = ref.watch(nowProvider);
     final groups = digestGroups(
-      ref.watch(notificationGroupsProvider).value ?? const [],
+      ref.watch(unreadNotificationGroupsProvider),
       now,
-      readAt: ref.watch(notificationsReadAtProvider).value,
     );
     if (groups.isEmpty) return const SizedBox.shrink();
     final total = groups.fold<int>(0, (n, g) => n + g.items.length);

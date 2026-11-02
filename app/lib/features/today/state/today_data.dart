@@ -136,22 +136,20 @@ final notificationsReadAtProvider =
       NotificationsReadAt.new,
     );
 
-/// Groups the digest card shows: last 24 h, not already in "Needs you", not
-/// marked read. One line per app.
+/// Groups the digest card shows: last 24 h, not already in "Needs you". One
+/// line per app. [groups] must already be unread
+/// (`unreadNotificationGroupsProvider`).
 List<NotificationGroup> digestGroups(
   List<NotificationGroup> groups,
-  DateTime now, {
-  DateTime? readAt,
-}) {
+  DateTime now,
+) {
   final waiting = {for (final w in needsYou(groups, now)) w.group.package};
   final out = <NotificationGroup>[];
   for (final g in groups) {
     if (waiting.contains(g.package)) continue;
     final fresh = [
       for (final i in g.items)
-        if (now.difference(i.sentAt ?? i.updatedAt) <= needsYouWindow &&
-            (readAt == null || (i.sentAt ?? i.updatedAt).isAfter(readAt)))
-          i,
+        if (now.difference(i.sentAt ?? i.updatedAt) <= needsYouWindow) i,
     ];
     if (fresh.isEmpty) continue;
     out.add(
