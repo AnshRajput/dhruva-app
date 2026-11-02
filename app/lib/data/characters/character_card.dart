@@ -213,7 +213,11 @@ ImportedCharacterFields cardToCharacterFields(CharacterCardV2 card) {
     scenario: card.scenario,
   );
   if (persona.length > maxPersonaChars) {
-    persona = persona.substring(0, maxPersonaChars).trimRight();
+    var end = maxPersonaChars;
+    // Never cut between a surrogate pair: a lone high surrogate makes Text throw.
+    final last = persona.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    persona = persona.substring(0, end).trimRight();
   }
   if (persona.isEmpty) {
     throw const ValidationFailure(

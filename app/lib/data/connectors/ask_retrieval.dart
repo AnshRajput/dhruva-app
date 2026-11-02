@@ -87,6 +87,7 @@ class AskRetriever {
     required int budgetChars,
     List<String> mentioned = const [],
     List<ConnectorItem> focus = const [],
+    String? about,
   }) async {
     final searched = connectorSourcesOf(sources);
     if ((searched.isEmpty && focus.isEmpty) || budgetChars <= 0) {
@@ -110,7 +111,8 @@ class AskRetriever {
     for (final s in searched) {
       final id = s.connectorId!;
       final hits = await _index.search(
-        question,
+        // The person a thread is ABOUT is a retrieval term, not question text.
+        about == null ? question : '$question $about',
         limit: hitsPerSource,
         sources: {id},
       );
@@ -129,6 +131,7 @@ class AskRetriever {
         maxChars: budgetChars,
         // A focused file's sections may be long; give them room.
         maxItemChars: focus.isEmpty ? 1200 : 2500,
+        about: about,
       ),
       searched,
     );

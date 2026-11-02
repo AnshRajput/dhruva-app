@@ -30,12 +30,20 @@ class ConnectorsChannel {
   ConnectorsChannel({
     MethodChannel? channel,
     this.folderCallTimeout = const Duration(seconds: 30),
+    // ponytail: 120s ceiling, not a "slow folder" limit: native listing of a
+    // big cloud SAF tree (up to 5000 queries) can legitimately take a while;
+    // this only stops a stalled provider hanging the worker forever.
+    this.folderBulkTimeout = const Duration(seconds: 120),
   }) : _ch = channel ?? const MethodChannel(channelName);
 
-  /// Deadline for the folder calls that run on the native single worker
-  /// thread: one stalled provider read must not hang every later sync and the
-  /// disconnect-and-wipe behind it.
+  /// Deadline for the cheap `folder.reachable` probe. A timeout means
+  /// "unknown", never "gone" (see `SystemFolderSource.isReachable`).
   final Duration folderCallTimeout;
+
+  /// Ceiling for `folder.list` / `folder.fetch`, which run on the native
+  /// single worker thread: one stalled provider read must not hang every later
+  /// sync and the disconnect-and-wipe behind it.
+  final Duration folderBulkTimeout;
 
   static const channelName = 'app.dhruva/connectors';
   final MethodChannel _ch;
@@ -129,7 +137,7 @@ class ConnectorsChannel {
           'id': grantId,
           'maxFiles': maxFiles,
         })
-        .timeout(folderCallTimeout);
+        .timeout(folderBulkTimeout);
     final out = <FolderEntry>[];
     for (final m in raw ?? const <Object?>[]) {
       if (m is! Map) continue;
@@ -165,7 +173,7 @@ class ConnectorsChannel {
             'dest': destPath,
             'maxBytes': maxBytes,
           })
-          .timeout(folderCallTimeout);
+          .timeout(folderBulkTimeout);
     } on PlatformException catch (e) {
       throw FolderFetchException(e.message ?? e.code);
     } on TimeoutException {
@@ -391,9 +399,9 @@ class SystemFolderSource implements FolderSource {
       return await _channel.folderReachable(grantId);
     } on PlatformException {
       return false;
-    } on TimeoutException {
-      return false;
     }
+    // A TimeoutException propagates on purpose: "didn't answer" is UNKNOWN,
+    // and callers must not treat it as a revoked grant.
   }
 
   @override

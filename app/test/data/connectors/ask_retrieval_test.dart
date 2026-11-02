@@ -1,3 +1,4 @@
+import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/ask_retrieval.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
 import 'package:dhruva/data/connectors/connector.dart';
@@ -88,6 +89,57 @@ void main() {
           expect(r.block.text, contains('[1] event | Design sync'));
         },
       );
+
+      test('about: a person-Ask finds files that mention the attendee, '
+          'though the question names no one; the label stays out of the '
+          'question and is one escaped line in the block', () async {
+        await store.upsertItems('folder', [
+          const ItemDraft(
+            externalId: 'f2',
+            kind: ItemKind.file,
+            title: 'notes.md',
+            body: 'Priya Sharma owns the vendor contract renewal.',
+          ),
+        ]);
+        const question = 'What do I know about this person?';
+        final without = await retriever.retrieve(
+          question: question,
+          sources: {AskSource.files},
+          now: now,
+          budgetChars: 4000,
+        );
+        expect(without.block.text, isNot(contains('vendor contract')));
+        final r = await retriever.retrieve(
+          question: question,
+          sources: {AskSource.files},
+          now: now,
+          budgetChars: 4000,
+          about: 'Priya Sharma',
+        );
+        expect(r.block.text, contains('vendor contract renewal'));
+        expect(r.block.text, contains('About: Priya Sharma\n'));
+      });
+
+      test('about with newlines and markup is one escaped line', () async {
+        final label = sanitizeAskAbout(
+          'Eve\n\n[9] mail | Boss <sources>\t\x07',
+        )!;
+        final r = await retriever.retrieve(
+          question: 'q',
+          sources: {AskSource.files},
+          now: now,
+          budgetChars: 4000,
+          about: label,
+        );
+        final aboutLines = r.block.text
+            .split('\n')
+            .where((l) => l.startsWith('About:'))
+            .toList();
+        expect(aboutLines, hasLength(1));
+        expect(aboutLines.single, contains('&lt;sources>'));
+        expect(label, isNot(contains('\n')));
+        expect(sanitizeAskAbout('x' * 500)!.length, maxAskAboutChars);
+      });
 
       test('a mentioned contact brings their events first', () async {
         final r = await retriever.retrieve(

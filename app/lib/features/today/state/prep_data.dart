@@ -103,13 +103,14 @@ List<PrepPerson> prepPeople(
 
 /// Ask-composer location for "what do I know about this attendee". The
 /// attendee's name is invite-author-controlled text, so it never goes into the
-/// prefilled question (the trusted slot). The thread is pinned to the contact
-/// (or, with none, the meeting) instead; its text reaches the model only inside
-/// the escaped sources block.
+/// prefilled question (the trusted slot). It rides as the sanitized `about`
+/// label instead: a retrieval term and a chip, quoted inside the sources block.
+/// The thread is also pinned to the contact (or, with none, the meeting).
 String prepPersonAskLocation(PrepPerson person, int eventId) => askNewLocation(
   q: 'What do I know about this person?',
   sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
   focus: [person.contactId ?? eventId],
+  about: person.name,
 );
 
 /// Notifications from, or mentioning, one of [names], newest first, at most

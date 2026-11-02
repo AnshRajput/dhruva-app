@@ -120,6 +120,25 @@ void main() {
     });
   });
 
+  group('reachability probe timeout is unknown, never revoked', () {
+    test('status keeps the data and is not accessRevoked', () async {
+      await connect();
+      kit.folder.reachableTimesOut = true;
+      await kit.hub.folder.refreshStatus();
+      final s = kit.hub.folder.currentStatus;
+      expect(s.accessRevoked, isFalse);
+      expect(s.holdsData, isTrue);
+    });
+
+    test('a sync is skipped, not failed as revoked', () async {
+      await connect();
+      kit.folder.reachableTimesOut = true;
+      await kit.hub.folder.indexNow();
+      expect(kit.hub.folder.currentStatus.accessRevoked, isFalse);
+      expect(kit.folder.listCalls, 0);
+    });
+  });
+
   group('indexing policy: explicit request or charging only', () {
     setUp(() {
       kit.folder.addFile('a.txt', 'Hotel prices in Pune are rising.');

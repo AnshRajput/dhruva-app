@@ -69,4 +69,49 @@ void main() {
     expect(retried!.url, entry.url);
     expect(retried.metaData, contains(entry.sha256!));
   });
+
+  test('retry of a voice task with no catalog entry fails closed', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final dir = Directory.systemTemp.createTempSync('dl_retry_gone_');
+    final backend = FakeDownloadBackend();
+    final manager = DownloadManager(
+      backend: backend,
+      db: db,
+      modelsDirectory: dir,
+    );
+    final container = ProviderContainer(
+      overrides: [downloadManagerProvider.overrideWith((ref) async => manager)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await manager.dispose();
+      await db.close();
+      dir.deleteSync(recursive: true);
+    });
+    await container.read(downloadsControllerProvider.future);
+    final request = DownloadRequest(
+      repoId: 'sherpa-voice/retired-voice',
+      fileName: 'retired.tar.bz2',
+      url: Uri.parse('https://example.test/x'),
+      expectedSizeBytes: 10,
+    );
+    // Reach the failed state through the manager's own stream.
+    await manager.enqueue(request, freeBytes: 32000000000);
+    backend.emit(
+      BackendStatusUpdate(request.taskId, status: BackendTaskStatus.failed),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    backend.enqueuedRequests.clear();
+    await container
+        .read(downloadsControllerProvider.notifier)
+        .retry(request.taskId);
+
+    expect(backend.enqueuedRequests, isEmpty);
+    final p = container
+        .read(downloadsControllerProvider)
+        .value![request.taskId]!;
+    expect(p.state, DownloadState.failed);
+    expect(p.errorMessage, contains('no longer available'));
+  });
 }

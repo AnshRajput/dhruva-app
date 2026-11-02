@@ -18,6 +18,10 @@
 ///   Library "Ask about this file" and Inbox "Ask about this" start a thread.
 ///   Their text leads the sources block; the thread opens with no Auto, only
 ///   the `sources` pinned (none for the Library and Inbox entry points).
+/// * `about`: a short label (a person's name) this thread is ABOUT. It is
+///   untrusted text (an invite author chose it): sanitized by
+///   [sanitizeAskAbout], used only as a retrieval term and a chip, and shown
+///   to the model inside the quoted sources block, never in the question.
 /// * `sources`: comma-separated `calendar,contacts,files,mail,docs`; those
 ///   chips arrive pinned (Auto off). Unknown ids are ignored; missing or empty
 ///   means Auto.
@@ -35,6 +39,7 @@ String askNewLocation({
   String? q,
   Iterable<AskSource> sources = const [],
   Iterable<int> focus = const [],
+  String? about,
 }) {
   final params = <String, Object>{
     if (q != null && q.trim().isNotEmpty) 'q': q,
@@ -44,6 +49,7 @@ String askNewLocation({
           if (sources.contains(s)) s.name,
       ].join(','),
     if (focus.isNotEmpty) 'focus': [for (final i in focus) '$i'],
+    if (sanitizeAskAbout(about) != null) 'about': sanitizeAskAbout(about)!,
   };
   return Uri(
     path: '/ask/new',
@@ -51,12 +57,34 @@ String askNewLocation({
   ).toString();
 }
 
+/// Longest `about` label kept.
+const maxAskAboutChars = 80;
+
+/// Control characters (newlines and tabs included) become spaces, whitespace
+/// collapses, the result is cut to [maxAskAboutChars] without splitting a
+/// surrogate pair. Null when nothing is left.
+String? sanitizeAskAbout(String? raw) {
+  if (raw == null) return null;
+  var s = raw
+      .replaceAll(RegExp(r'[\u0000-\u001F\u007F-\u009F\u2028\u2029]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (s.length > maxAskAboutChars) {
+    var end = maxAskAboutChars;
+    final last = s.codeUnitAt(end - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) end--;
+    s = s.substring(0, end).trimRight();
+  }
+  return s.isEmpty ? null : s;
+}
+
 /// Longest prefill carried in the URL; anything longer is cut (a deep route
 /// is not a document channel).
 const maxAskPrefillChars = 2000;
 
 /// Reads `q` / `sources` back out of a route's query parameters.
-({String? draft, Set<AskSource> sources, List<int> focus}) parseAskNewQuery(
+({String? draft, Set<AskSource> sources, List<int> focus, String? about})
+parseAskNewQuery(
   Map<String, String> query, {
   Iterable<String> focus = const [],
 }) {
@@ -69,5 +97,6 @@ const maxAskPrefillChars = 2000;
               ? q
               : q.substring(0, maxAskPrefillChars)),
     sources: parseAskSources(query['sources']),
+    about: sanitizeAskAbout(query['about']),
   );
 }

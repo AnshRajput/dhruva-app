@@ -138,6 +138,7 @@ void main() {
         final slow = ConnectorsChannel(
           channel: mc,
           folderCallTimeout: const Duration(milliseconds: 50),
+          folderBulkTimeout: const Duration(milliseconds: 50),
         );
         handler = (_) => Completer<Object?>().future;
         await expectLater(
@@ -188,6 +189,37 @@ void main() {
               contains('granted folder'),
             ),
           ),
+        );
+      },
+    );
+
+    test('a list slower than the probe deadline but under the ceiling still '
+        'succeeds (scaled: probe 50ms, ceiling 2s, list 300ms)', () async {
+      final ch = ConnectorsChannel(
+        channel: mc,
+        folderCallTimeout: const Duration(milliseconds: 50),
+        folderBulkTimeout: const Duration(seconds: 2),
+      );
+      handler = (_) => Future<Object?>.delayed(
+        const Duration(milliseconds: 300),
+        () => [
+          {'id': 'a', 'name': 'a.txt', 'size': 3, 'modified': 5},
+        ],
+      );
+      expect((await ch.listFolder('tree:1', 10)).map((e) => e.id), ['a']);
+    });
+
+    test(
+      'SystemFolderSource: a probe timeout is unknown, not "gone"',
+      () async {
+        final ch = ConnectorsChannel(
+          channel: mc,
+          folderCallTimeout: const Duration(milliseconds: 50),
+        );
+        handler = (_) => Completer<Object?>().future;
+        await expectLater(
+          SystemFolderSource(ch).isReachable('g'),
+          throwsA(isA<TimeoutException>()),
         );
       },
     );

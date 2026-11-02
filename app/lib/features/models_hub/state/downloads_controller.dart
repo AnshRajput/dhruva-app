@@ -72,6 +72,27 @@ class DownloadsController extends AsyncNotifier<Map<String, DownloadProgress>> {
     final voice = voiceModelCatalog
         .where((e) => voiceModelDownloadRequest(e).taskId == taskId)
         .firstOrNull;
+    if (voice == null && progress.repoId.startsWith('sherpa-voice/')) {
+      // Fail closed: a voice bundle with no pinned catalog entry must never be
+      // re-fetched from a guessed URL without its checksum.
+      const failure = ValidationFailure(
+        'This voice is no longer available. Remove it and pick another.',
+      );
+      state = AsyncData({
+        ...?state.value,
+        taskId: DownloadProgress(
+          taskId: progress.taskId,
+          repoId: progress.repoId,
+          fileName: progress.fileName,
+          state: DownloadState.failed,
+          downloadedBytes: 0,
+          totalBytes: progress.totalBytes,
+          errorMessage: failure.message,
+          failure: failure,
+        ),
+      });
+      return;
+    }
     final request = voice != null
         ? voiceModelDownloadRequest(voice)
         : DownloadRequest(

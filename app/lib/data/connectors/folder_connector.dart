@@ -81,13 +81,23 @@ class FolderConnector extends BaseConnector {
   /// before it is believed (M3).
   static const _pruneHoldFor = Duration(hours: 1);
 
+  /// True when reachable OR when the check timed out (unknown never revokes).
+  Future<bool> _reachableOrUnknown(String grant) async {
+    try {
+      return await source.isReachable(grant);
+    } on TimeoutException {
+      return true;
+    }
+  }
+
   String? _grantId(ConnectorAccount? a) => a?.config['grantId'] as String?;
 
   @override
   Future<ConnectorStatus> evaluate(ConnectorAccount? account) async {
     if (account == null) return ConnectorStatus.notConnected;
     final grant = _grantId(account);
-    if (grant == null || !await source.isReachable(grant)) {
+    // A probe that times out is "couldn't check": keep the data, don't revoke.
+    if (grant == null || !await _reachableOrUnknown(grant)) {
       return ConnectorStatus(
         ConnectorState.needsAttention,
         detail: _gone,
@@ -159,11 +169,24 @@ class FolderConnector extends BaseConnector {
   Future<SyncResult> doSync(ConnectorAccount account, DateTime? since) async {
     final isExplicit = _explicit;
     final grant = _grantId(account);
-    if (grant == null || !await source.isReachable(grant)) {
+    if (grant == null) {
       throw const ConnectorException(
         ConnectorState.needsAttention,
         _gone,
         accessRevoked: true,
+      );
+    }
+    try {
+      if (!await source.isReachable(grant)) {
+        throw const ConnectorException(
+          ConnectorState.needsAttention,
+          _gone,
+          accessRevoked: true,
+        );
+      }
+    } on TimeoutException {
+      return const SyncResult.skipped(
+        "Couldn't check the folder right now. Will try again soon.",
       );
     }
     if (!isExplicit && !await isCharging()) {

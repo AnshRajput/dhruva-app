@@ -18,6 +18,7 @@ import '../../../core/di/model_download.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
+import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
@@ -1028,7 +1029,9 @@ _searchInData(
   final chips = askChips(connectors: connectors, hasDocuments: hasDocuments);
   final focus = ref.watch(askFocusItemsProvider(args)).value ?? const [];
   // One chip per file, however many sections it was split into.
+  final about = sanitizeAskAbout(args.about);
   final focusTitles = <String>[
+    ?about,
     for (final t in {
       for (final i in focus)
         i.title.trim().isEmpty ? i.kind.name : i.title.trim(),

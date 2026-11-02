@@ -45,8 +45,14 @@ SourcesBlock buildSourcesBlock(
   List<ConnectorItem> items, {
   int maxChars = 4000,
   int maxItemChars = 1200,
+  String? about,
 }) {
-  final header = '$sourcesPreamble\n<sources>\n';
+  // The label an Ask thread is ABOUT rides inside the quoted block (escaped,
+  // one line), so it is data to the model, never an instruction.
+  final aboutLine = about == null || about.trim().isEmpty
+      ? ''
+      : 'About: ${escapeSourceText(_oneLine(about))}\n';
+  final header = '$sourcesPreamble\n<sources>\n$aboutLine';
   const footer = '</sources>';
   var room = maxChars - header.length - footer.length;
   final kept = <ConnectorItem>[];
