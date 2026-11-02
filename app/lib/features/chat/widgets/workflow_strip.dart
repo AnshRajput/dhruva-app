@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
-import '../../../core/widgets/edge_fade.dart';
 
 class WorkflowStrip extends StatelessWidget {
   const WorkflowStrip({super.key});
@@ -44,33 +43,29 @@ class WorkflowStrip extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          height: 40,
-          // The fade says the row scrolls (the last chips used to clip).
-          child: EdgeFade(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-              children: [
-                for (final (id, icon, label) in _quick) ...[
-                  ActionChip(
-                    avatar: Icon(
-                      icon,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                    label: Text(label),
-                    onPressed: () => context.push('/actions?id=$id'),
-                  ),
-                  SizedBox(width: tokens.spacing.xs),
-                ],
+        // Wraps instead of scrolling: no chip is ever clipped off the edge.
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+          child: Wrap(
+            spacing: tokens.spacing.xs,
+            runSpacing: tokens.spacing.xs,
+            children: [
+              for (final (id, icon, label) in _quick)
                 ActionChip(
-                  label: const Text('All'),
-                  avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
-                  onPressed: () => context.push('/actions'),
+                  avatar: Icon(
+                    icon,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  label: Text(label),
+                  onPressed: () => context.push('/actions?id=$id'),
                 ),
-              ],
-            ),
+              ActionChip(
+                label: const Text('All actions'),
+                avatar: const Icon(Icons.arrow_forward_rounded, size: 16),
+                onPressed: () => context.push('/actions'),
+              ),
+            ],
           ),
         ),
       ],

@@ -36,6 +36,45 @@ import '../widgets/installed_model_menu.dart';
 import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
 
+/// An app-bar action with a visible label (the bare globe and arrow read as
+/// nothing), plus a tooltip and the same words for screen readers. With large
+/// system text there is no room for the words, so it falls back to the icon
+/// alone (still tooltipped and labelled).
+class _BarAction extends StatelessWidget {
+  const _BarAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final large = MediaQuery.textScalerOf(context).scale(14) > 18;
+    if (large) {
+      return IconButton(
+        icon: Icon(icon),
+        tooltip: tooltip,
+        onPressed: onPressed,
+      );
+    }
+    return Tooltip(
+      message: tooltip,
+      child: TextButton.icon(
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 class ModelsHubScreen extends StatelessWidget {
   /// Which tab to open on. Deep-linked callers (e.g. hands-free's "Set up
   /// voice" — WS5) pass `2` to land straight on the Voice tab instead of the
@@ -56,14 +95,16 @@ class ModelsHubScreen extends StatelessWidget {
           actions: [
             // Parity row 37: advanced Hugging Face search must be findable
             // without scrolling to the foot of Discover.
-            IconButton(
+            _BarAction(
               key: const ValueKey('models-hf-search'),
-              icon: const Icon(Icons.travel_explore),
+              icon: Icons.travel_explore,
+              label: 'Search',
               tooltip: 'Search all of Hugging Face (advanced)',
               onPressed: () => context.push('/models/search'),
             ),
-            IconButton(
-              icon: const Icon(Icons.download_outlined),
+            _BarAction(
+              icon: Icons.download_outlined,
+              label: 'Downloads',
               tooltip: 'Downloads',
               onPressed: () => context.push('/models/downloads'),
             ),
