@@ -11,7 +11,12 @@
 ///    words from two to twelve count as numbers), and
 ///  * uses no capitalised word (a name, an app, a title) that is absent from
 ///    those facts, except the sentence-initial common words and the small
-///    allowlist below (You, Today, weekdays, months, the user's own name).
+///    allowlist below (You, Today, weekdays, months, the user's own name), and
+///  * introduces no lowercase content word (a noun, verb or adjective such as
+///    "cancelled", "moved", "furious", "skip") that is absent from the facts it
+///    cites AND from the rule-written sentence it rewrites. Only function
+///    words, connectives and a few faithful verbs ("starts", "ends", "joined",
+///    "waiting") are free, so a tone change passes and a new claim does not.
 ///
 /// One failure rejects the whole rewrite: the caller keeps the rule-written
 /// brief and shows "Kept the checked version".
@@ -242,6 +247,48 @@ const _alwaysAllowed = {
   'dec',
 };
 
+/// Lowercase words a faithful rewrite may use without them being in the facts:
+/// grammar, connectives, time-of-day words and the plain verbs of a schedule.
+/// Deliberately absent: modals and advice ("should", "must", "need"), and any
+/// state change ("cancelled", "moved", "postponed") or feeling ("furious").
+const _freeWords = <String>{
+  // Pronouns, articles, determiners.
+  'a', 'an', 'the', 'this', 'that', 'these', 'those', 'it', 'its', 'itself',
+  'there', 'here', 'you', 'your', 'youre', 'youve', 'youll', 'yours', 'we',
+  'i', 'me', 'my', 'they', 'them', 'their', 'he', 'she', 'him', 'her', 'his',
+  // Connectives and prepositions.
+  'then', 'after', 'before', 'also', 'and', 'but', 'so', 'or', 'nor', 'yet',
+  'meanwhile', 'otherwise', 'overall', 'finally', 'when', 'while', 'if', 'as',
+  'because', 'since', 'with', 'without', 'in', 'on', 'at', 'by', 'for', 'from',
+  'to', 'until', 'till', 'into', 'of', 'off', 'out', 'up', 'down', 'over',
+  'under', 'between', 'around', 'about', 'through', 'during', 'within',
+  'across', 'than', 'too', 'very', 'quite', 'plus', 'whats', 'thats', 'lets',
+  'let', 'what', 'who', 'where', 'which', 'how',
+  // Quantity and order.
+  'all', 'both', 'each', 'every', 'any', 'some', 'most', 'many', 'few', 'more',
+  'less', 'another', 'other', 'others', 'only', 'even', 'already', 'soon',
+  'first', 'next', 'last', 'later', 'earlier', 'left', 'remaining', 'one',
+  'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'once', 'twice', 'half', 'no', 'nothing', 'none',
+  'nobody', 'not', 'dont',
+  // Being, having, doing (no modals).
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'do', 'does', 'did',
+  'have', 'has', 'had', 'having', 'will',
+  // Time words.
+  'today', 'tomorrow', 'tonight', 'now', 'still', 'just', 'day', 'days',
+  'week', 'weekend', 'morning', 'afternoon', 'evening', 'night', 'noon',
+  'midnight', 'hour', 'hours', 'minute', 'minutes',
+  // The plain words of a schedule and an inbox.
+  'meeting', 'meetings', 'event', 'events', 'message', 'messages', 'messaged',
+  'notification', 'notifications', 'calendar', 'reply', 'replies', 'waiting',
+  'wait', 'waits', 'free', 'busy', 'clear', 'quiet', 'light', 'heads', 'open',
+  'todo', 'todos', 'library', 'starts', 'start', 'starting', 'started',
+  'begins', 'begin', 'beginning', 'kicks', 'opens', 'runs', 'run', 'running',
+  'ends', 'end', 'ending', 'ended', 'finishes', 'finish', 'finishing',
+  'finished', 'joined', 'joining', 'joins', 'join', 'overlap', 'overlaps',
+  'overlapping',
+};
+
 const _numberWords = {
   'two': '2',
   'three': '3',
@@ -306,6 +353,20 @@ String _plainWord(String w) {
   return s.replaceAll("'", '');
 }
 
+/// A crude stem so "meetings" matches "meeting" and "moved" matches "move".
+String _stem(String w) {
+  var s = w;
+  for (final suffix in const ['ing', 'ed', 'es', 's']) {
+    if (s.length > suffix.length + 2 && s.endsWith(suffix)) {
+      s = s.substring(0, s.length - suffix.length);
+      break;
+    }
+  }
+  return s.endsWith('e') && s.length > 3 ? s.substring(0, s.length - 1) : s;
+}
+
+Set<String> _stems(String text) => {for (final w in _words(text)) _stem(w)};
+
 /// Lowercase word parts of [text] (hyphenated words split), apostrophes gone.
 Set<String> _words(String text) => {
   for (final m in _word.allMatches(text.replaceAll(_time, ' ')))
@@ -320,11 +381,13 @@ bool _isCapitalised(String w) {
 }
 
 /// Why [sentence] is not backed by [factsText], or null when it is. [names]
-/// are extra allowed words (the user's own name).
+/// are extra allowed words (the user's own name). [rewrites] is the rule-written
+/// sentence this one rewords: its words are not new content either.
 String? ungrounded(
   String sentence,
   String factsText, {
   Set<String> names = const {},
+  String rewrites = '',
 }) {
   // Times: must be a time in the facts, 12/24 h agnostic.
   final factTimes = _times(factsText);
@@ -358,6 +421,17 @@ String? ungrounded(
     if (w.split('-').every((p) => factWords.contains(p))) continue;
     return 'the word "$raw"';
   }
+  // Lowercase content words: a claim can hide in "cancelled" or "furious".
+  final known = {..._stems(factsText), ..._stems(rewrites)};
+  for (final m in _word.allMatches(plain)) {
+    final raw = m.group(0)!;
+    if (_isCapitalised(raw)) continue;
+    for (final p in _plainWord(raw).split('-')) {
+      if (p.isEmpty || _freeWords.contains(p) || allowed.contains(p)) continue;
+      if (known.contains(_stem(p))) continue;
+      return 'the word "$raw"';
+    }
+  }
   return null;
 }
 
@@ -376,10 +450,14 @@ final class RewriteCheck {
 }
 
 /// Checks the model's [raw] text against [facts].
+///
+/// [draft] is the rule-written brief the model was asked to reword: a rewrite
+/// sentence may reuse the words of the draft sentences that cite the same facts.
 RewriteCheck checkRewrite(
   String raw,
   List<BriefFact> facts, {
   Set<String> names = const {},
+  List<BriefSentence> draft = const [],
 }) {
   final ids = {for (final f in facts) f.n};
   final cleaned = raw
@@ -415,7 +493,11 @@ RewriteCheck checkRewrite(
       for (final f in facts)
         if (cites.contains(f.n)) f.text,
     ].join(' \n ');
-    final why = ungrounded(s.plain, text, names: names);
+    final source = [
+      for (final d in draft)
+        if (d.spans.any((x) => x.cites.any(cites.contains))) d.plain,
+    ].join(' ');
+    final why = ungrounded(s.plain, text, names: names, rewrites: source);
     if (why != null) {
       return RewriteCheck.rejected('"${s.plain}" uses $why');
     }
