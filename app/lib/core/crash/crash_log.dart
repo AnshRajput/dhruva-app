@@ -17,6 +17,13 @@ const crashMaxRecords = 20;
 const crashMaxMessage = 500;
 const crashMaxStack = 8 * 1024;
 
+/// A FormatException's text carries a slice of the data it failed to parse
+/// (a chat, a file, a model reply): keep only its first line, the reason.
+String _safeMessage(Object error) {
+  final text = error.toString();
+  return error is FormatException ? text.split('\n').first : text;
+}
+
 String _cut(String s, int max) =>
     s.length <= max ? s : '${s.substring(0, max)}…[truncated]';
 
@@ -120,7 +127,7 @@ class CrashLog {
           platform: _platform ?? Platform.operatingSystem,
           osVersion: _os ?? Platform.operatingSystemVersion,
           errorType: error.runtimeType.toString(),
-          message: _cut(error.toString(), crashMaxMessage),
+          message: _cut(_safeMessage(error), crashMaxMessage),
           stack: _cut((stack ?? StackTrace.empty).toString(), crashMaxStack),
         );
         final keep = (await _readOldestFirst()).toList()..add(r);

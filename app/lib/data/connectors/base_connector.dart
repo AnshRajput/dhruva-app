@@ -169,8 +169,33 @@ abstract class BaseConnector implements Connector {
     return true;
   }
 
+  Future<SyncResult>? _flight;
+
+  /// One sync at a time per connector (M2): a call made while one is running
+  /// joins it and gets its result, whoever asks (the hub on resume, Today on
+  /// open, the first sync after connecting, the folder's "index now", the
+  /// notification drain). Two overlapping runs used to clobber the
+  /// syncing/cancelled flags, let `revoke()` skip waiting for the second, and
+  /// write every "Read N" ledger row twice.
   @override
-  Future<SyncResult> sync({DateTime? since}) async {
+  Future<SyncResult> sync({DateTime? since}) => _flight ??= _sync(since);
+
+  Future<SyncResult> _sync(DateTime? since) async {
+    // Claimed before the first await so `revoke()` always sees it.
+    _syncing = true;
+    _cancelled = false;
+    final done = Completer<void>();
+    _running = done.future;
+    try {
+      return await _syncOnce(since);
+    } finally {
+      _syncing = false;
+      _flight = null;
+      done.complete();
+    }
+  }
+
+  Future<SyncResult> _syncOnce(DateTime? since) async {
     final account = await store.account(id);
     if (account == null) {
       throw ConnectorException(
@@ -178,10 +203,6 @@ abstract class BaseConnector implements Connector {
         '$displayName is not connected.',
       );
     }
-    _syncing = true;
-    _cancelled = false;
-    final done = Completer<void>();
-    _running = done.future;
     emit(_status.copyWith(state: ConnectorState.syncing));
     try {
       final result = await doSync(account, since);
@@ -202,6 +223,7 @@ abstract class BaseConnector implements Connector {
           e.state,
           detail: e.message,
           lastSyncAt: account.lastSyncAt,
+          accessRevoked: e.accessRevoked,
         ),
       );
       rethrow;
@@ -216,9 +238,6 @@ abstract class BaseConnector implements Connector {
         ),
       );
       throw ConnectorException(ConnectorState.needsAttention, msg);
-    } finally {
-      _syncing = false;
-      done.complete();
     }
   }
 

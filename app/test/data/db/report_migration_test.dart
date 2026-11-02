@@ -57,7 +57,7 @@ void main() {
     await v4.close();
 
     final v5 = AppDatabase(NativeDatabase(file));
-    expect(v5.schemaVersion, 8);
+    expect(v5.schemaVersion, 9);
     final rows = await v5.select(v5.messages).get();
     expect(rows, hasLength(1));
     expect(rows.single.content, 'hello');

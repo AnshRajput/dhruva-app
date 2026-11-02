@@ -333,3 +333,55 @@ abstract interface class EngineService {
   /// unusable afterwards.
   Future<void> dispose();
 }
+
+/// Serialises model loads on one in-flight future (H1). Two callers that
+/// load at once can no longer both see "nothing loaded" and each spawn a
+/// worker isolate (the second assignment would orphan the first, which keeps
+/// the model in RAM). A request identical to the latest queued one shares
+/// that future; any other request runs after it finishes. The last request
+/// wins, so the engine ends up holding what was asked for last.
+final class LoadGate {
+  Future<void>? _tail;
+  String? _tailKey;
+
+  /// Runs [body] after every earlier load; [key] describes the request
+  /// (model path + params) so an identical back-to-back request is shared.
+  Future<void> run(String key, Future<void> Function() body) {
+    final tail = _tail;
+    if (tail != null && _tailKey == key) return tail;
+    final f = (tail == null ? Future<void>.value() : tail.catchError((_) {}))
+        .then((_) => body());
+    _tail = f;
+    _tailKey = key;
+    // Clear once settled, unless a later request replaced the tail.
+    void clear() {
+      if (identical(_tail, f)) {
+        _tail = null;
+        _tailKey = null;
+      }
+    }
+
+    f.then((_) => clear(), onError: (_) => clear());
+    return f;
+  }
+
+  /// Completes when every queued load has settled (errors swallowed).
+  Future<void> idle() async {
+    while (_tail != null) {
+      final t = _tail!;
+      try {
+        await t;
+      } catch (_) {}
+      if (identical(_tail, t)) {
+        _tail = null;
+        _tailKey = null;
+      }
+    }
+  }
+
+  /// A stable key for a load request.
+  static String keyFor(String modelPath, EngineLoadParams p) =>
+      '$modelPath|${p.contextSize}|${p.gpuLayers}|${p.batchSize}|'
+      '${p.maxSequences}|${p.mmprojPath}|${p.flashAttn.name}|'
+      '${p.kvCacheQuant.name}';
+}

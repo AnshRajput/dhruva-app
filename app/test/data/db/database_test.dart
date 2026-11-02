@@ -135,7 +135,7 @@ void main() {
   });
 
   test('schemaVersion is 8', () {
-    expect(db.schemaVersion, 8);
+    expect(db.schemaVersion, 9);
   });
 
   group('generated row/companion surface', () {

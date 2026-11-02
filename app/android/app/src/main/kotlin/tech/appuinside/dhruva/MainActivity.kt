@@ -20,21 +20,19 @@ import io.flutter.plugin.common.MethodChannel
  * `{text?, route?, replaceable?}`. Routing lives in Dart (`IntentInbox`); this
  * class only extracts.
  *
- * PROCESS_TEXT round trip: when the selection menu was opened on an EDITABLE
- * field (EXTRA_PROCESS_TEXT_READONLY present and false) and this activity was
- * started for a result, the payload carries `replaceable: true` and Dart can
- * call `setProcessTextResult(text)` to hand the result back
- * (`setResult(RESULT_OK, Intent().putExtra(EXTRA_PROCESS_TEXT, text))`, then
- * finish). `open` so [ProcessTextActivity] (standard launch mode, required for
- * a result to reach the calling app) shares all of this.
+ * PROCESS_TEXT round trip: the selection menu starts [ProcessTextActivity], a
+ * UI-less trampoline (it does NOT boot a second Flutter engine; this activity
+ * and its engine are the only ones in the process). The trampoline forwards
+ * the text here. When the selection was on an EDITABLE field and the trampoline
+ * was started for a result, it also forwards a one-time token ([ProcessTextBridge]);
+ * a payload with a valid token carries `replaceable: true` and Dart can call
+ * `setProcessTextResult(text)`, which hands the text to the waiting trampoline
+ * (it sets the result for the calling app and finishes) and sends this task to
+ * the back so the user lands in the app they selected in.
  */
-open class MainActivity : FlutterActivity() {
+class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var initial: Map<String, Any>? = null
-
-    // True only for the launching intent of a PROCESS_TEXT started for a result
-    // on an editable field. Later onNewIntent deliveries never reset it to true.
-    private var replaceable = false
 
     companion object {
         // "Hide content in app switcher" (Settings > Privacy). Process-wide so a
@@ -57,7 +55,6 @@ open class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        replaceable = isReplaceableProcessText(intent)
         initial = extract(intent)
         // Battery & heat guard (Dart: core/device_health). Always answers; any
         // unavailable value is -1 / "unknown".
@@ -95,6 +92,12 @@ open class MainActivity : FlutterActivity() {
             }
     }
 
+    // FlutterActivity also honours `dart_entrypoint`, `initial_route` and shell
+    // argument extras from the launching intent, and this activity is exported:
+    // pin the Dart entrypoint so no other app can pick one (the background sync
+    // dispatcher is a vm:entry-point too).
+    override fun getDartEntrypointFunctionName(): String = "main"
+
     // FlutterActivity treats an intent extra named `route` as the engine's
     // initial route, so a shortcut `route=new_chat` would hit go_router as
     // "/new_chat" before IntentInbox runs. Always boot at "/"; IntentInbox
@@ -104,30 +107,29 @@ open class MainActivity : FlutterActivity() {
     // singleTop: a share/shortcut while the app is open lands here, not onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // A redelivered intent can't answer the original caller's request.
-        replaceable = false
         extract(intent)?.let { channel?.invokeMethod("onIntent", it) }
     }
 
     /**
-     * Sends [arg] back to the app that opened the selection menu and closes
-     * this screen. Rejected unless this launch really is a replaceable
-     * PROCESS_TEXT, and for empty or oversized text (the Binder transaction
-     * limit is ~1 MB; the cap leaves ample headroom).
+     * Sends [arg] back to the app that opened the selection menu (through the
+     * waiting [ProcessTextActivity]) and returns the user to it. Rejected unless
+     * a replaceable PROCESS_TEXT is really waiting, and for empty or oversized
+     * text (the Binder transaction limit is ~1 MB; the cap leaves ample
+     * headroom).
      */
     private fun returnProcessText(arg: Any?, result: MethodChannel.Result) {
         val text = arg as? String
-        if (!replaceable) {
+        if (!ProcessTextBridge.hasPending()) {
             result.error("not_replaceable", "No editable selection to replace", null)
         } else if (text.isNullOrBlank()) {
             result.error("empty", "Nothing to send back", null)
         } else if (text.length > MAX_RESULT_CHARS) {
             result.error("too_long", "Result is too long to send back", null)
+        } else if (!ProcessTextBridge.deliver(text)) {
+            result.error("not_replaceable", "The app you selected in is gone", null)
         } else {
-            setResult(RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, text))
-            replaceable = false
             result.success(true)
-            finish()
+            moveTaskToBack(true)
         }
     }
 
@@ -145,12 +147,6 @@ open class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
-
-    private fun isReplaceableProcessText(intent: Intent?): Boolean =
-        intent?.action == Intent.ACTION_PROCESS_TEXT &&
-            callingActivity != null &&
-            intent.hasExtra(Intent.EXTRA_PROCESS_TEXT_READONLY) &&
-            !intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
 
     private fun readDeviceHealth(): Map<String, Any> {
         var battery = -1
@@ -193,16 +189,12 @@ open class MainActivity : FlutterActivity() {
             else -> null
         }?.toString()
         if (!text.isNullOrBlank()) {
-            return mapOf("text" to text, "replaceable" to (replaceable && intent?.action == Intent.ACTION_PROCESS_TEXT))
+            // Replaceable only with the trampoline's one-time token: an exported
+            // activity must not trust a bare `replaceable` extra from any app.
+            val replaceable = intent?.action == Intent.ACTION_PROCESS_TEXT &&
+                ProcessTextBridge.accepts(intent.getStringExtra(ProcessTextBridge.EXTRA_TOKEN))
+            return mapOf("text" to text, "replaceable" to replaceable)
         }
         return intent?.getStringExtra("route")?.let { mapOf("route" to it) }
     }
 }
-
-/**
- * Target of the text-selection "Ask Dhruva AI" menu item. A separate,
- * standard-launch-mode activity: [MainActivity] is singleTask, and a result
- * is never delivered to the caller of a singleTask activity, so "Replace
- * selected text" needs its own instance inside the calling app's task.
- */
-class ProcessTextActivity : MainActivity()

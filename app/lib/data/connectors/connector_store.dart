@@ -231,6 +231,10 @@ class ConnectorStore {
   /// Deletes [source] items with exactly these external ids (a file's section
   /// rows, for instance). Exact match in chunks: ids such as SAF uris contain
   /// `%` and `_`, which must never be treated as wildcards.
+  /// Runs [body] as one transaction: all of its writes land, or none do.
+  Future<T> inTransaction<T>(Future<T> Function() body) =>
+      _db.transaction(body);
+
   Future<int> removeByExternalIds(
     String source,
     Iterable<String> externalIds,
@@ -642,6 +646,19 @@ class ConnectorStore {
     await (_db.delete(
       _db.connectorAccounts,
     )..where((t) => t.connector.equals(connector))).go();
+    // Library items that quote this connector's data go with it (the rule is
+    // documented on `encodeConnectors` in library_store.dart).
+    final like = Variable<String>('%,$connector,%');
+    await _db.customUpdate(
+      'DELETE FROM saved_answers WHERE source_connectors LIKE ?',
+      variables: [like],
+      updates: {_db.savedAnswers},
+    );
+    await _db.customUpdate(
+      'DELETE FROM todos WHERE source_connectors LIKE ?',
+      variables: [like],
+      updates: {_db.todos},
+    );
     await addLedger(connector, LedgerAction.revoke);
   });
 

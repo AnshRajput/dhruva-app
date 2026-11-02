@@ -116,7 +116,7 @@ void main() {
   test('schema v8 creates the library tables on a fresh database', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    expect(db.schemaVersion, 8);
+    expect(db.schemaVersion, 9);
     expect(await db.select(db.todos).get(), isEmpty);
     expect(await db.select(db.savedAnswers).get(), isEmpty);
   });

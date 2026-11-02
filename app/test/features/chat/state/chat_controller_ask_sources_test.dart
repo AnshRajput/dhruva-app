@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
+import 'package:dhruva/core/di/connector_providers.dart'
+    show liveConnectorIdsProvider;
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/data/chat/chat_repository.dart';
 import 'package:dhruva/data/connectors/ask_sources.dart';
@@ -72,12 +74,19 @@ void main() {
         ),
       );
 
-  ProviderContainer build({FakeDocumentPicker? picker}) {
+  /// Every connector's OS access on, unless a test says otherwise.
+  const allLive = {'calendar', 'contacts', 'notifications', 'folder'};
+
+  ProviderContainer build({
+    FakeDocumentPicker? picker,
+    Set<String> live = allLive,
+  }) {
     final c = ProviderContainer(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
         engineServiceProvider.overrideWithValue(engine),
+        liveConnectorIdsProvider.overrideWith((ref) async => live),
         if (picker != null) ...[
           documentPickerProvider.overrideWithValue(picker),
           documentExtractorProvider.overrideWithValue(
@@ -187,6 +196,24 @@ void main() {
       );
     },
   );
+
+  test('M1: access switched off in system settings: the account row and items '
+      'remain, but Ask neither retrieves nor cites them', () async {
+    await store.saveAccount('calendar'); // opted in earlier, rows stored
+    final modelId = await insertModel();
+    final args = ChatRouteArgs(initialModelId: modelId);
+    final c = build(live: const {'contacts'}); // calendar is off now
+    final ctrl = await open(c, args);
+
+    await ctrl.sendMessage('What meetings do I have today?');
+
+    expect(userTurn(), 'What meetings do I have today?');
+    expect(userTurn(), isNot(contains('Budget review')));
+    expect(
+      c.read(chatControllerProvider(args)).value!.messages.last.itemSources,
+      isEmpty,
+    );
+  });
 
   test(
     'pinned sources are used as chosen, whatever the question says',

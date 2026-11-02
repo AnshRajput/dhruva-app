@@ -16,6 +16,10 @@ class FakeCalendarSource implements CalendarSource {
   List<DeviceCalendarEvent> items;
   bool failRead = false;
   int requests = 0;
+  int eventsCalls = 0;
+
+  /// When set, [events] waits for it (a test acts while a sync is mid-run).
+  Completer<void>? eventsGate;
   int settingsOpened = 0;
   DateTime? lastFrom;
   DateTime? lastTo;
@@ -38,8 +42,10 @@ class FakeCalendarSource implements CalendarSource {
 
   @override
   Future<List<DeviceCalendarEvent>> events(DateTime from, DateTime to) async {
+    eventsCalls++;
     lastFrom = from;
     lastTo = to;
+    if (eventsGate != null) await eventsGate!.future;
     if (failRead) throw StateError('provider down');
     return items;
   }

@@ -114,6 +114,9 @@ void main() {
       final s = kit.hub.folder.currentStatus;
       expect(s.state, ConnectorState.needsAttention);
       expect(s.detail, contains('Choose it again'));
+      // Gone access holds no data (the written brief must be forgotten); a
+      // one-off read failure would.
+      expect(s.holdsData, isFalse);
     });
   });
 
@@ -448,6 +451,7 @@ void main() {
           kit.hub.folder.indexNow(),
           throwsA(isA<ConnectorException>()),
         );
+        expect(kit.hub.folder.currentStatus.holdsData, isFalse);
       },
     );
   });
