@@ -93,7 +93,6 @@ void main() {
         'settings-connectors',
         'settings-about-me',
         'settings-models',
-        'settings-appearance',
         'settings-notifications',
         'settings-privacy',
         'settings-safety',
@@ -117,7 +116,6 @@ void main() {
         ('settings-about-me', 'Name'),
         ('settings-privacy', 'There is no Dhruva server.'),
         ('settings-notifications', 'Download alerts'),
-        ('settings-appearance', 'System'),
       ]) {
         await tester.tap(find.byKey(ValueKey(key)));
         await tester.pumpAndSettle();

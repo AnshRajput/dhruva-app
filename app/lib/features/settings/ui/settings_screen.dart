@@ -13,8 +13,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../privacy_facts.dart';
 import '../state/storage_summary_provider.dart';
+import '../widgets/appearance_section.dart';
 import '../widgets/credit_row.dart';
 import '../widgets/settings_widgets.dart';
 import '../widgets/version_text.dart';
@@ -84,14 +86,9 @@ class SettingsScreen extends StatelessWidget {
         const SettingsSectionLabel('This app'),
         SettingsGroup(
           children: [
-            _nav(
-              context,
-              'settings-appearance',
-              Icons.wb_sunny_outlined,
-              'Appearance',
-              'Light, dark, or follow your phone',
-              '/settings/appearance',
-            ),
+            // Inline, not a page of its own: one control never earns a screen.
+            const AppearanceRow(key: ValueKey('settings-appearance')),
+            if (isCupertinoChrome(context)) const ReduceTransparencyRow(),
             _nav(
               context,
               'settings-notifications',

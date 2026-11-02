@@ -218,7 +218,8 @@ class SettingsSwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
+    // `.adaptive`: a Cupertino switch on iOS (Rule 6), Material on Android.
+    return SwitchListTile.adaptive(
       secondary: SettingsIconTile(icon),
       title: Text(title),
       subtitle: Text(subtitle),

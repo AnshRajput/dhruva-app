@@ -27,6 +27,8 @@ Future<void> main() async {
   // documented exception, per Loop 2/3) was deleted in Loop 4 — its
   // developer-harness role is now the real chat feature.
   WidgetsFlutterBinding.ensureInitialized();
+  // The real version, from the bundled pubspec (About line, crash log, reports).
+  await loadAppVersion();
 
   // WS2: on a fresh install, send the user into the guided onboarding flow
   // before the first frame. Read the "onboarding done" flag ONCE here (not a
