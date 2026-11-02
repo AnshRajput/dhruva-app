@@ -49,6 +49,22 @@ void main() {
     expect(r.message, isNot(contains('\n')));
   });
 
+  test('a SQLite error keeps the SQL shape but not the bound values', () async {
+    final log = make();
+    await log.record(
+      _SqlError(
+        'SqliteException(1): constraint failed\n'
+        '  Causing statement: INSERT INTO "messages" (content) VALUES (?), '
+        'parameters: meet me at 9 behind the station',
+      ),
+      null,
+    );
+    final r = (await log.readAll()).single;
+    expect(r.message, contains('INSERT INTO "messages"'));
+    expect(r.message, isNot(contains('behind the station')));
+    expect(r.message, isNot(contains('parameters')));
+  });
+
   test('truncates message and stack', () async {
     final log = make();
     await log.record('x' * 5000, null);
@@ -110,4 +126,11 @@ void main() {
     expect(text, contains('No chats, prompts or files'));
     expect(text, contains('boom'));
   });
+}
+
+class _SqlError implements Exception {
+  _SqlError(this.text);
+  final String text;
+  @override
+  String toString() => text;
 }

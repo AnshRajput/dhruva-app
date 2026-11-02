@@ -115,6 +115,8 @@ abstract interface class FolderSource {
   Future<FolderGrant?> pick();
 
   /// Whether the grant still resolves (folder moved, deleted or revoked).
+  /// Throws [TimeoutException] when the platform did not answer in time:
+  /// unknown, NOT unreachable.
   Future<bool> isReachable(String grantId);
 
   /// Files (never directories) at any depth under the grant, at most

@@ -36,6 +36,7 @@ import '../../../core/di/connector_providers.dart'
 import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/profile/user_profile.dart';
+import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
 import '../../../core/safety/safety_guard.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/chat/models/sampling_params.dart';
@@ -99,6 +100,10 @@ final class ChatRouteArgs {
   /// row; never instructions to the model.
   final List<int> focusItemIds;
 
+  /// Sanitized label this new chat is ABOUT (`/ask/new?about=`, a person's
+  /// name): a retrieval term and a chip, never part of the question text.
+  final String? about;
+
   const ChatRouteArgs({
     this.conversationId,
     this.initialModelId,
@@ -110,6 +115,7 @@ final class ChatRouteArgs {
     this.initialDraft,
     this.initialSources = const {},
     this.focusItemIds = const [],
+    this.about,
   });
 
   @override
@@ -125,7 +131,8 @@ final class ChatRouteArgs {
       other.initialDraft == initialDraft &&
       other.initialSources.length == initialSources.length &&
       other.initialSources.containsAll(initialSources) &&
-      listEquals(other.focusItemIds, focusItemIds);
+      listEquals(other.focusItemIds, focusItemIds) &&
+      other.about == about;
 
   @override
   int get hashCode => Object.hash(
@@ -139,6 +146,7 @@ final class ChatRouteArgs {
     initialDraft,
     Object.hashAllUnordered(initialSources),
     Object.hashAll(focusItemIds),
+    about,
   );
 }
 
@@ -1277,6 +1285,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final focus = await ref.read(askFocusItemsProvider(args).future);
 
     SourcesBlock? block;
+    final about = sanitizeAskAbout(args.about);
     if (active.isNotEmpty || focus.isNotEmpty) {
       final now = store.now;
       final promptChars =
@@ -1298,8 +1307,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
               sources: active,
               now: now,
               budgetChars: budget,
-              mentioned: mentionedContacts(question, names),
+              mentioned: [...mentionedContacts(question, names), ?about],
               focus: focus,
+              about: about,
             );
         block = retrieval.block;
       } finally {

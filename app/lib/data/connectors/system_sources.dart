@@ -27,8 +27,23 @@ import 'connector_sources.dart';
 /// Thin typed wrapper over the platform channel. Parsing is defensive: a
 /// malformed map from native code is dropped, never thrown.
 class ConnectorsChannel {
-  ConnectorsChannel({MethodChannel? channel})
-    : _ch = channel ?? const MethodChannel(channelName);
+  ConnectorsChannel({
+    MethodChannel? channel,
+    this.folderCallTimeout = const Duration(seconds: 30),
+    // ponytail: 120s ceiling, not a "slow folder" limit: native listing of a
+    // big cloud SAF tree (up to 5000 queries) can legitimately take a while;
+    // this only stops a stalled provider hanging the worker forever.
+    this.folderBulkTimeout = const Duration(seconds: 120),
+  }) : _ch = channel ?? const MethodChannel(channelName);
+
+  /// Deadline for the cheap `folder.reachable` probe. A timeout means
+  /// "unknown", never "gone" (see `SystemFolderSource.isReachable`).
+  final Duration folderCallTimeout;
+
+  /// Ceiling for `folder.list` / `folder.fetch`, which run on the native
+  /// single worker thread: one stalled provider read must not hang every later
+  /// sync and the disconnect-and-wipe behind it.
+  final Duration folderBulkTimeout;
 
   static const channelName = 'app.dhruva/connectors';
   final MethodChannel _ch;
@@ -111,14 +126,18 @@ class ConnectorsChannel {
   }
 
   Future<bool> folderReachable(String grantId) async =>
-      (await _ch.invokeMethod<bool>('folder.reachable', {'id': grantId})) ??
+      (await _ch
+          .invokeMethod<bool>('folder.reachable', {'id': grantId})
+          .timeout(folderCallTimeout)) ??
       false;
 
   Future<List<FolderEntry>> listFolder(String grantId, int maxFiles) async {
-    final raw = await _ch.invokeListMethod<Object?>('folder.list', {
-      'id': grantId,
-      'maxFiles': maxFiles,
-    });
+    final raw = await _ch
+        .invokeListMethod<Object?>('folder.list', {
+          'id': grantId,
+          'maxFiles': maxFiles,
+        })
+        .timeout(folderBulkTimeout);
     final out = <FolderEntry>[];
     for (final m in raw ?? const <Object?>[]) {
       if (m is! Map) continue;
@@ -147,14 +166,18 @@ class ConnectorsChannel {
     int maxBytes,
   ) async {
     try {
-      await _ch.invokeMethod<void>('folder.fetch', {
-        'id': grantId,
-        'entryId': entryId,
-        'dest': destPath,
-        'maxBytes': maxBytes,
-      });
+      await _ch
+          .invokeMethod<void>('folder.fetch', {
+            'id': grantId,
+            'entryId': entryId,
+            'dest': destPath,
+            'maxBytes': maxBytes,
+          })
+          .timeout(folderBulkTimeout);
     } on PlatformException catch (e) {
       throw FolderFetchException(e.message ?? e.code);
+    } on TimeoutException {
+      throw const FolderFetchException('The folder took too long to answer');
     }
   }
 
@@ -377,6 +400,8 @@ class SystemFolderSource implements FolderSource {
     } on PlatformException {
       return false;
     }
+    // A TimeoutException propagates on purpose: "didn't answer" is UNKNOWN,
+    // and callers must not treat it as a revoked grant.
   }
 
   @override

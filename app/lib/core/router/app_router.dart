@@ -229,6 +229,7 @@ final appRouter = GoRouter(
             initialDraft: q.draft,
             initialSources: q.sources,
             focusItemIds: q.focus,
+            about: q.about,
           ),
         );
       },

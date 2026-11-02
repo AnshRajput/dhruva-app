@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -33,6 +34,9 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var initial: Map<String, Any>? = null
+    // Token of the PROCESS_TEXT request whose payload Dart last received; the
+    // result may only be delivered back to that same request.
+    private var activeToken: String? = null
 
     companion object {
         // "Hide content in app switcher" (Settings > Privacy). Process-wide so a
@@ -104,6 +108,14 @@ class MainActivity : FlutterActivity() {
     // owns shortcut routing.
     override fun getInitialRoute(): String = "/"
 
+    // Engine shell switches (e.g. trace-to-file) must not come from the intent
+    // of any app that can reach this exported activity: defaults only.
+    override fun getFlutterShellArgs(): FlutterShellArgs = FlutterShellArgs(emptyArray<String>())
+
+    // The default pushes any caller's intent data URI to go_router on onNewIntent,
+    // bypassing the IntentInbox allowlist. Routing goes only through `extract`.
+    override fun shouldHandleDeeplinking(): Boolean = false
+
     // singleTop: a share/shortcut while the app is open lands here, not onCreate.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -125,7 +137,7 @@ class MainActivity : FlutterActivity() {
             result.error("empty", "Nothing to send back", null)
         } else if (text.length > MAX_RESULT_CHARS) {
             result.error("too_long", "Result is too long to send back", null)
-        } else if (!ProcessTextBridge.deliver(text)) {
+        } else if (!ProcessTextBridge.deliver(text, activeToken)) {
             result.error("not_replaceable", "The app you selected in is gone", null)
         } else {
             result.success(true)
@@ -191,8 +203,10 @@ class MainActivity : FlutterActivity() {
         if (!text.isNullOrBlank()) {
             // Replaceable only with the trampoline's one-time token: an exported
             // activity must not trust a bare `replaceable` extra from any app.
+            val tokenExtra = intent?.getStringExtra(ProcessTextBridge.EXTRA_TOKEN)
             val replaceable = intent?.action == Intent.ACTION_PROCESS_TEXT &&
-                ProcessTextBridge.accepts(intent.getStringExtra(ProcessTextBridge.EXTRA_TOKEN))
+                ProcessTextBridge.accepts(tokenExtra)
+            activeToken = if (replaceable) tokenExtra else null
             return mapOf("text" to text, "replaceable" to replaceable)
         }
         return intent?.getStringExtra("route")?.let { mapOf("route" to it) }

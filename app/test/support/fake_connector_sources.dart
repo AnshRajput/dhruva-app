@@ -91,6 +91,9 @@ class FakeContactsSource implements ContactsSource {
 class FakeFolderSource implements FolderSource {
   FolderGrant? nextPick;
   bool reachable = true;
+
+  /// The reachability probe never answers in time (TimeoutException).
+  bool reachableTimesOut = false;
   bool failList = false;
   bool failRelease = false;
   bool ignoreMaxFiles = false;
@@ -123,7 +126,10 @@ class FakeFolderSource implements FolderSource {
   Future<FolderGrant?> pick() async => nextPick;
 
   @override
-  Future<bool> isReachable(String grantId) async => reachable;
+  Future<bool> isReachable(String grantId) async {
+    if (reachableTimesOut) throw TimeoutException('probe');
+    return reachable;
+  }
 
   @override
   Future<List<FolderEntry>> list(

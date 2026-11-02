@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/connectors/system_sources.dart';
 import 'package:flutter/foundation.dart';
@@ -130,6 +132,26 @@ void main() {
       expect((await channel.pickFolder())!.name, 'Folder');
     });
 
+    test(
+      'a folder call that never answers times out instead of hanging',
+      () async {
+        final slow = ConnectorsChannel(
+          channel: mc,
+          folderCallTimeout: const Duration(milliseconds: 50),
+          folderBulkTimeout: const Duration(milliseconds: 50),
+        );
+        handler = (_) => Completer<Object?>().future;
+        await expectLater(
+          slow.fetchFolderFile('tree:1', 'doc', '/tmp/x.bin', 1024),
+          throwsA(isA<FolderFetchException>()),
+        );
+        await expectLater(
+          slow.listFolder('tree:1', 10),
+          throwsA(isA<TimeoutException>()),
+        );
+      },
+    );
+
     test('list passes the cap and drops malformed entries', () async {
       handler = (_) => [
         {'id': 'a', 'name': 'a.txt', 'size': 3, 'modified': 5},
@@ -167,6 +189,37 @@ void main() {
               contains('granted folder'),
             ),
           ),
+        );
+      },
+    );
+
+    test('a list slower than the probe deadline but under the ceiling still '
+        'succeeds (scaled: probe 50ms, ceiling 2s, list 300ms)', () async {
+      final ch = ConnectorsChannel(
+        channel: mc,
+        folderCallTimeout: const Duration(milliseconds: 50),
+        folderBulkTimeout: const Duration(seconds: 2),
+      );
+      handler = (_) => Future<Object?>.delayed(
+        const Duration(milliseconds: 300),
+        () => [
+          {'id': 'a', 'name': 'a.txt', 'size': 3, 'modified': 5},
+        ],
+      );
+      expect((await ch.listFolder('tree:1', 10)).map((e) => e.id), ['a']);
+    });
+
+    test(
+      'SystemFolderSource: a probe timeout is unknown, not "gone"',
+      () async {
+        final ch = ConnectorsChannel(
+          channel: mc,
+          folderCallTimeout: const Duration(milliseconds: 50),
+        );
+        handler = (_) => Completer<Object?>().future;
+        await expectLater(
+          SystemFolderSource(ch).isReachable('g'),
+          throwsA(isA<TimeoutException>()),
         );
       },
     );
