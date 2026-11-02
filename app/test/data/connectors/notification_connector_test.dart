@@ -499,6 +499,25 @@ void main() {
       expect('${item.title} ${item.body}', isNot(contains('731942')));
     });
 
+    test('each drain writes its own ledger row with its own count; empty '
+        'drains between them write none', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      live().writeAsStringSync(
+        [line(text: 'one'), line(text: 'two'), line(text: 'three')].join('\n'),
+      );
+      await kit.hub.notifications.sync();
+      await kit.hub.notifications.sync(); // nothing queued
+      live().writeAsStringSync(
+        [line(text: 'four'), line(text: 'five')].join('\n'),
+      );
+      await kit.hub.notifications.sync();
+      final reads = (await kit.hub.store.ledger(
+        connector: 'notifications',
+      )).where((e) => e.action == LedgerAction.read);
+      expect(reads.map((e) => e.count), [2, 3]); // newest first
+    });
+
     test('an empty drain leaves no "Read 0" ledger row but still counts as '
         'a sync', () async {
       kit.notifications.granted = true;

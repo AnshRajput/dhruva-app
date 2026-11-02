@@ -30,11 +30,6 @@ class NotificationConnector extends BaseConnector {
 
   final NotificationAccess access;
 
-  // Drained on every resume, Inbox open and pull-to-refresh: an empty drain is
-  // not worth a ledger row.
-  @override
-  bool get logEmptyReads => false;
-
   @override
   String get id => ConnectorIds.notifications;
 

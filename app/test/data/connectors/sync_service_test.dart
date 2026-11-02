@@ -64,6 +64,15 @@ void main() {
     expect(reads, hasLength(2));
   });
 
+  test('a sync that read nothing writes no "Read 0" ledger row', () async {
+    kit.calendar.items = [];
+    await kit.hub.calendar.connect();
+    await kit.hub.sync.refresh();
+    final ledger = await kit.hub.store.ledger(connector: 'calendar');
+    expect(ledger.map((e) => e.action), [LedgerAction.connect]);
+    expect((await kit.hub.store.account('calendar'))!.lastSyncAt, isNotNull);
+  });
+
   test('one failing source does not stop the others', () async {
     await kit.hub.calendar.connect();
     await kit.hub.contacts.connect();
