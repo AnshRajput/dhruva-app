@@ -18,6 +18,7 @@ import 'package:dhruva/features/inbox/state/inbox_grouping.dart';
 import 'package:dhruva/features/inbox/state/inbox_summarizer.dart';
 import 'package:dhruva/features/inbox/ui/inbox_item_screen.dart';
 import 'package:dhruva/features/inbox/ui/inbox_screen.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -554,6 +555,126 @@ void main() {
       await until(() => s.done.isNotEmpty);
       expect(s.done, [item.id]);
       s.dispose();
+    });
+
+    test('a voice model is never picked to write with', () async {
+      final item = await seed('Sana shared v4');
+      // The voice model was used most recently, so it sorts first.
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'sherpa-voice/whisper-tiny',
+              fileName: 'whisper.onnx',
+              sizeBytes: 100,
+              localPath: '/models/whisper.onnx',
+              downloadedAt: DateTime(2026, 11, 1),
+              lastUsedAt: Value(DateTime(2026, 11, 2)),
+            ),
+          );
+      final s = container.read(inboxSummarizerProvider);
+      s.request(item);
+      await until(() => s.done.isNotEmpty);
+      expect(s.done, [item.id]);
+      final saved =
+          (await container
+                  .read(connectorStoreProvider)
+                  .itemsOf('notifications'))
+              .single;
+      expect(saved.summaryModel, 'model.gguf');
+    });
+
+    test(
+      'a model another feature already loaded is used, not swapped',
+      () async {
+        final item = await seed('Sana shared v4');
+        await engine.load('/models/other.gguf');
+        final s = container.read(inboxSummarizerProvider);
+        s.request(item);
+        await until(() => s.done.isNotEmpty);
+        expect(s.done, [item.id]);
+        expect(engine.loadCount, 1);
+        expect(engine.unloadCount, 0);
+        expect(engine.isLoaded, isTrue); // not ours to unload
+      },
+    );
+
+    test('a summary cut short by opening a row is written after returning, '
+        'not lost', () async {
+      final slow = FakeEngineService(
+        scriptedTokens: ['"Sana wants ', 'notes."'],
+        tokenDelay: const Duration(milliseconds: 40),
+      );
+      final c = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          engineServiceProvider.overrideWithValue(slow),
+          deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
+        ],
+      );
+      addTearDown(c.dispose);
+      final store = c.read(connectorStoreProvider);
+      await store.saveAccount('notifications');
+      await store.upsertItems('notifications', [
+        _draft('1', pkg: 'a', app: 'Slack', at: DateTime.now(), body: 'hi'),
+      ]);
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'org/model',
+              fileName: 'model.gguf',
+              sizeBytes: 100,
+              localPath: '/models/model.gguf',
+              downloadedAt: DateTime(2026, 11, 1),
+            ),
+          );
+      final item = (await store.itemsOf('notifications')).single;
+      final s = c.read(inboxSummarizerProvider);
+      s.request(item);
+      await until(() => slow.generateCount > 0);
+      s.pause(); // the user opened the row: generation is cancelled
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(s.done, isEmpty);
+      s.resume(); // back on the list
+      await until(() => s.done.isNotEmpty);
+      expect(s.done, [item.id]);
+      expect(slow.generateCount, 2);
+    });
+
+    test('a failing model is not retried in a hot loop', () async {
+      final bad = FakeEngineService(
+        generateFailure: const EngineStateFailure('boom'),
+        tokenDelay: Duration.zero,
+      );
+      final c = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          engineServiceProvider.overrideWithValue(bad),
+          deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
+        ],
+      );
+      addTearDown(c.dispose);
+      final store = c.read(connectorStoreProvider);
+      await store.saveAccount('notifications');
+      await store.upsertItems('notifications', [
+        _draft('1', pkg: 'a', app: 'Slack', at: DateTime.now(), body: 'hi'),
+      ]);
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'org/model',
+              fileName: 'model.gguf',
+              sizeBytes: 100,
+              localPath: '/models/model.gguf',
+              downloadedAt: DateTime(2026, 11, 1),
+            ),
+          );
+      final item = (await store.itemsOf('notifications')).single;
+      c.read(inboxSummarizerProvider).request(item);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(bad.generateCount, 1); // the retry waits for its timer
     });
 
     test('no installed model: rows simply keep their raw text', () async {

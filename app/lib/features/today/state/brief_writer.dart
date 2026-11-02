@@ -55,10 +55,7 @@ class EngineBriefWriter implements BriefWriter {
     if (_ref.read(engineServiceProvider).isLoaded) {
       return BriefModelStatus.ready;
     }
-    final models = await _ref
-        .read(storageManagerProvider)
-        .listInstalledModels();
-    final usable = models.where((m) => !m.repoId.startsWith('sherpa-voice/'));
+    final usable = await _ref.read(storageManagerProvider).listTextModels();
     return usable.isEmpty ? BriefModelStatus.none : BriefModelStatus.idle;
   }
 
@@ -74,9 +71,7 @@ class EngineBriefWriter implements BriefWriter {
       );
     }
     final storage = _ref.read(storageManagerProvider);
-    final models = (await storage.listInstalledModels())
-        .where((m) => !m.repoId.startsWith('sherpa-voice/'))
-        .toList();
+    final models = await storage.listTextModels();
     if (models.isEmpty) {
       throw const BriefUnavailable('Download a model to write your brief.');
     }

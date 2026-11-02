@@ -9,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/di/connector_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
