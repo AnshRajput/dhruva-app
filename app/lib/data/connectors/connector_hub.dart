@@ -131,7 +131,7 @@ final class ConnectorHub {
     return ConnectorHub.fromSources(
       db: db,
       calendar: SystemCalendarSource(channel),
-      contacts: const SystemContactsSource(),
+      contacts: SystemContactsSource(channel),
       folder: SystemFolderSource(channel),
       notifications: SystemNotificationAccess(channel),
       isCharging: chargingProbe(channel),

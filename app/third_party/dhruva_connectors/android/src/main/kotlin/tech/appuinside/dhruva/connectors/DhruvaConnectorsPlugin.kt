@@ -32,6 +32,7 @@ import java.util.concurrent.Executors
  * that as "needs the app open".
  *
  * Methods: calendar.permission | calendar.request | calendar.events,
+ * permission.asked | markAsked | rationale (calendar, contacts),
  * app.settings, apps.launch, folder.pick | reachable | list | fetch | open |
  * release,
  * notifications.granted | settings | capture | excluded | queueDir,
@@ -94,6 +95,12 @@ class DhruvaConnectorsPlugin :
             when (call.method) {
                 "calendar.permission" -> result.success(calendarPermission())
                 "calendar.request" -> requestCalendar(result)
+                "permission.asked" -> result.success(ConnectorPrefs.asked(context, permissionName(call)))
+                "permission.markAsked" -> {
+                    ConnectorPrefs.setAsked(context, permissionName(call))
+                    result.success(null)
+                }
+                "permission.rationale" -> result.success(rationale(permissionName(call)))
                 "calendar.events" -> background(result) {
                     CalendarReader.events(
                         context,
@@ -191,17 +198,27 @@ class DhruvaConnectorsPlugin :
 
     // ---- calendar (READ_CALENDAR only) ----------------------------------------------
 
-    private fun calendarPermission(): String {
+    /** Raw grant state. Whether a denial is final is Dart's call (PermissionGate). */
+    private fun calendarPermission(): String =
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) ==
             PackageManager.PERMISSION_GRANTED
-        ) return "granted"
-        if (!ConnectorPrefs.calendarAsked(context)) return "notDetermined"
-        val a = activity
-        // Asked before and the system would still show the prompt: not final.
-        if (a != null && ActivityCompat.shouldShowRequestPermissionRationale(a, Manifest.permission.READ_CALENDAR)) {
-            return "notDetermined"
-        }
-        return "denied"
+        ) "granted" else "denied"
+
+    private fun permissionName(call: MethodCall): String {
+        val n = requireArg(call, "name")
+        if (n != "calendar" && n != "contacts") throw IllegalArgumentException("Unknown permission: $n")
+        return n
+    }
+
+    /**
+     * ActivityCompat.shouldShowRequestPermissionRationale: true after a first
+     * Deny (the system will prompt again), false when never asked or when the
+     * user denied for good. False too with no Activity (background engine).
+     */
+    private fun rationale(name: String): Boolean {
+        val a = activity ?: return false
+        val perm = if (name == "calendar") Manifest.permission.READ_CALENDAR else Manifest.permission.READ_CONTACTS
+        return ActivityCompat.shouldShowRequestPermissionRationale(a, perm)
     }
 
     private fun requestCalendar(result: MethodChannel.Result) {
@@ -216,7 +233,6 @@ class DhruvaConnectorsPlugin :
         }
         pendingCalendar?.error("superseded", "Another request started.", null)
         pendingCalendar = result
-        ConnectorPrefs.setCalendarAsked(context)
         ActivityCompat.requestPermissions(a, arrayOf(Manifest.permission.READ_CALENDAR), REQ_CALENDAR)
     }
 

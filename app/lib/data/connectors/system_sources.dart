@@ -86,6 +86,21 @@ class ConnectorsChannel {
 
   Future<void> openAppSettings() => _ch.invokeMethod<void>('app.settings');
 
+  /// Android only. Whether this app has ever shown [name]'s ('calendar',
+  /// 'contacts') system prompt. Stored natively so it survives restarts.
+  Future<bool> permissionAsked(String name) async =>
+      (await _ch.invokeMethod<bool>('permission.asked', {'name': name})) ??
+      false;
+
+  Future<void> markPermissionAsked(String name) =>
+      _ch.invokeMethod<void>('permission.markAsked', {'name': name});
+
+  /// Android only: `shouldShowRequestPermissionRationale`. True after a Deny
+  /// the system will prompt again for; false when never asked or blocked.
+  Future<bool> permissionRationale(String name) async =>
+      (await _ch.invokeMethod<bool>('permission.rationale', {'name': name})) ??
+      false;
+
   Future<FolderGrant?> pickFolder() async {
     final m = await _ch.invokeMapMethod<String, Object?>('folder.pick');
     if (m == null) return null;
@@ -172,14 +187,77 @@ class ConnectorsChannel {
       (await _ch.invokeMethod<bool>('power.charging')) ?? false;
 }
 
+// ---- permission truth ------------------------------------------------------
+
+/// "Can the system still ask?" for Calendar and Contacts, decided from the
+/// platform, not from a plugin's enum: `flutter_contacts` reports plain
+/// `denied` after the very first Deny, `device_calendar_plus` reports
+/// `notDetermined`, and neither tells a retryable Deny from a blocked one.
+///
+///  * Android: not granted + never asked -> [DevicePermission.notDetermined];
+///    asked and the system would still prompt (rationale true, i.e. after the
+///    first Deny) -> notDetermined; asked and rationale false (a Deny that
+///    followed a prompt, "don't ask again", or blocked) -> denied.
+///  * iOS: the system prompts once, so the plugin's answer is already right
+///    (denied is final, only Settings can change it).
+class PermissionGate {
+  PermissionGate({
+    required this.name,
+    required this.channel,
+    required this.read,
+    required this.ask,
+    required this.android,
+  });
+
+  /// 'calendar' or 'contacts': the key for the asked flag and the permission.
+  final String name;
+  final ConnectorsChannel channel;
+  final bool android;
+
+  /// The plugin's own check / prompt. Only "granted or not" is trusted.
+  final Future<DevicePermission> Function() read;
+  final Future<DevicePermission> Function() ask;
+
+  Future<DevicePermission> status() async {
+    final raw = await read();
+    if (raw == DevicePermission.granted || !android) return raw;
+    if (!await channel.permissionAsked(name)) {
+      return DevicePermission.notDetermined;
+    }
+    return await channel.permissionRationale(name)
+        ? DevicePermission.notDetermined
+        : DevicePermission.denied;
+  }
+
+  Future<DevicePermission> request() async {
+    // Marked before the prompt: if the process dies behind it, we still know.
+    if (android) await channel.markPermissionAsked(name);
+    final raw = await ask();
+    return raw == DevicePermission.granted ? raw : status();
+  }
+}
+
 // ---- calendar ------------------------------------------------------------
 
 class SystemCalendarSource implements CalendarSource {
-  SystemCalendarSource(this._channel);
+  SystemCalendarSource(this._channel, {bool? android})
+    : _android = android ?? defaultTargetPlatform == TargetPlatform.android {
+    _gate = PermissionGate(
+      name: 'calendar',
+      channel: _channel,
+      android: _android,
+      read: () async => _android
+          ? _channel.calendarPermission()
+          : _map(await dc.DeviceCalendar.instance.hasPermissions()),
+      ask: () async => _android
+          ? _channel.requestCalendarPermission()
+          : _map(await dc.DeviceCalendar.instance.requestPermissions()),
+    );
+  }
 
   final ConnectorsChannel _channel;
-
-  bool get _android => defaultTargetPlatform == TargetPlatform.android;
+  final bool _android;
+  late final PermissionGate _gate;
 
   static DevicePermission _map(dc.CalendarPermissionStatus s) => switch (s) {
     dc.CalendarPermissionStatus.granted => DevicePermission.granted,
@@ -188,14 +266,10 @@ class SystemCalendarSource implements CalendarSource {
   };
 
   @override
-  Future<DevicePermission> permission() async => _android
-      ? _channel.calendarPermission()
-      : _map(await dc.DeviceCalendar.instance.hasPermissions());
+  Future<DevicePermission> permission() => _gate.status();
 
   @override
-  Future<DevicePermission> request() async => _android
-      ? _channel.requestCalendarPermission()
-      : _map(await dc.DeviceCalendar.instance.requestPermissions());
+  Future<DevicePermission> request() => _gate.request();
 
   @override
   Future<List<DeviceCalendarEvent>> events(DateTime from, DateTime to) async {
@@ -231,7 +305,20 @@ class SystemCalendarSource implements CalendarSource {
 // ---- contacts ------------------------------------------------------------
 
 class SystemContactsSource implements ContactsSource {
-  const SystemContactsSource();
+  SystemContactsSource(ConnectorsChannel channel, {bool? android})
+    : _gate = PermissionGate(
+        name: 'contacts',
+        channel: channel,
+        android: android ?? defaultTargetPlatform == TargetPlatform.android,
+        read: () async => _map(
+          await fc.FlutterContacts.permissions.check(fc.PermissionType.read),
+        ),
+        ask: () async => _map(
+          await fc.FlutterContacts.permissions.request(fc.PermissionType.read),
+        ),
+      );
+
+  final PermissionGate _gate;
 
   static DevicePermission _map(fc.PermissionStatus s) => switch (s) {
     fc.PermissionStatus.granted ||
@@ -241,13 +328,10 @@ class SystemContactsSource implements ContactsSource {
   };
 
   @override
-  Future<DevicePermission> permission() async =>
-      _map(await fc.FlutterContacts.permissions.check(fc.PermissionType.read));
+  Future<DevicePermission> permission() => _gate.status();
 
   @override
-  Future<DevicePermission> request() async => _map(
-    await fc.FlutterContacts.permissions.request(fc.PermissionType.read),
-  );
+  Future<DevicePermission> request() => _gate.request();
 
   @override
   Future<DeviceContact?> byEmail(String email) async {
