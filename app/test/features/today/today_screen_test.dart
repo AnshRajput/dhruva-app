@@ -48,24 +48,22 @@ String _freshCache() => jsonEncode(
 
 /// The brief's sentences as plain text.
 String _briefText(WidgetTester tester) => tester
-    .widget<RichText>(
-      find.descendant(
-        of: find.byKey(const ValueKey('today-brief-text')),
-        matching: find.byType(RichText),
-      ),
-    )
+    .widget<RichText>(_briefRichText)
     .text
     .toPlainText();
+
+// First RichText: a long brief also carries a "Read more" toggle after it.
+final _briefRichText = find
+    .descendant(
+      of: find.byKey(const ValueKey('today-brief-text')),
+      matching: find.byType(RichText),
+    )
+    .first;
 
 /// Taps the cited phrase containing [containing], the way a finger on it
 /// would (the span's own tap recognizer).
 Future<void> _tapCited(WidgetTester tester, String containing) async {
-  final rich = tester.widget<RichText>(
-    find.descendant(
-      of: find.byKey(const ValueKey('today-brief-text')),
-      matching: find.byType(RichText),
-    ),
-  );
+  final rich = tester.widget<RichText>(_briefRichText);
   TapGestureRecognizer? found;
   rich.text.visitChildren((s) {
     if (s is TextSpan &&

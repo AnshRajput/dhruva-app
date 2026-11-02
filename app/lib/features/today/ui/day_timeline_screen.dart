@@ -339,7 +339,7 @@ class _EventCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (!entry.isPast) ...[
+              if (!entry.isPast && canPrep(ev)) ...[
                 SizedBox(height: tokens.spacing.sm),
                 Align(
                   alignment: Alignment.centerRight,

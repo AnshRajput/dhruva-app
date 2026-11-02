@@ -137,18 +137,20 @@ class EventSheet extends ConsumerWidget {
           SizedBox(height: tokens.spacing.xl),
           Row(
             children: [
-              Expanded(
-                child: FilledButton.icon(
-                  key: const ValueKey('event-prep'),
-                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Prep'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    prepForEvent(context, event);
-                  },
+              if (canPrep(event)) ...[
+                Expanded(
+                  child: FilledButton.icon(
+                    key: const ValueKey('event-prep'),
+                    icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                    label: const Text('Prep'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      prepForEvent(context, event);
+                    },
+                  ),
                 ),
-              ),
-              SizedBox(width: tokens.spacing.sm),
+                SizedBox(width: tokens.spacing.sm),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   key: const ValueKey('event-open-calendar'),

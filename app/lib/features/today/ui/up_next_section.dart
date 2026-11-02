@@ -317,7 +317,7 @@ class _UpNextCard extends ConsumerWidget {
                             if (people.isNotEmpty)
                               Row(
                                 children: [
-                                  AvatarStack(people: people),
+                                  AvatarStack(people: people, showOverflow: false),
                                   SizedBox(width: tokens.spacing.sm),
                                   Expanded(
                                     child: AttendeeLine(
@@ -348,13 +348,18 @@ class _UpNextCard extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      SizedBox(width: tokens.spacing.sm),
-                      FilledButton.tonalIcon(
-                        key: const ValueKey('up-next-prep'),
-                        icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                        label: const Text('Prep'),
-                        onPressed: () => prepForEvent(context, first),
-                      ),
+                      if (canPrep(first)) ...[
+                        SizedBox(width: tokens.spacing.sm),
+                        FilledButton.tonalIcon(
+                          key: const ValueKey('up-next-prep'),
+                          icon: const Icon(
+                            Icons.auto_awesome_outlined,
+                            size: 18,
+                          ),
+                          label: const Text('Prep'),
+                          onPressed: () => prepForEvent(context, first),
+                        ),
+                      ],
                     ],
                   ),
                 ],
