@@ -157,9 +157,9 @@ void main() {
       await tester.pump();
       expect(find.byIcon(Icons.check), findsOneWidget);
       expect(find.byTooltip('Copied'), findsOneWidget);
-      // Let the copy-icon's revert timer (motion.moderate, 300ms) run out so
+      // Let the copy-icon's revert timer (1200ms) run out so
       // no pending timer trips flutter_test's end-of-test invariant check.
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 1250));
     },
   );
 
@@ -376,7 +376,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(Image), findsOneWidget);
-        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(InteractiveViewer), findsNothing);
         // Designer BLOCKING: the tap-to-view thumbnail carries a "View image"
         // tooltip + button semantics (was a bare, unlabeled GestureDetector).
         expect(find.byTooltip('View image'), findsOneWidget);
@@ -393,12 +393,12 @@ void main() {
             .onTap!();
         await tester.pumpAndSettle();
 
-        expect(find.byType(Dialog), findsOneWidget);
+        expect(find.byType(InteractiveViewer), findsOneWidget);
         expect(find.byType(InteractiveViewer), findsOneWidget);
 
         await tester.tap(find.byTooltip('Close'));
         await tester.pumpAndSettle();
-        expect(find.byType(Dialog), findsNothing);
+        expect(find.byType(InteractiveViewer), findsNothing);
       },
     );
 
@@ -424,7 +424,7 @@ void main() {
         expect(find.byIcon(Icons.check), findsOneWidget);
         // Revert timer — drain it so no pending timer trips flutter_test's
         // end-of-test invariant check.
-        await tester.pump(const Duration(milliseconds: 950));
+        await tester.pump(const Duration(milliseconds: 1250));
       },
     );
 

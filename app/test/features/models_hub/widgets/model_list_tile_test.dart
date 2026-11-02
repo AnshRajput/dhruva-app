@@ -81,7 +81,9 @@ void main() {
     expect(find.byTooltip('Download'), findsNothing);
   });
 
-  testWidgets('installed shows Chat + Delete actions', (tester) async {
+  testWidgets('installed shows a labelled Chat / Delete menu, not bare icons', (
+    tester,
+  ) async {
     await _pump(
       tester,
       const ListingModelState(
@@ -89,8 +91,15 @@ void main() {
         installedId: 1,
       ),
     );
-    expect(find.byTooltip('Chat'), findsOneWidget);
-    expect(find.byTooltip('Delete'), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete model?'), findsOneWidget);
   });
 
   testWidgets('a mobile-friendly (small) model shows the hint chip', (
@@ -213,7 +222,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Chat'));
+      await tester.tap(find.byTooltip('Model actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Chat'));
       await tester.pumpAndSettle();
 
       expect(find.text('chat-thread'), findsOneWidget);

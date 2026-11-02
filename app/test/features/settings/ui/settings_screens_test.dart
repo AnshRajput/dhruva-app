@@ -93,7 +93,6 @@ void main() {
         'settings-connectors',
         'settings-about-me',
         'settings-models',
-        'settings-appearance',
         'settings-notifications',
         'settings-privacy',
         'settings-safety',
@@ -117,7 +116,6 @@ void main() {
         ('settings-about-me', 'Name'),
         ('settings-privacy', 'There is no Dhruva server.'),
         ('settings-notifications', 'Download alerts'),
-        ('settings-appearance', 'System'),
       ]) {
         await tester.tap(find.byKey(ValueKey(key)));
         await tester.pumpAndSettle();
@@ -257,7 +255,7 @@ void main() {
       }
       expect(find.text('Hugging Face'), findsNothing); // inside body text
       expect(find.textContaining('Hugging Face'), findsOneWidget);
-      expect(find.text('Backups are off'), findsOneWidget);
+      expect(find.text('Cloud backup'), findsOneWidget);
       expect(find.text(backupsOffFact), findsOneWidget);
       expect(find.text(storedOnPhoneFact), findsOneWidget);
     });

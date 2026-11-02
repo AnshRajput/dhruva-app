@@ -20,6 +20,7 @@ import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/connectors/ask_sources.dart';
@@ -413,17 +414,28 @@ class _ThreadScaffold extends ConsumerWidget {
                         child: Center(
                           child: IgnorePointer(
                             ignoring: pinnedToBottom,
-                            child: AnimatedOpacity(
-                              opacity: pinnedToBottom ? 0 : 1,
+                            // Fade plus an ~8 px rise (fade only when motion is
+                            // reduced).
+                            child: AnimatedSlide(
+                              offset:
+                                  pinnedToBottom &&
+                                      !MediaQuery.disableAnimationsOf(context)
+                                  ? const Offset(0, 0.2)
+                                  : Offset.zero,
                               duration: tokens.motion.fast,
                               curve: tokens.motion.standard,
-                              child: FilledButton.icon(
-                                onPressed: onScrollToBottom,
-                                icon: const Icon(
-                                  Icons.arrow_downward,
-                                  size: 16,
+                              child: AnimatedOpacity(
+                                opacity: pinnedToBottom ? 0 : 1,
+                                duration: tokens.motion.fast,
+                                curve: tokens.motion.standard,
+                                child: FilledButton.icon(
+                                  onPressed: onScrollToBottom,
+                                  icon: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 16,
+                                  ),
+                                  label: const Text('New message'),
                                 ),
-                                label: const Text('New message'),
                               ),
                             ),
                           ),
@@ -1024,7 +1036,7 @@ class _SearchInRow extends ConsumerWidget {
           focusTitles: d.focusTitles,
         ),
         onTap: () => unawaited(
-          showModalBottomSheet<void>(
+          showDhruvaSheet<void>(
             context: context,
             showDragHandle: true,
             useSafeArea: true,

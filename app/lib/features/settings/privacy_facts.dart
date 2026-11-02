@@ -65,6 +65,19 @@ const storedOnPhoneFact =
     'notifications) is read into a private index here too. Clear chats under '
     'Privacy; revoke a connector to delete its copy.';
 
+/// [storedOnPhoneFact] for [platform]: notifications can only be connected on
+/// Android, so iOS never reads about them.
+String storedOnPhoneFor(TargetPlatform platform) =>
+    platform == TargetPlatform.android
+    ? storedOnPhoneFact
+    : storedOnPhoneFact.replaceFirst(', notifications)', ')');
+
+/// What the Connectors row lists, for [platform].
+String connectorsSummaryFor(TargetPlatform platform) =>
+    platform == TargetPlatform.android
+    ? 'Calendar, contacts, folder, notifications'
+    : 'Calendar, contacts, folder';
+
 /// Why backups are off, including the trade-off.
 const backupsOffFact =
     'Backups are off. Android and iOS cloud backups and device transfers '

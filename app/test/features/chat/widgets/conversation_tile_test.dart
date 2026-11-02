@@ -101,9 +101,8 @@ void main() {
     expect((await repo.getConversation(id))!.folderId, folderId);
   });
 
-  testWidgets('delete via menu removes the conversation after confirmation', (
-    tester,
-  ) async {
+  testWidgets('delete via menu: no confirm dialog, an Undo snackbar, and the '
+      'conversation goes after the undo window', (tester) async {
     final id = await repo.createConversation(title: 'Alpha');
     await container.read(conversationListControllerProvider.future);
     final convo = (await repo.getConversation(id))!;
@@ -113,10 +112,42 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete').last); // confirm dialog button
-    await tester.pumpAndSettle();
 
+    expect(find.byType(AlertDialog), findsNothing, reason: 'no confirm');
+    expect(find.text('Conversation deleted'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    // Still stored during the window...
+    expect(await repo.getConversation(id), isNotNull);
+    // ...and gone once it closes.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
     expect(await repo.getConversation(id), isNull);
+  });
+
+  testWidgets('Undo cancels the delete', (tester) async {
+    final id = await repo.createConversation(title: 'Alpha');
+    await container.read(conversationListControllerProvider.future);
+    final convo = (await repo.getConversation(id))!;
+
+    await tester.pumpWidget(buildApp(convo, const []));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+
+    expect(await repo.getConversation(id), isNotNull);
+    final state = container.read(conversationListControllerProvider).value!;
+    expect(state.conversations.map((c) => c.id), contains(id));
   });
 
   testWidgets('tapping the tile navigates to the thread route', (tester) async {

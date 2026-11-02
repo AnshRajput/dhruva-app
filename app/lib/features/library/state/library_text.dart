@@ -15,6 +15,18 @@ String unreadableReason(String problem) => switch (problem) {
   _ => 'Could not be read',
 };
 
+/// What the user can do about it, for the same `problem` codes.
+String unreadableFix(String problem) => switch (problem) {
+  'tooLarge' => 'Save a smaller copy or split it into parts.',
+  'tooLong' => 'Split it into shorter files.',
+  'empty' => 'Nothing to do, or add text to it.',
+  'noText' => 'Export a text version, or save it as a searchable PDF.',
+  'encrypted' => 'Remove the password and save a copy.',
+  'unsupported' => 'Save it as PDF, Markdown or plain text.',
+  'unsafe' => 'Save a fresh copy and try again.',
+  _ => 'Save a fresh copy and try again.',
+};
+
 /// "PDF", "MD", "TXT" for the tile on a document row.
 String fileBadge(String name) {
   final dot = name.lastIndexOf('.');

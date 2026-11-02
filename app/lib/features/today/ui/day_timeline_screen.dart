@@ -61,10 +61,11 @@ class DayTimelineScreen extends ConsumerWidget {
                 NextStepCard(
                   icon: Icons.timeline_rounded,
                   title: 'Nothing on your day yet',
+                  // Notifications are Android-only: no mention on iOS.
                   body:
-                      'Meetings from your calendar show up here as a timeline, '
-                      'with your notifications in between. It needs no sign-in '
-                      'and never leaves this phone.',
+                      'Meetings from your calendar show up here as a timeline'
+                      '${Theme.of(context).platform == TargetPlatform.iOS ? '' : ', with your notifications in between'}'
+                      '. It needs no sign-in and never leaves this phone.',
                   actionLabel: 'Connect your calendar',
                   actionKey: const ValueKey('day-connect-calendar'),
                   onAction: () async {
@@ -339,7 +340,7 @@ class _EventCard extends StatelessWidget {
                   ),
                 ),
               ],
-              if (!entry.isPast) ...[
+              if (!entry.isPast && canPrep(ev)) ...[
                 SizedBox(height: tokens.spacing.sm),
                 Align(
                   alignment: Alignment.centerRight,

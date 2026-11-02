@@ -1,12 +1,8 @@
-/// Loop 6 QA: pins the deliberate design split flagged in the
-/// [flutter-core → qa-tester, reviewer] HANDOFF — `storage_controller.dart`
-/// (Models hub "Installed" tab) filters out `sherpa-voice/` rows so voice
-/// models don't pollute the GGUF list, but `storageSummaryProvider`
-/// (Settings' storage section) deliberately does NOT filter, because it's
-/// meant to report real disk usage. No existing test covered either
-/// direction of this contract; this file locks in the "don't filter here"
-/// half (`storage_controller_test.dart` locks in the "do filter there"
-/// half).
+/// Pins ONE counting rule across the app: `storage_controller.dart` (Models hub
+/// "Installed" tab) and `storageSummaryProvider` (Settings' storage line) both
+/// count language models only. Voice files (`sherpa-voice/`) are reported
+/// separately, so Settings never says "4 models" over an Installed tab that
+/// says "1 installed" (wave 4 re-audit, issue 7).
 library;
 
 import 'package:dhruva/core/device_info/device_info_service.dart';
@@ -42,8 +38,8 @@ void main() {
   });
 
   test(
-    'unlike the Models hub Installed tab, Settings\' storage summary DOES '
-    'count sherpa-voice/ (voice model) bytes — real disk usage, by design',
+    'one counting rule: the storage summary counts language models only, and '
+    'reports sherpa-voice/ bytes apart (they are not "models")',
     () async {
       await db
           .into(db.installedModels)
@@ -70,8 +66,9 @@ void main() {
 
       final summary = await container.read(storageSummaryProvider.future);
 
-      expect(summary.modelCount, 2);
-      expect(summary.totalBytes, 300);
+      expect(summary.modelCount, 1);
+      expect(summary.totalBytes, 100);
+      expect(summary.voiceBytes, 200);
     },
   );
 }

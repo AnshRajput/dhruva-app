@@ -35,6 +35,18 @@ class _FailedController extends ListingDownloadController {
   };
 }
 
+class _InstalledController extends ListingDownloadController {
+  _InstalledController(this.repoId);
+  final String repoId;
+  @override
+  Future<Map<String, ListingModelState>> build() async => {
+    repoId: const ListingModelState(
+      status: ListingModelStatus.installed,
+      installedId: 1,
+    ),
+  };
+}
+
 const _fakeDeviceInfo = FakeDeviceInfoService(
   memory: DeviceMemoryInfo(totalBytes: 8000000000, availableBytes: 4000000000),
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
@@ -146,6 +158,101 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text(reason), findsOneWidget);
+  });
+
+  testWidgets('an installed model says so on its Discover card', (
+    tester,
+  ) async {
+    final model = starterModelCatalog.first;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listingDownloadControllerProvider.overrideWith(
+            () => _InstalledController(model.repoId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: CuratedModelCard(model: model, totalRamBytes: 8000000000),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Installed'), findsOneWidget);
+  });
+
+  testWidgets('an installed card offers a labelled Chat / Delete menu, not '
+      'bare icons', (tester) async {
+    final model = starterModelCatalog.first;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listingDownloadControllerProvider.overrideWith(
+            () => _InstalledController(model.repoId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: CuratedModelCard(model: model, totalRamBytes: 8000000000),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete model?'), findsOneWidget);
+    expect(find.textContaining(model.displayName), findsWidgets);
+  });
+
+  testWidgets('a not-installed card has no Installed badge', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listingDownloadControllerProvider.overrideWith(_StubController.new),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: CuratedModelCard(
+              model: starterModelCatalog.first,
+              totalRamBytes: 8000000000,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Installed'), findsNothing);
+  });
+
+  testWidgets('Comfortable is said once (the pick), not on every card', (
+    tester,
+  ) async {
+    await _pumpTab(tester);
+    expect(find.text('Comfortable'), findsOneWidget);
+  });
+
+  testWidgets('one pick and two alternatives up front, the rest under '
+      '"More models"', (tester) async {
+    await _pumpTab(tester);
+    final more = find.byKey(const ValueKey('discover-more-models'));
+    final fitting = starterModelCatalog.length;
+    expect(fitting, greaterThan(3));
+    expect(more, findsOneWidget);
+    expect(find.byType(CuratedModelCard).evaluate().length, 3);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.byType(CuratedModelCard).evaluate().length, greaterThan(3));
   });
 
   testWidgets('a vision entry carries a Vision badge', (tester) async {

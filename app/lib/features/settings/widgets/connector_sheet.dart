@@ -4,6 +4,7 @@
 /// permission page, because an app cannot revoke an OS grant itself).
 library;
 
+import 'package:flutter/cupertino.dart' show CupertinoDialogAction;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +12,7 @@ import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/folder_index_status.dart';
 import '../state/connector_copy.dart';
@@ -19,7 +21,7 @@ import 'settings_widgets.dart';
 Future<void> showConnectorSheet(
   BuildContext context, {
   required String connectorId,
-}) => showModalBottomSheet<void>(
+}) => showDhruvaSheet<void>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
@@ -34,29 +36,48 @@ Future<DisconnectChoice> confirmDisconnect(
   BuildContext context,
   ConnectorCopy copy,
 ) async {
-  final choice = await showDialog<DisconnectChoice>(
+  // Platform chrome (Rule 6): a Cupertino alert on iOS (actions stack, so the
+  // long label no longer wraps awkwardly), the Material dialog on Android.
+  final cupertino = Theme.of(context).platform == TargetPlatform.iOS;
+  Widget action(
+    Key? key,
+    String label,
+    DisconnectChoice value, {
+    bool primary = false,
+  }) {
+    void pick() => Navigator.pop(context, value);
+    if (cupertino) {
+      return CupertinoDialogAction(
+        key: key,
+        isDefaultAction: primary,
+        isDestructiveAction: primary,
+        onPressed: pick,
+        child: Text(label),
+      );
+    }
+    return primary
+        ? FilledButton(key: key, onPressed: pick, child: Text(label))
+        : TextButton(key: key, onPressed: pick, child: Text(label));
+  }
+
+  final choice = await showAdaptiveDialog<DisconnectChoice>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => AlertDialog.adaptive(
       title: Text('Disconnect ${copy.name}?'),
       content: Text(copy.disconnectEffect),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, DisconnectChoice.cancel),
-          child: const Text('Cancel'),
-        ),
+        action(null, 'Cancel', DisconnectChoice.cancel),
         if (copy.hasOsPermission)
-          TextButton(
-            key: const ValueKey('disconnect-and-settings'),
-            onPressed: () => Navigator.pop(
-              context,
-              DisconnectChoice.disconnectAndOpenSettings,
-            ),
-            child: const Text('Disconnect and open system settings'),
+          action(
+            const ValueKey('disconnect-and-settings'),
+            'Disconnect and open Settings',
+            DisconnectChoice.disconnectAndOpenSettings,
           ),
-        FilledButton(
-          key: const ValueKey('disconnect-confirm'),
-          onPressed: () => Navigator.pop(context, DisconnectChoice.disconnect),
-          child: const Text('Disconnect'),
+        action(
+          const ValueKey('disconnect-confirm'),
+          'Disconnect',
+          DisconnectChoice.disconnect,
+          primary: true,
         ),
       ],
     ),
@@ -444,7 +465,7 @@ class _NotificationsSection extends ConsumerWidget {
               'Notifications from these apps are never saved.',
             ),
             trailing: const Icon(Icons.chevron_right, size: 20),
-            onTap: () => showModalBottomSheet<void>(
+            onTap: () => showDhruvaSheet<void>(
               context: context,
               isScrollControlled: true,
               useSafeArea: true,

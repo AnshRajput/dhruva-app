@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/dhruva_theme_extension.dart';
+import '../widgets/dhruva_sheet.dart';
 
 /// Placeholder for any markdown image. The [uri] is never touched. Local and
 /// remote URIs are treated alike: the app has no feature that needs
@@ -73,7 +74,7 @@ Future<void> confirmAndOpenMarkdownLink(
 }) async {
   final uri = parseOpenableLink(href);
   if (uri == null) return;
-  final ok = await showModalBottomSheet<bool>(
+  final ok = await showDhruvaSheet<bool>(
     context: context,
     useSafeArea: true,
     showDragHandle: true,

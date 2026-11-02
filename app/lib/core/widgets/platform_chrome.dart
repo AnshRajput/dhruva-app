@@ -4,7 +4,9 @@
 /// - Android: Material 3 Expressive. Pill nav indicator, stadium shapes, all
 ///   from the theme (`AppTheme`, radius token `full`). Chrome here is plain
 ///   solid surfaces.
-/// - iOS: Cupertino-feel chrome with a translucent bar.
+/// - iOS: Cupertino-feel chrome: a floating pill tab bar with a selected-tab
+///   pill (`comps/today-ios.png`) and an app bar that turns translucent once
+///   content scrolls under it.
 ///
 /// IMPORTANT, honest naming: the iOS translucent bars are an APPROXIMATION of
 /// Apple's Liquid Glass (iOS 26). Flutter has no first-party API for the real
@@ -28,7 +30,11 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../theme/app_theme.dart' show overlayStyleFor;
 import '../theme/appearance_providers.dart';
+import '../theme/design_tokens.dart';
+import '../theme/dhruva_theme_extension.dart';
+import 'pressable_scale.dart';
 
 /// True when the platform wants Cupertino-feel chrome.
 bool isCupertinoChrome(BuildContext context) =>
@@ -103,9 +109,12 @@ class GlassChrome extends StatelessWidget {
 
 enum GlassEdge { top, bottom }
 
-/// Bottom tab bar chrome. Wrap a `NavigationBar` in this; on iOS the bar
-/// loses its pill indicator (Cupertino tab bars tint the icon instead) and
-/// goes transparent so the glass layer shows through.
+/// Bottom tab bar chrome. Android: the Material 3 `NavigationBar` with its
+/// pill indicator (from the theme). iOS: a FLOATING PILL (inset from the screen
+/// edges, fully rounded) with a selected-tab pill, per `comps/today-ios.png`.
+/// The pill is the one translucent layer (an approximation, see the library
+/// header); under reduce-transparency / increase-contrast it is a solid
+/// surface with a hairline.
 class AdaptiveTabBar extends ConsumerWidget {
   const AdaptiveTabBar({
     super.key,
@@ -120,42 +129,165 @@ class AdaptiveTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cupertino = isCupertinoChrome(context);
-    final glass = useGlassChrome(context, ref);
-    final theme = Theme.of(context);
-    final bar = NavigationBar(
+    if (!isCupertinoChrome(context)) {
+      return NavigationBar(
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onSelected,
+        destinations: destinations,
+      );
+    }
+    return _FloatingPillTabBar(
+      glass: useGlassChrome(context, ref),
       selectedIndex: selectedIndex,
-      onDestinationSelected: onSelected,
+      onSelected: onSelected,
       destinations: destinations,
-      backgroundColor: cupertino ? Colors.transparent : null,
-      indicatorColor: cupertino ? Colors.transparent : null,
     );
-    if (!cupertino) return bar;
-    return GlassChrome(
-      glass: glass,
-      edge: GlassEdge.top,
-      child: Theme(
-        // Cupertino-feel: selected = primary tint, no pill.
-        data: theme.copyWith(
-          navigationBarTheme: theme.navigationBarTheme.copyWith(
-            iconTheme: WidgetStateProperty.resolveWith(
-              (states) => IconThemeData(
-                color: states.contains(WidgetState.selected)
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
+  }
+}
+
+class _FloatingPillTabBar extends StatelessWidget {
+  const _FloatingPillTabBar({
+    required this.glass,
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.destinations,
+  });
+
+  final bool glass;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final List<NavigationDestination> destinations;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final radius = BorderRadius.circular(tokens.radius.full);
+    final surface = DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: glass ? 0.72 : 1),
+        borderRadius: radius,
+        border: Border.all(
+          color: scheme.onSurface.withValues(alpha: glass ? 0.12 : 0.10),
+          width: 0.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Row(
+          children: [
+            for (var i = 0; i < destinations.length; i++)
+              Expanded(
+                child: _PillTab(
+                  destination: destinations[i],
+                  selected: i == selectedIndex,
+                  onTap: () => onSelected(i),
+                ),
               ),
-            ),
+          ],
+        ),
+      ),
+    );
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: DecoratedBox(
+          // Soft lift so the pill reads as floating; it sits outside the clip.
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: 0.16),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: radius,
+            child: glass
+                ? BackdropFilter(
+                    // Modest blur (cost scales with radius).
+                    filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                    child: surface,
+                  )
+                : surface,
           ),
         ),
-        child: bar,
       ),
     );
   }
 }
 
-/// App bar for the new surfaces (Today, Inbox, Library). On iOS glass it is a
-/// translucent bar; pair it with [ChromeScaffold], which lets content scroll
-/// underneath.
+class _PillTab extends StatelessWidget {
+  const _PillTab({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final NavigationDestination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tokens = theme.extension<DhruvaTokens>()!;
+    final fg = selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    return Semantics(
+      selected: selected,
+      container: true,
+      button: true,
+      label: destination.label,
+      excludeSemantics: true,
+      child: PressableScale(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : tokens.motion.fast,
+          curve: TokenMotionCurve.decelerate,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(tokens.radius.full),
+          ),
+          child: IconTheme(
+            data: IconThemeData(color: fg, size: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (selected)
+                  destination.selectedIcon ?? destination.icon
+                else
+                  destination.icon,
+                const SizedBox(height: 2),
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: fg,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// App bar for the new surfaces (Today, Inbox, Library). On iOS it is clear at
+/// rest and fades to translucent glass once content scrolls under it; pair it
+/// with [ChromeScaffold], which lets content scroll underneath.
 class AdaptiveAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const AdaptiveAppBar({
     super.key,
@@ -183,13 +315,62 @@ class AdaptiveAppBar extends ConsumerWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: automaticallyImplyLeading,
       backgroundColor: glass ? Colors.transparent : null,
       scrolledUnderElevation: 0,
-      flexibleSpace: glass
+      // Explicit: a transparent bar would otherwise be judged "dark" and force
+      // white clock/battery on the light theme.
+      systemOverlayStyle: overlayStyleFor(Theme.of(context).brightness),
+      flexibleSpace: glass ? const _ScrollGlass() : null,
+    );
+  }
+}
+
+/// Glass that fades in only while content is scrolled under the bar.
+class _ScrollGlass extends StatefulWidget {
+  const _ScrollGlass();
+
+  @override
+  State<_ScrollGlass> createState() => _ScrollGlassState();
+}
+
+class _ScrollGlassState extends State<_ScrollGlass> {
+  ScrollNotificationObserverState? _observer;
+  bool _scrolled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _observer?.removeListener(_onScroll);
+    _observer = ScrollNotificationObserver.maybeOf(context)
+      ?..addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _observer?.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll(ScrollNotification n) {
+    // Only the primary vertical scrollable (depth 0) drives the bar.
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return;
+    final scrolled = n.metrics.extentBefore > 0;
+    if (scrolled != _scrolled && mounted) setState(() => _scrolled = scrolled);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<DhruvaTokens>()!;
+    return AnimatedSwitcher(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : tokens.motion.fast,
+      child: _scrolled
           ? const GlassChrome(
+              key: ValueKey('glass'),
               glass: true,
               edge: GlassEdge.bottom,
               child: SizedBox.expand(),
             )
-          : null,
+          : const SizedBox.expand(key: ValueKey('clear')),
     );
   }
 }

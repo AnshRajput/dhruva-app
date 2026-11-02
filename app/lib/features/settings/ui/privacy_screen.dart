@@ -24,6 +24,7 @@ class PrivacyScreen extends ConsumerWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
     final hide = ref.watch(hideInAppSwitcherProvider).value;
     final widgetTitle = ref.watch(widgetShowNextEventProvider).value;
+    final androidWidget = theme.platform == TargetPlatform.android;
 
     return SettingsPage(
       title: 'Privacy',
@@ -71,21 +72,22 @@ class PrivacyScreen extends ConsumerWidget {
           ],
         ),
         const SettingsSectionLabel('On this phone'),
-        const SettingsGroup(
+        SettingsGroup(
           children: [
             SettingsRow(
               icon: Icons.smartphone,
               title: 'What is stored',
-              subtitle: storedOnPhoneFact,
+              subtitle: storedOnPhoneFor(Theme.of(context).platform),
             ),
-            SettingsRow(
+            const SettingsRow(
               icon: Icons.lock_outline_rounded,
-              title: 'Backups are off',
+              // The body opens "Backups are off." itself.
+              title: 'Cloud backup',
               subtitle: backupsOffFact,
             ),
           ],
         ),
-        const SettingsSectionLabel('Screen and widget'),
+        SettingsSectionLabel(androidWidget ? 'Screen and widget' : 'Screen'),
         SettingsGroup(
           children: [
             SettingsSwitchRow(
@@ -99,17 +101,20 @@ class PrivacyScreen extends ConsumerWidget {
               onChanged: (v) =>
                   ref.read(hideInAppSwitcherProvider.notifier).set(v),
             ),
-            SettingsSwitchRow(
-              key: const ValueKey('widget-next-event-switch'),
-              icon: Icons.widgets_outlined,
-              title: 'Show next event title on the home widget',
-              subtitle:
-                  'Your own calendar only. The widget never shows mail or '
-                  'notifications.',
-              value: widgetTitle,
-              onChanged: (v) =>
-                  ref.read(widgetShowNextEventProvider.notifier).set(v),
-            ),
+            // The home widget exists on Android only (iOS has no widget
+            // extension), so the switch would do nothing there.
+            if (androidWidget)
+              SettingsSwitchRow(
+                key: const ValueKey('widget-next-event-switch'),
+                icon: Icons.widgets_outlined,
+                title: 'Show next event title on the home widget',
+                subtitle:
+                    'Your own calendar only. The widget never shows mail or '
+                    'notifications.',
+                value: widgetTitle,
+                onChanged: (v) =>
+                    ref.read(widgetShowNextEventProvider.notifier).set(v),
+              ),
           ],
         ),
         const SettingsSectionLabel('Your data'),

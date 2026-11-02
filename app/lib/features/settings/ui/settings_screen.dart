@@ -13,7 +13,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/identity/app_identity.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
+import '../privacy_facts.dart';
 import '../state/storage_summary_provider.dart';
+import '../widgets/appearance_section.dart';
 import '../widgets/credit_row.dart';
 import '../widgets/settings_widgets.dart';
 import '../widgets/version_text.dart';
@@ -36,7 +39,7 @@ class SettingsScreen extends StatelessWidget {
               'settings-connectors',
               Icons.link_outlined,
               'Connectors',
-              'Calendar, contacts, folder, notifications',
+              connectorsSummaryFor(Theme.of(context).platform),
               '/settings/connectors',
             ),
             _nav(
@@ -83,14 +86,9 @@ class SettingsScreen extends StatelessWidget {
         const SettingsSectionLabel('This app'),
         SettingsGroup(
           children: [
-            _nav(
-              context,
-              'settings-appearance',
-              Icons.wb_sunny_outlined,
-              'Appearance',
-              'Light, dark, or follow your phone',
-              '/settings/appearance',
-            ),
+            // Inline, not a page of its own: one control never earns a screen.
+            const AppearanceRow(key: ValueKey('settings-appearance')),
+            if (isCupertinoChrome(context)) const ReduceTransparencyRow(),
             _nav(
               context,
               'settings-notifications',
@@ -167,7 +165,8 @@ class _ModelsRow extends ConsumerWidget {
       subtitle: switch (summary) {
         AsyncData(:final value) when value.modelCount > 0 =>
           '${value.modelCount} model${value.modelCount == 1 ? '' : 's'} · '
-              '${_formatBytes(value.totalBytes)} used',
+              '${_formatBytes(value.totalBytes)} used'
+              '${value.voiceBytes > 0 ? ' · voice ${_formatBytes(value.voiceBytes)}' : ''}',
         AsyncError() => "Couldn't read storage usage",
         _ => 'Discover, installed, speed test',
       },

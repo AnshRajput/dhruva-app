@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/actions/action_prompt.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../data/workflow_catalog.dart';
 
 /// What the sheet hands back on Run: the verb, the user's text and the option.
@@ -89,7 +90,7 @@ class _WorkflowsScreenState extends State<WorkflowsScreen> {
   }
 
   Future<void> _open(BuildContext context, Workflow workflow) async {
-    final run = await showModalBottomSheet<WorkflowRun>(
+    final run = await showDhruvaSheet<WorkflowRun>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

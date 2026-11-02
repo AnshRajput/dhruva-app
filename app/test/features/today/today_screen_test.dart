@@ -47,25 +47,21 @@ String _freshCache() => jsonEncode(
 );
 
 /// The brief's sentences as plain text.
-String _briefText(WidgetTester tester) => tester
-    .widget<RichText>(
-      find.descendant(
-        of: find.byKey(const ValueKey('today-brief-text')),
-        matching: find.byType(RichText),
-      ),
+String _briefText(WidgetTester tester) =>
+    tester.widget<RichText>(_briefRichText).text.toPlainText();
+
+// First RichText: a long brief also carries a "Read more" toggle after it.
+final _briefRichText = find
+    .descendant(
+      of: find.byKey(const ValueKey('today-brief-text')),
+      matching: find.byType(RichText),
     )
-    .text
-    .toPlainText();
+    .first;
 
 /// Taps the cited phrase containing [containing], the way a finger on it
 /// would (the span's own tap recognizer).
 Future<void> _tapCited(WidgetTester tester, String containing) async {
-  final rich = tester.widget<RichText>(
-    find.descendant(
-      of: find.byKey(const ValueKey('today-brief-text')),
-      matching: find.byType(RichText),
-    ),
-  );
+  final rich = tester.widget<RichText>(_briefRichText);
   TapGestureRecognizer? found;
   rich.text.visitChildren((s) {
     if (s is TextSpan &&
@@ -247,7 +243,8 @@ void main() {
       );
       expect(
         _briefText(tester),
-        'Meera, your first meeting is Design sync at 9:30 AM with Ravi, '
+        // The greeting above already says the name: the brief doesn't repeat it.
+        'Your first meeting is Design sync at 9:30 AM with Ravi, '
         'Sana and Dev. You have 2 meetings today, from 9:30 AM to 12:00 PM. '
         'Ravi Menon on WhatsApp is waiting for a reply. You also have 7 other '
         'notifications: 4 from Swiggy and 3 from HDFC.',

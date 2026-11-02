@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
@@ -175,7 +176,7 @@ class _HitRow extends StatelessWidget {
     final paged = item.flags['pages'] != null && page is int;
     return InkWell(
       key: ValueKey('hit-${item.id}'),
-      onTap: () => showModalBottomSheet<void>(
+      onTap: () => showDhruvaSheet<void>(
         context: context,
         useSafeArea: true,
         showDragHandle: true,

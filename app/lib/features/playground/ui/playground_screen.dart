@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
 import '../../../data/hf_api/models/hf_model_summary.dart';
@@ -521,7 +522,7 @@ class _CompareBody extends ConsumerWidget {
     void Function(int) onPick,
   ) async {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-    final picked = await showModalBottomSheet<int>(
+    final picked = await showDhruvaSheet<int>(
       context: context,
       builder: (context) => SafeArea(
         child: RadioGroup<int>(

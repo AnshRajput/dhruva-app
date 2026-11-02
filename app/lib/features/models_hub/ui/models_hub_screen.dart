@@ -15,6 +15,7 @@ import 'dart:io';
 // `dart:io`/drift (see local_import.dart: "selection itself is a UI
 // concern, out of scope").
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSlidingSegmentedControl;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,10 +23,11 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/failures/failure_message.dart';
+import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
-import '../../../data/downloads/storage_manager.dart';
+import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../voice/voice_model_catalog.dart'
     show VoiceModelRole, voiceBundleEntries;
@@ -34,6 +36,7 @@ import '../state/speed_test_controller.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
 import '../widgets/curated_tab.dart';
+import '../widgets/installed_model_menu.dart';
 import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
 
@@ -55,22 +58,78 @@ class ModelsHubScreen extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Models'),
           actions: [
+            // Parity row 37: advanced Hugging Face search must be findable
+            // without scrolling to the foot of Discover.
+            IconButton(
+              key: const ValueKey('models-hf-search'),
+              icon: const Icon(Icons.travel_explore),
+              tooltip: 'Search all of Hugging Face (advanced)',
+              onPressed: () => context.push('/models/search'),
+            ),
             IconButton(
               icon: const Icon(Icons.download_outlined),
               tooltip: 'Downloads',
               onPressed: () => context.push('/models/downloads'),
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Discover'),
-              Tab(text: 'Installed'),
-              Tab(text: 'Voice'),
-            ],
-          ),
+          // Rule 6: Material underline tabs on Android, a segmented control
+          // on iOS.
+          bottom: isCupertinoChrome(context)
+              ? const _CupertinoTabs()
+              : const TabBar(
+                  tabs: [
+                    Tab(text: 'Discover'),
+                    Tab(text: 'Installed'),
+                    Tab(text: 'Voice'),
+                  ],
+                ),
         ),
         body: const TabBarView(
           children: [CuratedTab(), _InstalledTab(), _VoiceTab()],
+        ),
+      ),
+    );
+  }
+}
+
+/// The three tabs as an iOS segmented control, driven by the same
+/// `DefaultTabController` the `TabBarView` reads.
+class _CupertinoTabs extends StatelessWidget implements PreferredSizeWidget {
+  const _CupertinoTabs();
+
+  static const _labels = ['Discover', 'Installed', 'Voice'];
+
+  @override
+  Size get preferredSize => const Size.fromHeight(52);
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = DefaultTabController.of(context);
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: AnimatedBuilder(
+        animation: controller.animation!,
+        builder: (context, _) => CupertinoSlidingSegmentedControl<int>(
+          key: const ValueKey('models-tabs'),
+          groupValue: controller.index,
+          thumbColor: theme.colorScheme.primaryContainer,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          children: {
+            for (final (i, label) in _labels.indexed)
+              i: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+          },
+          onValueChanged: (i) {
+            if (i != null) controller.animateTo(i);
+          },
         ),
       ),
     );
@@ -93,21 +152,45 @@ class _VoiceTab extends ConsumerWidget {
       AsyncData(:final value) => ListView(
         children: [
           _VoiceBundleCard(states: value, onInstall: notifier.downloadBundle),
-          for (final role in VoiceModelRole.values) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                _roleLabel(role),
-                style: Theme.of(context).textTheme.labelLarge,
+          // The technical parts (model names, quantization, voice engines)
+          // live under Advanced; the primary surface stays plain words.
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('voice-advanced'),
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: Text(
+                'Advanced',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
+              subtitle: Text(
+                'Pick or remove individual voice models',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                for (final role in VoiceModelRole.values) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _roleLabel(role),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                  ),
+                  for (final s in value.where((s) => s.entry.role == role))
+                    VoiceModelTile(
+                      state: s,
+                      onDownload: () => notifier.download(s.entry),
+                      onDelete: () => notifier.delete(s.entry),
+                    ),
+                ],
+              ],
             ),
-            for (final s in value.where((s) => s.entry.role == role))
-              VoiceModelTile(
-                state: s,
-                onDownload: () => notifier.download(s.entry),
-                onDelete: () => notifier.delete(s.entry),
-              ),
-          ],
+          ),
         ],
       ),
       AsyncError(:final error) => ErrorStateView(
@@ -119,9 +202,9 @@ class _VoiceTab extends ConsumerWidget {
   }
 
   String _roleLabel(VoiceModelRole role) => switch (role) {
-    VoiceModelRole.vad => 'Turn-taking (required)',
-    VoiceModelRole.asr => 'Speech-to-text',
-    VoiceModelRole.tts => 'Text-to-speech voices',
+    VoiceModelRole.vad => 'Knows when you stop talking (required)',
+    VoiceModelRole.asr => 'Listens to you',
+    VoiceModelRole.tts => 'Speaks the answers',
   };
 }
 
@@ -179,7 +262,7 @@ class _VoiceBundleCard extends StatelessWidget {
                 SizedBox(width: tokens.spacing.sm),
                 Expanded(
                   child: Text(
-                    'Hands-free voice',
+                    'Talk hands-free',
                     style: theme.textTheme.titleMedium,
                   ),
                 ),
@@ -188,10 +271,9 @@ class _VoiceBundleCard extends StatelessWidget {
             SizedBox(height: tokens.spacing.xs),
             Text(
               allInstalled
-                  ? 'Everything hands-free needs is installed. You\'re ready '
-                        'to talk.'
-                  : 'Turn-taking, speech-to-text, and a voice — installed '
-                        'together in one tap.',
+                  ? 'Everything you need to talk is installed. You\'re ready.'
+                  : 'Talk to ${AppIdentity.shortName} and hear it answer, all on '
+                        'your phone. One tap installs everything.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -380,60 +462,24 @@ class _InstalledBody extends ConsumerWidget {
                     SpeedTestRow(model: m),
                   ],
                 ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Designer Phase B nit: the Installed tab was delete-only.
-                    // Add Chat (consistent with the Search tab's installed row)
-                    // carrying the model — `extra: <drift row id>` →
-                    // ChatRouteArgs.initialModelId — so it opens a LOADED chat.
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      tooltip: 'Chat',
-                      onPressed: () => context.push('/chat/new', extra: m.id),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete',
-                      onPressed: () => _confirmDelete(context, ref, m),
-                    ),
-                  ],
+                // A LABELLED overflow instead of two bare icons side by side
+                // (wave 4: "chat" and "trash" next to each other, unlabelled).
+                // Chat carries the model (`extra: <drift row id>` →
+                // ChatRouteArgs.initialModelId) so it opens a LOADED chat.
+                trailing: InstalledModelMenu(
+                  key: ValueKey('installed-menu-${m.id}'),
+                  onChat: () => context.push('/chat/new', extra: m.id),
+                  onDelete: () =>
+                      ref.read(storageControllerProvider.notifier).delete(m.id),
+                  deleteMessage:
+                      'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) '
+                      'from this device.',
                 ),
               ),
             ),
         ],
       ),
     );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    InstalledModelInfo m,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete model?'),
-        content: Text(
-          'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) from '
-          'this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await ref.read(storageControllerProvider.notifier).delete(m.id);
-    }
   }
 
   Future<void> _importFile(BuildContext context, WidgetRef ref) async {

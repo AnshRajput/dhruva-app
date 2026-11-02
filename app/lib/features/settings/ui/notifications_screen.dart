@@ -125,7 +125,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               title: 'Download alerts',
               subtitle:
                   'Tell me when a model finishes or fails. A progress '
-                  'notification still shows while it downloads, so Android '
+                  'notification still shows while it downloads, so your phone '
                   'keeps it running.',
               value: alerts,
               onChanged: (v) =>

@@ -79,7 +79,11 @@ void main() {
     expect(find.text('Llama 3.2 1B Instruct'), findsOneWidget);
     expect(find.text('bartowski/Llama-3.2-1B-Instruct-GGUF'), findsNothing);
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    // Chat and Delete live in a labelled overflow, not as bare icons.
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
 
     expect(find.text('Delete model?'), findsOneWidget);

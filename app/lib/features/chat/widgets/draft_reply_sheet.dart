@@ -22,6 +22,7 @@ import '../../../core/actions/action_prompt.dart';
 import '../../../core/di/connector_providers.dart' show externalOpenerProvider;
 import '../../../core/di/library_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/chat_controller.dart';
 import '../state/message_info_x.dart';
@@ -47,7 +48,7 @@ String originalMessageOf(ChatThreadState s) {
 }
 
 Future<void> showDraftReplySheet(BuildContext context, ChatRouteArgs args) =>
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/crash/crash_log.dart';
@@ -26,6 +27,8 @@ Future<void> main() async {
   // documented exception, per Loop 2/3) was deleted in Loop 4 — its
   // developer-harness role is now the real chat feature.
   WidgetsFlutterBinding.ensureInitialized();
+  // The real version, from the bundled pubspec (About line, crash log, reports).
+  await loadAppVersion();
 
   // WS2: on a fresh install, send the user into the guided onboarding flow
   // before the first frame. Read the "onboarding done" flag ONCE here (not a
@@ -41,33 +44,35 @@ Future<void> main() async {
       appVersionProvider.overrideWithValue(appVersion),
     ],
   );
-  try {
-    final done = await container.read(onboardingCompleteProvider.future);
-    if (!done) appRouter.go('/onboarding');
-  } catch (_) {
-    // Onboarding is a nicety, not a gate — fall through to Today on any error.
+  // The four startup reads are independent, so they run TOGETHER: first frame
+  // waits for the slowest, not the sum (a widget/tile launch showed a black
+  // frame for seconds). Each failure is swallowed on its own.
+  Future<void> guarded(Future<void> Function() read) async {
+    try {
+      await read();
+    } catch (_) {
+      // Every one of these is a nicety, never a gate on launch.
+    }
   }
-  try {
+
+  await Future.wait([
+    // Onboarding is a nicety, not a gate: fall through to Today on any error.
+    guarded(() async {
+      final done = await container.read(onboardingCompleteProvider.future);
+      if (!done) appRouter.go('/onboarding');
+    }),
     // Load the saved theme mode before the first frame so a user who chose
     // Light/Dark never sees a flash of the system theme.
-    await container.read(themeModeProvider.future);
-  } catch (_) {
-    // Unreadable prefs fall back to following the system.
-  }
-  try {
+    guarded(() => container.read(themeModeProvider.future)),
     // Warm the "About the user" prompt block so the first send has it.
-    await container.read(userContextProvider.future);
-  } catch (_) {
-    // Prompts just go without it.
-  }
-  try {
+    guarded(() => container.read(userContextProvider.future)),
     // "Hide content in app switcher" must be in force before the first frame
     // is ever snapshotted; DhruvaApp keeps it in sync after that.
-    final hidden = await container.read(hideInAppSwitcherProvider.future);
-    await container.read(screenPrivacyProvider).setHidden(hidden);
-  } catch (_) {
-    // Unreadable prefs fall back to off.
-  }
+    guarded(() async {
+      final hidden = await container.read(hideInAppSwitcherProvider.future);
+      await container.read(screenPrivacyProvider).setHidden(hidden);
+    }),
+  ]);
 
   runApp(
     UncontrolledProviderScope(container: container, child: const DhruvaApp()),
@@ -155,6 +160,12 @@ class DhruvaApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,
+      // Status bar style follows the theme on every route (iOS clock was
+      // invisible on light screens). AppBars carry the same style themselves.
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: overlayStyleFor(Theme.of(context).brightness),
+        child: child ?? const SizedBox.shrink(),
+      ),
       routerConfig: appRouter,
     );
   }

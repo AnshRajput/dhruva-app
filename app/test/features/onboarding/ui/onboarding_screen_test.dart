@@ -226,6 +226,27 @@ void main() {
     },
   );
 
+  testWidgets('pick step: a pick and two alternatives, the rest behind '
+      '"Other models"; the button names the cost, not a long model name', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
+
+    int cards() =>
+        find.byIcon(Icons.radio_button_checked).evaluate().length +
+        find.byIcon(Icons.radio_button_unchecked).evaluate().length;
+    expect(cards(), 3);
+    expect(find.text('Other models'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^Download · \d')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-other-models')));
+    await tester.pumpAndSettle();
+    expect(cards(), greaterThan(3));
+    expect(find.text('Other models'), findsNothing);
+  });
+
   group('connect your calendar', () {
     testWidgets('an installed model moves on to "Start with your day"', (
       tester,

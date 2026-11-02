@@ -54,7 +54,8 @@ final class _Candidate {
 String _people(List<String> names) {
   if (names.isEmpty) return '';
   if (names.length == 1) return names.first;
-  if (names.length <= 3) {
+  // "A, B, C and D" up to four names (never "and 1 others"), then a count.
+  if (names.length <= 4) {
     return '${names.sublist(0, names.length - 1).join(', ')} and '
         '${names.last}';
   }

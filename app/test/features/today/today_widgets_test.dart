@@ -4,8 +4,11 @@
 import 'dart:async';
 
 import 'package:dhruva/core/widgets/route_transition_guard.dart';
+import 'package:dhruva/features/today/state/brief_parser.dart';
+import 'package:dhruva/features/today/ui/brief_card.dart';
 import 'package:dhruva/features/today/ui/today_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -113,6 +116,44 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Go'));
       expect(taps, 1);
+    });
+  });
+
+  group('CitedText', () {
+    // Regression: ellipsis + maxLines null clipped a short brief to one line.
+    testWidgets('a 2-5 line brief renders in full, with no Read more', (
+      tester,
+    ) async {
+      const sentence = 'Your first meeting is Design sync at 9:30, with Ravi.';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 312,
+              child: CitedText(
+                sentences: const [
+                  BriefSentence([
+                    BriefSpan(sentence, [1]),
+                  ]),
+                ],
+                onCite: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byKey(const ValueKey('today-brief-more')), findsNothing);
+      final box = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(CitedText),
+          matching: find.byType(RichText),
+        ),
+      );
+      final lineHeight = box.getFullHeightForCaret(
+        const TextPosition(offset: 0),
+      );
+      expect(box.size.height, greaterThan(lineHeight * 1.5));
+      expect(box.didExceedMaxLines, isFalse);
     });
   });
 }

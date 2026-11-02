@@ -34,6 +34,8 @@ import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
+import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
 import '../../voice/state/voice_input_controller.dart';
@@ -216,7 +218,7 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   void _openAttachSheet() {
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
@@ -274,7 +276,7 @@ class _ComposerState extends ConsumerState<Composer> {
   /// No voice bundle yet: say what voice needs and why, in place, before
   /// sending the user anywhere (not a bounce to a list of speech-model parts).
   Future<void> _onNoModel() async {
-    final go = await showModalBottomSheet<bool>(
+    final go = await showDhruvaSheet<bool>(
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
@@ -802,9 +804,23 @@ class _SendStopButton extends StatelessWidget {
       width: 40,
       height: 40,
       child: AnimatedSwitcher(
-        duration: tokens.motion.fast,
-        switchInCurve: tokens.motion.standard,
-        switchOutCurve: tokens.motion.standard,
+        // Send <-> Stop reads as ONE control morphing: a small scale from
+        // 0.85 with the fade (two coloured discs cross-fading looked muddy).
+        // 120 ms in, 90 ms out; reduced motion falls back to the plain fade.
+        duration: tokens.motion.instant + const Duration(milliseconds: 20),
+        reverseDuration: const Duration(milliseconds: 90),
+        switchInCurve: tokens.motion.decelerate,
+        switchOutCurve: tokens.motion.decelerate,
+        transitionBuilder: (child, animation) =>
+            MediaQuery.disableAnimationsOf(context)
+            ? FadeTransition(opacity: animation, child: child)
+            : FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
+                  child: child,
+                ),
+              ),
         child: isGenerating
             ? _RoundIconButton(
                 key: const ValueKey('stop'),
@@ -841,13 +857,18 @@ class _RoundIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton.filled(
-      onPressed: onPressed,
-      icon: Icon(icon),
-      style: IconButton.styleFrom(
-        backgroundColor: background,
-        foregroundColor: foreground,
-        shape: const CircleBorder(),
+    // Press-in scale on pointer-down; the scale is the feedback, so no ripple.
+    return PressableScale.passive(
+      passiveEnabled: onPressed != null,
+      child: IconButton.filled(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        style: IconButton.styleFrom(
+          backgroundColor: background,
+          foregroundColor: foreground,
+          shape: const CircleBorder(),
+          splashFactory: NoSplash.splashFactory,
+        ),
       ),
     );
   }

@@ -14,6 +14,7 @@ import '../../../core/di/providers.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart' show DhruvaLoader;
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/speed_label_chip.dart';
 import '../../../data/benchmark/speed_result.dart';
@@ -34,18 +35,9 @@ Future<InstalledModelInfo?> showModelPickerSheet(
   /// sheet says so and links to Discover instead of listing a bigger model.
   int? smallerThanBytes,
 }) {
-  final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-  return showModalBottomSheet<InstalledModelInfo>(
+  return showDhruvaSheet<InstalledModelInfo>(
     context: context,
     isScrollControlled: true,
-    // Nit 6, chat-spec.md §10 — see sampling_settings_sheet.dart's
-    // identical note: duration is sourced from the tokens, the
-    // entrance/exit curve is a documented deviation (no public
-    // `showModalBottomSheet` hook reads it).
-    sheetAnimationStyle: AnimationStyle(
-      duration: tokens.motion.moderate,
-      reverseDuration: tokens.motion.fast,
-    ),
     builder: (context) => _ModelPickerSheet(
       selectedModelId: selectedModelId,
       smallerModelsOnly: smallerModelsOnly,

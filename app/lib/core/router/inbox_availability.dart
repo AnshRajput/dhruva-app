@@ -9,6 +9,7 @@
 /// stays hidden rather than flashing an empty tab.
 library;
 
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/connectors/connector.dart';
@@ -22,3 +23,11 @@ final inboxAvailableProvider = Provider<bool>((ref) {
         e.status.isConnected,
   );
 });
+
+/// Whether an inbox source COULD be set up on [platform]. On iOS today there is
+/// none (notifications are Android-only, Gmail joins in 0.7b), so Today must not
+/// offer to "set up your inbox" there: the card would lead nowhere.
+/// ponytail: a platform check; replace with a connector capability flag when
+/// Gmail lands.
+bool inboxSetupPossibleOn(TargetPlatform platform) =>
+    platform == TargetPlatform.android;

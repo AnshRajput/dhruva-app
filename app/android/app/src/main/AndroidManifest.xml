@@ -64,6 +64,14 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Keeps the launch drawable (navy/paper + star) painted OVER the
+                 Flutter surface until the first Flutter frame. Without it the
+                 surface shows black on launches that skip the system splash,
+                 which is what a widget or Quick Settings tile tap does. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.SplashScreenDrawable"
+              android:resource="@drawable/launch_background"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
