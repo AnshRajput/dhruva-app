@@ -22,6 +22,7 @@ import '../../../core/di/connector_providers.dart';
 import '../../../core/format/when.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/label_chip.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/connector.dart';
 import '../state/connector_copy.dart';
@@ -235,7 +236,7 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
                     children: [
                       Text(copy.name, style: theme.textTheme.titleMedium),
                       if (c.id == ConnectorIds.notifications)
-                        const _AndroidChip(),
+                        const LabelChip('Android'),
                     ],
                   ),
                   SizedBox(height: tokens.spacing.xs),
@@ -277,29 +278,6 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _AndroidChip extends StatelessWidget {
-  const _AndroidChip();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(tokens.radius.full),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.sm,
-          vertical: tokens.spacing.xs / 2,
-        ),
-        child: Text('Android', style: theme.textTheme.labelSmall),
       ),
     );
   }
