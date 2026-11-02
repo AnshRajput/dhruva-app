@@ -231,6 +231,10 @@ class ConnectorStore {
   /// Deletes [source] items with exactly these external ids (a file's section
   /// rows, for instance). Exact match in chunks: ids such as SAF uris contain
   /// `%` and `_`, which must never be treated as wildcards.
+  /// Runs [body] as one transaction: all of its writes land, or none do.
+  Future<T> inTransaction<T>(Future<T> Function() body) =>
+      _db.transaction(body);
+
   Future<int> removeByExternalIds(
     String source,
     Iterable<String> externalIds,

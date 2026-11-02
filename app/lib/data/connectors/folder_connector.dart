@@ -165,7 +165,8 @@ class FolderConnector extends BaseConnector {
 
     final List<FolderEntry> listed;
     try {
-      listed = await source.list(grant, maxFiles: maxFolderFiles);
+      // One more than the cap: getting it back means the listing was cut off.
+      listed = await source.list(grant, maxFiles: maxFolderFiles + 1);
     } catch (_) {
       throw const ConnectorException(
         ConnectorState.needsAttention,
@@ -173,6 +174,7 @@ class FolderConnector extends BaseConnector {
         'again.',
       );
     }
+    final capped = listed.length > maxFolderFiles;
     final entries = [
       for (final e in listed.take(maxFolderFiles))
         if (isIndexableName(e.name) && e.size >= 0) e,
@@ -200,11 +202,49 @@ class FolderConnector extends BaseConnector {
         );
       }
     }
-    // Files that left the folder leave the index.
-    await store.removeByExternalIds(id, [
-      for (final e in rowsByFile.entries)
-        if (!ids.contains(e.key)) ...e.value,
-    ]);
+    // Files that left the folder leave the index, but only when the listing
+    // can be trusted (M3). An empty, cut-off (file cap) or suddenly much
+    // smaller listing is what a cloud provider that is offline or a partial
+    // read looks like, and acting on it would wipe the whole index. Such a
+    // listing removes nothing the first time; if the very same removal is
+    // proposed again at the next sync, it is believed.
+    // ponytail: the native directory cap (5000 folders) cannot be seen from
+    // here; the "much smaller" guard is what covers it. A native `partial`
+    // flag on the listing would make this exact.
+    final staleFiles = [
+      for (final k in rowsByFile.keys)
+        if (!ids.contains(k)) k,
+    ];
+    final suspicious =
+        staleFiles.isNotEmpty &&
+        (listed.isEmpty ||
+            capped ||
+            (rowsByFile.length >= 8 &&
+                staleFiles.length * 2 > rowsByFile.length));
+    final hold = account.config['pruneHold'];
+    if (!suspicious || hold == staleFiles.length) {
+      await store.removeByExternalIds(id, [
+        for (final k in staleFiles) ...rowsByFile[k]!,
+      ]);
+      if (hold != null) {
+        await store.saveAccount(
+          id,
+          config: {...account.config, 'total': entries.length}
+            ..remove('pruneHold'),
+          onlyIfExists: true,
+        );
+      }
+    } else if (hold != staleFiles.length) {
+      await store.saveAccount(
+        id,
+        config: {
+          ...account.config,
+          'total': entries.length,
+          'pruneHold': staleFiles.length,
+        },
+        onlyIfExists: true,
+      );
+    }
 
     var read = 0, changed = 0, processed = 0;
     for (final entry in entries) {
@@ -230,8 +270,19 @@ class FolderConnector extends BaseConnector {
       if (drafts == null && old != null) continue;
       final fresh =
           drafts ?? [_placeholder(entry, mtime, 'unreadable', retry: true)];
-      await store.removeByExternalIds(id, rowsByFile[entry.id] ?? const []);
-      final r = await store.upsertItems(id, fresh, requireAccount: true);
+      // One transaction (M4): a crash or failure between the two writes can no
+      // longer leave the file with no sections. Upsert first, then drop only
+      // the sections the new text no longer has, so the surviving rows keep
+      // their ids (answers saved earlier still point at them).
+      final freshIds = {for (final d in fresh) d.externalId};
+      final r = await store.inTransaction(() async {
+        final up = await store.upsertItems(id, fresh, requireAccount: true);
+        await store.removeByExternalIds(id, [
+          for (final old in rowsByFile[entry.id] ?? const <String>[])
+            if (!freshIds.contains(old)) old,
+        ]);
+        return up;
+      });
       read++;
       changed += r.changed;
     }
