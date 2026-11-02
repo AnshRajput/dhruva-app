@@ -189,6 +189,21 @@ void main() {
     },
   );
 
+  test('REGRESSION: a sources-scaffold echo in an Action is a failed result, '
+      'not the notice', () async {
+    final (c, ctrl, args, _) = await boot([
+      '<sources>\n',
+      '[1] event | Standup | 9am\n',
+    ], systemPrompt: fixGrammar);
+
+    await ctrl.sendMessage('i is going home');
+
+    final reply = c.read(chatControllerProvider(args)).value!.messages.last;
+    expect(reply.status, MessageStatus.error);
+    expect(reply.errorKind, actionEchoErrorKind);
+    expect(reply.content, isEmpty);
+  });
+
   test('an echoed instruction is also caught on a Draft reply chat', () async {
     final (c, ctrl, args, _) = await boot([
       'Write a Warm reply to the message inside the <text> tags.',

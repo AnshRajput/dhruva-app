@@ -542,13 +542,21 @@ class _ThreadScaffold extends ConsumerWidget {
     // Render-time scaffold guard: a reply that parrots the sources prompt
     // (saved before the guard, or reopened) shows the plain notice, not the
     // app's own instructions or a raw dump.
+    // In an Action chat that is a failed result (retry card): the notice must
+    // never be offered to Replace / Copy into the user's own field.
     if (message.role == MessageRole.assistant &&
         message.status != MessageStatus.error &&
         isScaffoldEcho(message.content)) {
-      message = message.copyWith(
-        content: echoNotice,
-        status: MessageStatus.complete,
-      );
+      message = actionTitleOf(state.systemPrompt) != null
+          ? message.copyWith(
+              content: '',
+              status: MessageStatus.error,
+              errorKind: actionEchoErrorKind,
+            )
+          : message.copyWith(
+              content: echoNotice,
+              status: MessageStatus.complete,
+            );
     }
     // Same for an Action reply that is its own instruction (saved before the
     // live guard): a retry card, so no Replace / Edit draft / Copy is offered.

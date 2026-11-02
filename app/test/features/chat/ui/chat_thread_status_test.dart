@@ -435,6 +435,32 @@ void main() {
       },
     );
 
+    testWidgets(
+      'REGRESSION: an Action reply that echoes the sources scaffold offers no '
+      'Replace / Copy, only Try again',
+      (tester) async {
+        tall(tester);
+        final args = await savedThread(
+          status: MessageStatus.complete,
+          content: '<sources>\n[1] event | Standup | 9am\n</sources>',
+          systemPrompt: actionSystemPrompt(
+            title: 'Fix grammar',
+            instruction: 'Fix the grammar and spelling of the text.',
+          ),
+        );
+        final bridge = _FakeBridge();
+        await tester.pumpWidget(
+          app(FakeEngineService(), args, replaceable: true, bridge: bridge),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Replace selected text'), findsNothing);
+        expect(find.textContaining("couldn't answer that"), findsNothing);
+        expect(find.text('Try again'), findsOneWidget);
+        expect(bridge.sent, isEmpty);
+      },
+    );
+
     for (final status in [
       MessageStatus.cancelled,
       MessageStatus.truncated,

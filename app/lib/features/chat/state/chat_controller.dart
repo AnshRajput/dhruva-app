@@ -1615,11 +1615,19 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     // Scaffold echo (the model repeats the sources prompt/rows): swap the
     // stream for the plain notice as soon as it is recognisable, and stop
     // generating the rest of the dump.
+    // In an Action chat the reply may land in the user's own field, so the
+    // echo is a failed result (error row, retry card), never a notice dressed
+    // up as an answer.
     if (!_outputBlocked &&
         !_echoBlocked &&
-        _activePrompt != null &&
+        !_actionEchoBlocked &&
+        (isAction || _activePrompt != null) &&
         isScaffoldEcho(split.content, prompt: _activePrompt)) {
-      _echoBlocked = true;
+      if (isAction) {
+        _actionEchoBlocked = true;
+      } else {
+        _echoBlocked = true;
+      }
       if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
     }
     if (_echoBlocked) {
