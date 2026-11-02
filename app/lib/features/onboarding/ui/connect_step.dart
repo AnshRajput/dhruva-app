@@ -1,6 +1,6 @@
 /// Onboarding step 3: "Start with your day" (comp onboarding-connect.png).
 ///
-/// One primary action, Allow calendar access (the phone's own calendar, no
+/// One primary action, Connect your calendar (the phone's own calendar, no
 /// sign-in), and an always-there "Not now". Folder and, on Android,
 /// Notifications are optional extras. If the OS says no, the step says what
 /// to do (Open settings) instead of failing quietly. A slim strip at the top
@@ -221,7 +221,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             FilledButton(
               key: const ValueKey('connect-allow'),
               onPressed: _busy ? null : _allow,
-              child: Text(_busy ? 'Connecting…' : 'Allow calendar access'),
+              child: Text(_busy ? 'Connecting…' : 'Connect your calendar'),
             ),
             TextButton(
               key: const ValueKey('connect-not-now'),
