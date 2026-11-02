@@ -257,7 +257,7 @@ void main() {
       }
       expect(find.text('Hugging Face'), findsNothing); // inside body text
       expect(find.textContaining('Hugging Face'), findsOneWidget);
-      expect(find.text('Backups are off'), findsOneWidget);
+      expect(find.text('Cloud backup'), findsOneWidget);
       expect(find.text(backupsOffFact), findsOneWidget);
       expect(find.text(storedOnPhoneFact), findsOneWidget);
     });

@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
 import '../../../core/identity/app_identity.dart';
+import '../privacy_facts.dart';
 import '../state/storage_summary_provider.dart';
 import '../widgets/credit_row.dart';
 import '../widgets/settings_widgets.dart';
@@ -36,7 +37,7 @@ class SettingsScreen extends StatelessWidget {
               'settings-connectors',
               Icons.link_outlined,
               'Connectors',
-              'Calendar, contacts, folder, notifications',
+              connectorsSummaryFor(Theme.of(context).platform),
               '/settings/connectors',
             ),
             _nav(
