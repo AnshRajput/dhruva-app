@@ -1,4 +1,5 @@
 import 'package:background_downloader/background_downloader.dart' as bg;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'download_backend.dart';
 import 'download_notifications.dart';
@@ -157,7 +158,9 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
         return BackendStatusUpdate(
           update.task.taskId,
           status: _toBackendStatus(update.status),
-          errorMessage: update.exception?.description,
+          errorMessage: update.exception == null
+              ? null
+              : downloadErrorText(update.exception!),
         );
       case bg.TaskProgressUpdate():
         return BackendProgressUpdate(
@@ -187,3 +190,21 @@ final class BackgroundDownloaderBackend implements DownloadBackend {
     bg.TaskStatus.notFound => BackendTaskStatus.notFound,
   };
 }
+
+/// Plain words for a failed download. The plugin's own description is OS
+/// text ("unknown error", NSURLErrorDomain…) that tells a user nothing and
+/// gives them no next step.
+@visibleForTesting
+String downloadErrorText(bg.TaskException e) => switch (e) {
+  bg.TaskHttpException(httpResponseCode: 404) =>
+    'This file is no longer on Hugging Face.',
+  bg.TaskHttpException(httpResponseCode: 401 || 403) =>
+    'Hugging Face refused this download. Pick another model.',
+  bg.TaskHttpException(:final httpResponseCode) when httpResponseCode > 0 =>
+    'Hugging Face had a problem (error $httpResponseCode). Tap retry.',
+  bg.TaskConnectionException() =>
+    'No connection. Check your internet and tap retry.',
+  bg.TaskFileSystemException() =>
+    "Couldn't save the file. Free up some space and tap retry.",
+  _ => "The download couldn't start. Tap retry.",
+};
