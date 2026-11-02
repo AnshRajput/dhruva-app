@@ -426,6 +426,7 @@ class _ThreadScaffold extends ConsumerWidget {
               onAttachDocument: controller.attachDocument,
               onRemoveDocument: controller.removeDocument,
               onDismissDocumentError: controller.dismissDocumentError,
+              onCancelDocumentRead: controller.cancelDocumentRead,
               beforeSend: () => _confirmStart(context, ref),
               onSend: (text, imageBytes) {
                 onScrollToBottom();

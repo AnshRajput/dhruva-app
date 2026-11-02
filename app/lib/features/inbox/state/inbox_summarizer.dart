@@ -65,6 +65,10 @@ class InboxSummarizer with WidgetsBindingObserver {
   bool _disposed = false;
   Timer? _retry;
 
+  /// Failed tries per row; a row is given up on after [_maxTries].
+  final _tries = <int, int>{};
+  static const _maxTries = 3;
+
   /// Test hook: ids summarised so far, in order.
   final done = <int>[];
 
@@ -78,7 +82,10 @@ class InboxSummarizer with WidgetsBindingObserver {
   }
 
   /// The row went away (scrolled off, screen left): drop its request.
-  void cancel(int itemId) => _wanted.remove(itemId);
+  void cancel(int itemId) {
+    _wanted.remove(itemId);
+    _tries.remove(itemId);
+  }
 
   /// Stops work and holds new requests until [resume] (the user opened a row
   /// or a chat on top of the Inbox, which now needs the engine).
@@ -122,39 +129,67 @@ class InboxSummarizer with WidgetsBindingObserver {
           _retry = Timer(const Duration(seconds: 10), () => unawaited(_pump()));
           break;
         }
+        // The row stays wanted until it is written or given up on: a
+        // summary cut short (app backgrounded, row opened) or a failed one is
+        // tried again, not lost for the rest of the session.
         final item = _wanted.values.first;
-        _wanted.remove(item.id);
         lease.chatEnter();
+        var failed = false;
         try {
           final models = await _ref
               .read(storageManagerProvider)
-              .listInstalledModels();
+              .listTextModels();
           if (models.isEmpty) {
             _wanted.clear(); // nothing to write with: rows keep their text
             break;
           }
           final model = models.first;
-          if (!engine.isLoaded ||
-              _ref.read(loadedModelIdProvider) != model.id) {
-            await engine.load(model.localPath);
+          // A model somebody else loaded is used as it is; loading another
+          // would evict it for a one-line summary.
+          if (!engine.isLoaded) {
+            await engine.load(
+              model.localPath,
+              params: EngineLoadParams(mmprojPath: model.mmprojPath),
+            );
+            await _ref.read(storageManagerProvider).touchLastUsed(model.id);
             _ref.read(loadedModelIdProvider.notifier).set(model.id);
             weLoaded = true;
           }
           final text = await _summarise(engine, item);
-          if (text != null) {
+          if (text != null && _wanted.containsKey(item.id)) {
             await _ref
                 .read(connectorStoreProvider)
                 .setSummary(item.id, text, model.fileName);
             done.add(item.id);
+            _wanted.remove(item.id);
+            _tries.remove(item.id);
+          } else if (text == null && !_paused && _isForeground()) {
+            failed = true; // empty output (not a pause or a backgrounding)
           }
-        } catch (_) {
-          // A failed, cancelled or timed-out summary just leaves the raw text
+        } catch (e) {
+          // A failed, cancelled or timed-out summary leaves the raw text
           // showing; make sure the engine is not left generating.
+          debugPrint('InboxSummarizer: $e');
+          failed = true;
           try {
             await engine.cancel();
           } catch (_) {}
         } finally {
           lease.chatLeave();
+        }
+        if (failed) {
+          final n = (_tries[item.id] ?? 0) + 1;
+          _tries[item.id] = n;
+          if (n >= _maxTries) {
+            _wanted.remove(item.id);
+          } else if (_wanted.containsKey(item.id)) {
+            _retry?.cancel();
+            _retry = Timer(
+              const Duration(seconds: 10),
+              () => unawaited(_pump()),
+            );
+          }
+          break; // later rows wait for the retry; no hot loop on a bad model
         }
       }
     } finally {

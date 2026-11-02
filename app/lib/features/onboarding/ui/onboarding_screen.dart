@@ -605,8 +605,10 @@ class _DownloadStep extends ConsumerWidget {
             ),
             SizedBox(height: tokens.spacing.sm),
             Text(
-              status == OnboardingDownloadStatus.downloading &&
-                      (dl?.progress ?? 0) > 0
+              (dl?.finishing ?? false)
+                  ? 'Finishing up…'
+                  : status == OnboardingDownloadStatus.downloading &&
+                        (dl?.progress ?? 0) > 0
                   ? '${((dl!.progress) * 100).round()}%'
                   : 'Preparing…',
               style: theme.textTheme.labelMedium?.copyWith(

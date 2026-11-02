@@ -21,6 +21,8 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/device_info/device_info_service.dart';
 import '../../../core/device_info/model_tier.dart';
+import '../../../core/di/model_download.dart'
+    show downloadFinishing, downloadFraction;
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
@@ -114,6 +116,13 @@ final class OnboardingDownloadState {
   /// what the success step hands to chat so the first conversation opens with
   /// this model already loaded.
   final int? installedId;
+
+  /// Every byte is here but the model is not registered yet: say "Finishing
+  /// up…", never 100%.
+  bool get finishing =>
+      status == OnboardingDownloadStatus.downloading &&
+      download != null &&
+      downloadFinishing(download!);
 
   const OnboardingDownloadState({
     this.status = OnboardingDownloadStatus.idle,
@@ -275,10 +284,7 @@ class OnboardingDownloadController
       case DownloadState.running:
       case DownloadState.paused:
       case DownloadState.verifying:
-        final total = prog.totalBytes ?? 0;
-        final progress = total > 0
-            ? (prog.downloadedBytes / total).clamp(0.0, 1.0)
-            : 0.0;
+        final progress = downloadFraction(prog) ?? 0.0;
         state = AsyncData(
           OnboardingDownloadState(
             status: OnboardingDownloadStatus.downloading,

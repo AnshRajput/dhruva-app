@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/connectors/connector.dart';
@@ -67,7 +68,7 @@ class LedgerRow extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final copy = copyFor(entry.connector);
-    final when = ledgerWhen(
+    final when = shortWhen(
       entry.at,
       DateTime.now(),
       (d) => clockText(context, d),

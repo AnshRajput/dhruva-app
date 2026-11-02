@@ -208,6 +208,30 @@ void main() {
       await settle(tester);
       expect(find.text('Calendar access is off'), findsOneWidget);
     });
+
+    todayTest('once access is off the header, Up next and the timeline stop '
+        'counting the meetings the store still holds', (tester) async {
+      final h = await pumpToday(tester, seed: _seedDay);
+      expect(
+        find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
+        findsOneWidget,
+      );
+      h.kit.calendar.perm = DevicePermission.denied;
+      await h.kit.hub.calendar.refreshStatus();
+      await settle(tester);
+      expect(find.textContaining('meetings'), findsNothing);
+      expect(find.textContaining('2 meeting'), findsNothing);
+      expect(find.text('Monday 2 November · 1 reply waiting'), findsOneWidget);
+      expect(find.text('Up next'), findsNothing);
+      // Granting it again brings the day back without a re-sync.
+      h.kit.calendar.perm = DevicePermission.granted;
+      await h.kit.hub.calendar.refreshStatus();
+      await settle(tester);
+      expect(
+        find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
+        findsOneWidget,
+      );
+    });
   });
 
   group('brief: written by rules', () {
@@ -368,6 +392,25 @@ void main() {
       expect(find.byKey(const ValueKey('today-brief-get-model')), findsNothing);
       expect(_briefText(tester), contains('Design sync at 9:30 AM'));
       expect(h.writer.prompts, isEmpty);
+    });
+
+    todayTest('a download whose bytes are all here says Finishing up, never '
+        '100%', (tester) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+        download: const DownloadProgress(
+          taskId: 't',
+          repoId: 'org/model',
+          fileName: 'm.gguf',
+          state: DownloadState.running,
+          downloadedBytes: 1000,
+          totalBytes: 1000,
+        ),
+      );
+      expect(find.text('Finishing up…'), findsOneWidget);
+      expect(find.textContaining('100%'), findsNothing);
     });
 
     todayTest('a cached brief from before the check (v1) is never shown', (
@@ -1017,6 +1060,25 @@ void main() {
       expect(ravi, lessThan(now)); // 7:12 is before now (7:42)
       expect(now, lessThan(design));
       expect(design, lessThan(budget));
+    });
+
+    todayTest('Mark all read on Today also clears the notifications here', (
+      tester,
+    ) async {
+      await pumpToday(
+        tester,
+        writer: FakeBriefWriter(model: BriefModelStatus.none),
+        seed: _seedDay,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('digest-mark-read')),
+      );
+      await tester.tap(find.byKey(const ValueKey('digest-mark-read')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('today-see-day')));
+      await settle(tester);
+      expect(find.textContaining('Wants your OK'), findsNothing);
+      expect(find.text('Design sync'), findsOneWidget);
     });
 
     todayTest('overlapping meetings are marked on the rail', (tester) async {

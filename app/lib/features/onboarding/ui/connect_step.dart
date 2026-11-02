@@ -1,6 +1,6 @@
 /// Onboarding step 3: "Start with your day" (comp onboarding-connect.png).
 ///
-/// One primary action, Allow calendar access (the phone's own calendar, no
+/// One primary action, Connect your calendar (the phone's own calendar, no
 /// sign-in), and an always-there "Not now". Folder and, on Android,
 /// Notifications are optional extras. If the OS says no, the step says what
 /// to do (Open settings) instead of failing quietly. A slim strip at the top
@@ -78,14 +78,8 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
     await connectAndSync(ref, id);
   }
 
-  Future<void> _openSettings(String id) async {
-    try {
-      final hub = await ref.read(connectorHubProvider.future);
-      await hub.byId(id)?.openSystemSettings();
-    } on Object {
-      // The row keeps saying what to do.
-    }
-  }
+  Future<void> _openSettings(String id) =>
+      ref.read(connectorActionsProvider).openSystemSettings(id);
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +215,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             FilledButton(
               key: const ValueKey('connect-allow'),
               onPressed: _busy ? null : _allow,
-              child: Text(_busy ? 'Connecting…' : 'Allow calendar access'),
+              child: Text(_busy ? 'Connecting…' : 'Connect your calendar'),
             ),
             TextButton(
               key: const ValueKey('connect-not-now'),
@@ -336,10 +330,13 @@ class _DownloadStrip extends ConsumerWidget {
     final failed = status == OnboardingDownloadStatus.failed;
     final done = status == OnboardingDownloadStatus.installed;
     final pct = ((dl?.progress ?? 0) * 100).round();
+    final finishing = dl?.finishing ?? false;
     final label = failed
         ? "Download didn't finish. ${dl?.errorMessage ?? ''}".trim()
         : done
         ? 'Your model is ready.'
+        : finishing
+        ? 'Finishing up…'
         : pct > 0
         ? 'Your model is downloading in the background · $pct%'
         : 'Getting your model ready in the background…';

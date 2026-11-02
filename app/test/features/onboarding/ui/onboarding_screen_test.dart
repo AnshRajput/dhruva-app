@@ -236,7 +236,7 @@ void main() {
       );
       await _toConnect(tester);
       expect(find.text('Start with your day'), findsOneWidget);
-      expect(find.text('Allow calendar access'), findsOneWidget);
+      expect(find.text('Connect your calendar'), findsOneWidget);
       expect(find.text('Your model is ready.'), findsOneWidget);
       expect(find.text('Example. Yours will appear on Today.'), findsOneWidget);
     });
@@ -281,6 +281,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('connect-allow')), findsOneWidget);
+      // The copy says "Tap Connect"; the button's verb is Connect.
+      expect(find.text('Connect your calendar'), findsOneWidget);
       expect(find.byKey(const ValueKey('connect-open-settings')), findsNothing);
 
       // Second Deny: the system will not ask again.

@@ -20,8 +20,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
+import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
+import '../../../core/widgets/label_chip.dart';
 import '../../../core/widgets/next_step_card.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
@@ -439,7 +441,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
     final line = (summary != null && summary.isNotEmpty)
         ? summary
         : item.body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final when = inboxWhen(
+    final when = shortWhen(
       item.when,
       DateTime.now(),
       (d) => MaterialLocalizations.of(
@@ -471,7 +473,7 @@ class _InboxRowTileState extends ConsumerState<InboxRowTile> {
                   // On a phone-width column the title keeps the whole line and
                   // the chip drops below it, so a long app name never crushes it.
                   final narrow = box.maxWidth < 300;
-                  final chip = _AppChip(label: item.appLabel);
+                  final chip = LabelChip(item.appLabel);
                   final title = Text(
                     item.title,
                     maxLines: 1,
@@ -596,40 +598,6 @@ class _InboxSkeleton extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The app-name pill. Capped so a very long app name ellipsises instead of
-/// overflowing its row.
-class _AppChip extends StatelessWidget {
-  const _AppChip({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 160),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(tokens.radius.full),
-        ),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: tokens.spacing.sm,
-            vertical: tokens.spacing.xs / 2,
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall,
-          ),
         ),
       ),
     );

@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
 import 'package:dhruva/core/di/speed_providers.dart';
+import 'package:dhruva/core/format/when.dart';
 import 'package:dhruva/core/router/ask_route.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/notification_queue.dart';
@@ -18,6 +19,7 @@ import 'package:dhruva/features/inbox/state/inbox_grouping.dart';
 import 'package:dhruva/features/inbox/state/inbox_summarizer.dart';
 import 'package:dhruva/features/inbox/ui/inbox_item_screen.dart';
 import 'package:dhruva/features/inbox/ui/inbox_screen.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -129,10 +131,10 @@ void main() {
       expect(avatarLetters('Google Calendar'), 'GC');
       expect(avatarLetters(''), '?');
       String clock(DateTime d) => '7:30';
-      expect(inboxWhen(DateTime(2026, 11, 2, 7, 30), now, clock), '7:30');
-      expect(inboxWhen(DateTime(2026, 11, 1, 20), now, clock), 'Yesterday');
-      expect(inboxWhen(DateTime(2026, 10, 30, 20), now, clock), 'Fri');
-      expect(inboxWhen(DateTime(2026, 10, 3, 20), now, clock), '3 Oct');
+      expect(shortWhen(DateTime(2026, 11, 2, 7, 30), now, clock), '7:30');
+      expect(shortWhen(DateTime(2026, 11, 1, 20), now, clock), 'Yesterday');
+      expect(shortWhen(DateTime(2026, 10, 30, 20), now, clock), 'Fri');
+      expect(shortWhen(DateTime(2026, 10, 3, 20), now, clock), '3 Oct');
     });
   });
 
@@ -556,6 +558,126 @@ void main() {
       s.dispose();
     });
 
+    test('a voice model is never picked to write with', () async {
+      final item = await seed('Sana shared v4');
+      // The voice model was used most recently, so it sorts first.
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'sherpa-voice/whisper-tiny',
+              fileName: 'whisper.onnx',
+              sizeBytes: 100,
+              localPath: '/models/whisper.onnx',
+              downloadedAt: DateTime(2026, 11, 1),
+              lastUsedAt: Value(DateTime(2026, 11, 2)),
+            ),
+          );
+      final s = container.read(inboxSummarizerProvider);
+      s.request(item);
+      await until(() => s.done.isNotEmpty);
+      expect(s.done, [item.id]);
+      final saved =
+          (await container
+                  .read(connectorStoreProvider)
+                  .itemsOf('notifications'))
+              .single;
+      expect(saved.summaryModel, 'model.gguf');
+    });
+
+    test(
+      'a model another feature already loaded is used, not swapped',
+      () async {
+        final item = await seed('Sana shared v4');
+        await engine.load('/models/other.gguf');
+        final s = container.read(inboxSummarizerProvider);
+        s.request(item);
+        await until(() => s.done.isNotEmpty);
+        expect(s.done, [item.id]);
+        expect(engine.loadCount, 1);
+        expect(engine.unloadCount, 0);
+        expect(engine.isLoaded, isTrue); // not ours to unload
+      },
+    );
+
+    test('a summary cut short by opening a row is written after returning, '
+        'not lost', () async {
+      final slow = FakeEngineService(
+        scriptedTokens: ['"Sana wants ', 'notes."'],
+        tokenDelay: const Duration(milliseconds: 40),
+      );
+      final c = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          engineServiceProvider.overrideWithValue(slow),
+          deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
+        ],
+      );
+      addTearDown(c.dispose);
+      final store = c.read(connectorStoreProvider);
+      await store.saveAccount('notifications');
+      await store.upsertItems('notifications', [
+        _draft('1', pkg: 'a', app: 'Slack', at: DateTime.now(), body: 'hi'),
+      ]);
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'org/model',
+              fileName: 'model.gguf',
+              sizeBytes: 100,
+              localPath: '/models/model.gguf',
+              downloadedAt: DateTime(2026, 11, 1),
+            ),
+          );
+      final item = (await store.itemsOf('notifications')).single;
+      final s = c.read(inboxSummarizerProvider);
+      s.request(item);
+      await until(() => slow.generateCount > 0);
+      s.pause(); // the user opened the row: generation is cancelled
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(s.done, isEmpty);
+      s.resume(); // back on the list
+      await until(() => s.done.isNotEmpty);
+      expect(s.done, [item.id]);
+      expect(slow.generateCount, 2);
+    });
+
+    test('a failing model is not retried in a hot loop', () async {
+      final bad = FakeEngineService(
+        generateFailure: const EngineStateFailure('boom'),
+        tokenDelay: Duration.zero,
+      );
+      final c = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          engineServiceProvider.overrideWithValue(bad),
+          deviceInfoServiceProvider.overrideWithValue(harnessDeviceInfo),
+        ],
+      );
+      addTearDown(c.dispose);
+      final store = c.read(connectorStoreProvider);
+      await store.saveAccount('notifications');
+      await store.upsertItems('notifications', [
+        _draft('1', pkg: 'a', app: 'Slack', at: DateTime.now(), body: 'hi'),
+      ]);
+      await db
+          .into(db.installedModels)
+          .insert(
+            InstalledModelsCompanion.insert(
+              repoId: 'org/model',
+              fileName: 'model.gguf',
+              sizeBytes: 100,
+              localPath: '/models/model.gguf',
+              downloadedAt: DateTime(2026, 11, 1),
+            ),
+          );
+      final item = (await store.itemsOf('notifications')).single;
+      c.read(inboxSummarizerProvider).request(item);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(bad.generateCount, 1); // the retry waits for its timer
+    });
+
     test('no installed model: rows simply keep their raw text', () async {
       final store = container.read(connectorStoreProvider);
       await store.saveAccount('notifications');
@@ -639,8 +761,18 @@ void main() {
         otp: true,
       );
       expect(find.text('Verification code (hidden)'), findsWidgets);
+      expect(find.text('Hidden for your privacy'), findsOneWidget);
+      expect(find.text('Original'), findsNothing);
       expect(_key('inbox-ask'), findsNothing);
       expect(_key('inbox-open-app'), findsOneWidget);
+    });
+
+    testWidgets('an ordinary notification keeps the Original heading', (
+      tester,
+    ) async {
+      await pumpDetail(tester);
+      expect(find.text('Original'), findsOneWidget);
+      expect(find.text('Hidden for your privacy'), findsNothing);
     });
 
     testWidgets('Open app launches the source app; a missing app is named', (

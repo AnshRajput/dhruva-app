@@ -75,6 +75,14 @@ final class StorageManager {
     return rows.map(_toInfo).toList(growable: false);
   }
 
+  /// [listInstalledModels] without the voice (speech) models: the ones a text
+  /// feature (the brief, Inbox summaries) can load to write with. The one
+  /// place that rule lives.
+  Future<List<InstalledModelInfo>> listTextModels() async => [
+    for (final m in await listInstalledModels())
+      if (!m.repoId.startsWith('sherpa-voice/')) m,
+  ];
+
   /// A single installed model by drift row id, or null if it isn't
   /// installed (already deleted, or never was).
   Future<InstalledModelInfo?> getInstalledModel(int id) async {

@@ -78,8 +78,15 @@ final class ConnectorActions {
     if (openSystemSettings) await c.openSystemSettings();
   }
 
-  Future<void> openSystemSettings(String id) async =>
-      (await _connector(id))?.openSystemSettings();
+  /// Opens the OS page where [id]'s access is switched. Best effort: the card
+  /// that offered it keeps saying what to do in words if the page cannot open.
+  Future<void> openSystemSettings(String id) async {
+    try {
+      await (await _connector(id))?.openSystemSettings();
+    } on Object {
+      // Nothing more to do.
+    }
+  }
 
   /// Opens the OS folder picker; picking a different folder replaces the old
   /// grant (the connector releases it).

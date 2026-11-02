@@ -197,7 +197,12 @@ class BriefController extends AsyncNotifier<BriefState> {
         return;
       }
       final name = ref.read(todayNameProvider);
-      final check = checkRewrite(raw, draft.facts, names: {?name});
+      final check = checkRewrite(
+        raw,
+        draft.facts,
+        names: {?name},
+        draft: draft.sentences,
+      );
       if (!check.ok) {
         state = AsyncData(
           _s.copyWith(writing: false, keptChecked: true, clearRewrite: true),

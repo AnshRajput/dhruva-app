@@ -462,6 +462,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   final Map<int, ExtractedDocument> _pendingDocs = {};
   var _nextTempDocId = -1;
 
+  /// Bumped by every read and by [cancelDocumentRead]; a read whose number is
+  /// no longer current was cancelled, so its result is dropped.
+  var _docReadGen = 0;
+
   /// Retrieval corpus + BM25 index for this conversation's documents, built
   /// on first question and dropped whenever the document set changes.
   List<StoredChunk>? _corpus;
@@ -1010,18 +1014,20 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       return;
     }
     if (picked == null || _disposed) return;
+    final gen = ++_docReadGen;
     state = AsyncData(
       state.value!.copyWith(
         extractingDocName: picked.name,
         clearDocumentError: true,
       ),
     );
+    bool cancelled() => _disposed || gen != _docReadGen;
     try {
       final doc = await ref.read(documentExtractorProvider)(
         picked.path,
         picked.name,
       );
-      if (_disposed) return;
+      if (cancelled()) return;
       final cur = state.value!;
       final DocumentInfo info;
       if (cur.conversationId != null) {
@@ -1033,7 +1039,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       }
       _corpus = null;
       _corpusIndex = null;
-      if (_disposed) return;
+      if (cancelled()) {
+        // Cancelled while it was being stored: take it straight back out.
+        if (info.id >= 0) unawaited(_docs.removeDocument(info.id));
+        _pendingDocs.remove(info.id);
+        return;
+      }
       state = AsyncData(
         state.value!.copyWith(
           documents: [...state.value!.documents, info],
@@ -1041,7 +1052,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     } on DocumentException catch (e) {
-      if (_disposed) return;
+      if (cancelled()) return;
       state = AsyncData(
         state.value!.copyWith(
           documentError: e.message,
@@ -1049,7 +1060,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     } catch (_) {
-      if (_disposed) return;
+      if (cancelled()) return;
       state = AsyncData(
         state.value!.copyWith(
           documentError: "Couldn't read that file.",
@@ -1057,6 +1068,16 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         ),
       );
     }
+  }
+
+  /// "Cancel" on the Reading chip: the chip goes at once and nothing is
+  /// attached when the read finishes (the extraction isolate still ends on its
+  /// own: it has a time limit and a memory watchdog).
+  void cancelDocumentRead() {
+    final current = state.value;
+    if (current == null || current.extractingDocName == null) return;
+    _docReadGen++;
+    state = AsyncData(current.copyWith(clearExtractingDocName: true));
   }
 
   /// Detaches a document from this conversation (and deletes its stored

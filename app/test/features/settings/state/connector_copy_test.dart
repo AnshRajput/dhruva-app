@@ -1,3 +1,4 @@
+import 'package:dhruva/core/format/when.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/features/settings/state/connector_copy.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,10 +93,10 @@ void main() {
     test('times: clock today, Yesterday, weekday, date', () {
       final now = DateTime(2026, 11, 2, 12);
       String clock(DateTime d) => '7:01';
-      expect(ledgerWhen(DateTime(2026, 11, 2, 7, 1), now, clock), '7:01');
-      expect(ledgerWhen(DateTime(2026, 11, 1, 23), now, clock), 'Yesterday');
-      expect(ledgerWhen(DateTime(2026, 10, 31, 9), now, clock), 'Sat');
-      expect(ledgerWhen(DateTime(2026, 10, 20, 9), now, clock), '20 Oct');
+      expect(shortWhen(DateTime(2026, 11, 2, 7, 1), now, clock), '7:01');
+      expect(shortWhen(DateTime(2026, 11, 1, 23), now, clock), 'Yesterday');
+      expect(shortWhen(DateTime(2026, 10, 31, 9), now, clock), 'Sat');
+      expect(shortWhen(DateTime(2026, 10, 20, 9), now, clock), '20 Oct');
     });
   });
 }

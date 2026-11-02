@@ -30,11 +30,6 @@ class NotificationConnector extends BaseConnector {
 
   final NotificationAccess access;
 
-  // Drained on every resume, Inbox open and pull-to-refresh: an empty drain is
-  // not worth a ledger row.
-  @override
-  bool get logEmptyReads => false;
-
   @override
   String get id => ConnectorIds.notifications;
 
@@ -135,7 +130,7 @@ class NotificationConnector extends BaseConnector {
     ).drain(now: now, excluded: _excluded(account));
     final drafts = [
       for (final n in batch.notifications)
-        if (looksLikeVerificationCode(n.title, n.text))
+        if (looksLikeVerificationCode(n.title, n.text, pkg: n.pkg))
           // The code is dropped here, before anything is stored: the title
           // may carry it too, so the app name stands in for it.
           ItemDraft(

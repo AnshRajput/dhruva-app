@@ -367,9 +367,11 @@ DayBrief composeBrief({
     final listed = top.fold<int>(0, (n, a) => n + a.$3);
     final parts = [for (final a in top) '${a.$3} from ${a.$2}'];
     final rest = otherCount - listed;
-    final core =
-        '$otherCount other notifications: ${_people(parts)}'
-        '${rest > 0 ? ', and $rest more' : ''}';
+    // One app owns them all: "7 notifications from Shell", not a list of one.
+    final core = byApp.length == 1
+        ? '$otherCount notifications from ${top.first.$2}'
+        : '$otherCount other notifications: ${_people(parts)}'
+              '${rest > 0 ? ', and $rest more' : ''}';
     cands.add(
       _Candidate(
         7,

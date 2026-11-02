@@ -175,30 +175,3 @@ String ledgerTitle(LedgerEntry e) => switch (e.action) {
 };
 
 String ledgerSource(LedgerEntry e) => copyFor(e.connector).name;
-
-/// "7:01" today, a short weekday within the last week, else "3 Nov".
-String ledgerWhen(DateTime at, DateTime now, String Function(DateTime) clock) {
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(at.year, at.month, at.day);
-  final days = today.difference(day).inDays;
-  if (days <= 0) return clock(at);
-  if (days == 1) return 'Yesterday';
-  if (days < 7) return _weekdays[at.weekday - 1];
-  return '${at.day} ${_months[at.month - 1]}';
-}
-
-const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];

@@ -38,6 +38,7 @@ void main() {
     VoidCallback? onAttachDocument,
     void Function(int)? onRemoveDocument,
     VoidCallback? onDismissDocumentError,
+    VoidCallback? onCancelDocumentRead,
     bool disableAnimations = false,
   }) {
     final router = GoRouter(
@@ -54,6 +55,7 @@ void main() {
               onAttachDocument: onAttachDocument,
               onRemoveDocument: onRemoveDocument,
               onDismissDocumentError: onDismissDocumentError,
+              onCancelDocumentRead: onCancelDocumentRead,
               onSend: (_, _) {},
               onCancel: () {},
               onOpenSettings: () {},
@@ -169,6 +171,23 @@ void main() {
       find.widgetWithIcon(IconButton, Icons.description_outlined),
     );
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('the Reading chip has a Cancel', (tester) async {
+    var cancelled = 0;
+    await pump(
+      tester,
+      extractingDocName: 'big.pdf',
+      onAttachDocument: () {},
+      onCancelDocumentRead: () => cancelled++,
+    );
+    final cancel = find.byTooltip('Cancel reading big.pdf');
+    expect(cancel, findsOneWidget);
+    final size = tester.getSize(cancel);
+    expect(size.width, greaterThanOrEqualTo(48));
+    expect(size.height, greaterThanOrEqualTo(48));
+    await tester.tap(cancel);
+    expect(cancelled, 1);
   });
 
   testWidgets('an extraction error is shown in plain words and dismissible', (

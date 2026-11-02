@@ -7,7 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/di/connector_providers.dart';
+import '../../../core/di/connector_actions.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/connector.dart';
@@ -137,7 +137,9 @@ class DigestCard extends ConsumerWidget {
               SizedBox(height: tokens.spacing.md),
               OutlinedButton(
                 key: const ValueKey('digest-open-settings'),
-                onPressed: entry.connector.openSystemSettings,
+                onPressed: () => ref
+                    .read(connectorActionsProvider)
+                    .openSystemSettings(ConnectorIds.notifications),
                 child: const Text('Open settings'),
               ),
             ],
@@ -149,9 +151,8 @@ class DigestCard extends ConsumerWidget {
 
     final now = ref.watch(nowProvider);
     final groups = digestGroups(
-      ref.watch(notificationGroupsProvider).value ?? const [],
+      ref.watch(unreadNotificationGroupsProvider),
       now,
-      readAt: ref.watch(notificationsReadAtProvider).value,
     );
     if (groups.isEmpty) return const SizedBox.shrink();
     final total = groups.fold<int>(0, (n, g) => n + g.items.length);

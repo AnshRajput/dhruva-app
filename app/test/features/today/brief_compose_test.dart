@@ -59,6 +59,28 @@ void main() {
       ]);
     });
 
+    test('one app owning every notification is named once', () {
+      final shell = [
+        for (var i = 0; i < 7; i++)
+          notification(
+            40 + i,
+            'com.shell',
+            'Shell',
+            'Shell',
+            'Fuel offer $i',
+            at(6, 10 + i),
+          ),
+      ];
+      final b = compose(events: [designSync], groups: [notifGroup(shell)]);
+      expect(plain(b).last, 'You also have 7 notifications from Shell.');
+      expect(plain(b).join(' '), isNot(contains('other')));
+      // Three apps still list the top ones.
+      expect(
+        plain(compose(groups: groups)).last,
+        'You also have 7 other notifications: 4 from Swiggy and 3 from HDFC.',
+      );
+    });
+
     test('every tappable span cites the fact that says it', () {
       final b = compose(
         events: [budgetReview, designSync],
@@ -348,6 +370,73 @@ void main() {
       expect(check('No numbers here at all.').ok, isFalse);
     });
 
+    group('lowercase content words (the claim hides in the verb)', () {
+      final standup = compose(
+        events: [
+          event(
+            5,
+            'Standup',
+            at(13),
+            at(13, 30),
+            people: const [Person(name: 'Priya', email: 'priya@x.test')],
+          ),
+        ],
+      );
+      RewriteCheck standupCheck(String raw) =>
+          checkRewrite(raw, standup.facts, draft: standup.sentences);
+
+      test('rejects the exact fabrications seen on device', () {
+        for (final raw in [
+          'Standup at 1:00 PM with Priya is cancelled [1].',
+          'Standup at 1:00 PM was moved to the boardroom [1].',
+          'Standup at 1:00 PM with Priya, who is furious [1].',
+          'Standup is at 1:00 PM [1]. You should skip it [1].',
+        ]) {
+          final r = standupCheck(raw);
+          expect(r.ok, isFalse, reason: raw);
+          expect(r.reason, contains('uses the word'), reason: raw);
+        }
+      });
+
+      test('names the offending lowercase word', () {
+        const f = 'Standup at 1:00 PM with Priya.';
+        expect(
+          ungrounded('Standup at 1:00 PM with Priya is cancelled', f),
+          'the word "cancelled"',
+        );
+        expect(
+          ungrounded('Standup was moved to the boardroom', f),
+          'the word "moved"',
+        );
+        expect(ungrounded('Priya is furious', f), 'the word "furious"');
+        expect(ungrounded('You should skip it', f), 'the word "should"');
+      });
+
+      test('still accepts faithful tone rewrites', () {
+        for (final raw in [
+          'Standup is at 1:00 PM with Priya [1].',
+          'Your first meeting is Standup, starting at 1:00 PM with Priya [1].',
+          'Priya joins you for Standup at 1:00 PM [1].',
+          'Standup begins at 1:00 PM with Priya [1].',
+          'Your day starts with Standup at 1:00 PM, joined by Priya [1].',
+        ]) {
+          final r = standupCheck(raw);
+          expect(r.ok, isTrue, reason: '$raw ${r.reason}');
+        }
+      });
+
+      test('words of the sentence being rewritten are not new claims', () {
+        // "on" and "now" come from the draft; a word in neither is rejected.
+        const f = 'Standup is on now until 1:30 PM.';
+        expect(ungrounded('Standup is on now.', f), isNull);
+        expect(ungrounded('Standup is delayed.', f), isNotNull);
+        expect(
+          ungrounded('Standup is delayed.', f, rewrites: 'Standup is delayed'),
+          isNull,
+        );
+      });
+    });
+
     test('12 and 24 hour clocks match each other, bare hours are strict', () {
       const f = 'Dinner at 9:45 PM with Sam.';
       expect(ungrounded('Dinner at 21:45.', f), isNull);
@@ -367,7 +456,7 @@ void main() {
       expect(ungrounded('Your Offsite is at 3 PM.', f), isNotNull);
       // A sentence-initial common word is fine; a sentence-initial NAME is not.
       expect(ungrounded('Priya joins at 3 PM.', f), isNotNull);
-      expect(ungrounded('Room 4B is booked.', f), isNull);
+      expect(ungrounded('Room 4B is open.', f), isNull);
     });
   });
 }
