@@ -3,6 +3,7 @@
 // the real screens (the blur-layer tests in platform_chrome_test can't see it).
 
 import 'package:dhruva/core/widgets/next_step_card.dart';
+import 'package:dhruva/core/widgets/platform_chrome.dart' show AdaptiveTabBar;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,7 +54,7 @@ void main() {
     final lastCard = find.byType(NextStepCard).last;
     expect(
       tester.getBottomLeft(lastCard).dy,
-      lessThanOrEqualTo(tester.getTopLeft(find.byType(NavigationBar)).dy),
+      lessThanOrEqualTo(tester.getTopLeft(find.byType(AdaptiveTabBar)).dy),
     );
     resetPlatform();
   });

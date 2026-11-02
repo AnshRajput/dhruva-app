@@ -66,9 +66,46 @@ void main() {
     await tester.pumpWidget(bar(TargetPlatform.iOS));
     await tester.pumpAndSettle();
     expect(blur(), findsOneWidget);
-    // No pill on iOS: Cupertino tab bars tint the icon instead.
-    final nav = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(nav.indicatorColor, Colors.transparent);
+    // iOS is a floating pill, not the Material NavigationBar.
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Ask'), findsOneWidget);
+  });
+
+  testWidgets('iOS: tapping a tab reports its index', (tester) async {
+    var tapped = -1;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          prefsStoreProvider.overrideWith((ref) async => MemoryPrefsStore()),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark.copyWith(platform: TargetPlatform.iOS),
+          home: Scaffold(
+            bottomNavigationBar: AdaptiveTabBar(
+              selectedIndex: 0,
+              onSelected: (i) => tapped = i,
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.sunny), label: 'Today'),
+                NavigationDestination(icon: Icon(Icons.chat), label: 'Ask'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ask'));
+    expect(tapped, 1);
+  });
+
+  test('overlayStyleFor: icons contrast with the theme on both platforms', () {
+    final dark = overlayStyleFor(Brightness.dark);
+    expect(dark.statusBarIconBrightness, Brightness.light);
+    expect(dark.statusBarBrightness, Brightness.dark);
+    final light = overlayStyleFor(Brightness.light);
+    expect(light.statusBarIconBrightness, Brightness.dark);
+    expect(light.statusBarBrightness, Brightness.light);
   });
 
   testWidgets('iOS + Increase Contrast: solid fallback, no blur', (

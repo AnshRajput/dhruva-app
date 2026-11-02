@@ -17,9 +17,24 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 import 'design_tokens.dart';
 import 'dhruva_theme_extension.dart';
+import 'page_transitions.dart';
+
+/// System bar style driven by the theme, so the clock/battery stay readable on
+/// every screen in both modes. `statusBarBrightness` is the iOS half (the
+/// brightness of the app's own content under the bar), `statusBarIconBrightness`
+/// the Android half (the icons themselves, so inverted).
+SystemUiOverlayStyle overlayStyleFor(Brightness theme) {
+  final dark = theme == Brightness.dark;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarBrightness: theme,
+    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+  );
+}
 
 abstract final class AppTheme {
   static ThemeData get dark => _build(Brightness.dark, darkTokenColors);
@@ -69,10 +84,11 @@ abstract final class AppTheme {
       fontFamilyFallback: const [tokenUiDevanagariFamily],
       textTheme: textTheme,
       primaryTextTheme: textTheme,
-      splashFactory: InkSparkle.splashFactory,
+      // InkRipple, not the long decorative sparkle: this runs on every tap.
+      splashFactory: InkRipple.splashFactory,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.android: DhruvaPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
           TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
         },
@@ -84,6 +100,7 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: tokenElevation[1].dp,
         titleTextStyle: textTheme.titleLarge,
+        systemOverlayStyle: overlayStyleFor(brightness),
       ),
       cardTheme: CardThemeData(
         elevation: tokenElevation[1].dp,
