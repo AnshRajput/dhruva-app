@@ -19,12 +19,13 @@ void main() {
           .firstMatch(File('$res/$valuesDir/colors.xml').readAsStringSync())!
           .group(1)!;
 
-  test('both launch activities keep the splash over the Flutter surface', () {
+  test('the Flutter launch activity keeps the splash over its surface', () {
     final tags = RegExp(
       'io.flutter.embedding.android.SplashScreenDrawable',
     ).allMatches(manifest);
-    // MainActivity (icon, widget, tile) and ProcessTextActivity.
-    expect(tags.length, 2);
+    // MainActivity only (icon, widget, tile). ProcessTextActivity is a
+    // UI-less trampoline (TrampolineTheme), not a Flutter activity.
+    expect(tags.length, 1);
     expect(
       manifest,
       contains('android:resource="@drawable/launch_background"'),

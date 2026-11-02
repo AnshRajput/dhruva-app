@@ -28,7 +28,6 @@ import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
-import '../../../data/downloads/storage_manager.dart';
 import '../../../data/hf_api/quant_quality.dart' show plainQuantName;
 import '../../../voice/voice_model_catalog.dart'
     show VoiceModelRole, voiceBundleEntries;
@@ -37,6 +36,7 @@ import '../state/speed_test_controller.dart';
 import '../state/storage_controller.dart';
 import '../state/voice_models_controller.dart';
 import '../widgets/curated_tab.dart';
+import '../widgets/installed_model_menu.dart';
 import '../widgets/speed_test_widgets.dart';
 import '../widgets/voice_model_tile.dart';
 
@@ -342,8 +342,6 @@ class _VoiceBundleCard extends StatelessWidget {
   }
 }
 
-enum _ModelAction { chat, delete }
-
 class _InstalledTab extends ConsumerWidget {
   const _InstalledTab();
 
@@ -468,67 +466,20 @@ class _InstalledBody extends ConsumerWidget {
                 // (wave 4: "chat" and "trash" next to each other, unlabelled).
                 // Chat carries the model (`extra: <drift row id>` →
                 // ChatRouteArgs.initialModelId) so it opens a LOADED chat.
-                trailing: PopupMenuButton<_ModelAction>(
+                trailing: InstalledModelMenu(
                   key: ValueKey('installed-menu-${m.id}'),
-                  tooltip: 'Model actions',
-                  onSelected: (a) => switch (a) {
-                    _ModelAction.chat => context.push('/chat/new', extra: m.id),
-                    _ModelAction.delete => _confirmDelete(context, ref, m),
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: _ModelAction.chat,
-                      child: ListTile(
-                        leading: Icon(Icons.chat_bubble_outline),
-                        title: Text('Chat'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: _ModelAction.delete,
-                      child: ListTile(
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Delete'),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ],
+                  onChat: () => context.push('/chat/new', extra: m.id),
+                  onDelete: () =>
+                      ref.read(storageControllerProvider.notifier).delete(m.id),
+                  deleteMessage:
+                      'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) '
+                      'from this device.',
                 ),
               ),
             ),
         ],
       ),
     );
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    InstalledModelInfo m,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete model?'),
-        content: Text(
-          'This removes ${m.fileName} (${_formatBytes(m.sizeBytes)}) from '
-          'this device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await ref.read(storageControllerProvider.notifier).delete(m.id);
-    }
   }
 
   Future<void> _importFile(BuildContext context, WidgetRef ref) async {

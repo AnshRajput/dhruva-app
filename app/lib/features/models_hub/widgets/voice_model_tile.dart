@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../voice/voice_model_catalog.dart';
 import '../state/voice_models_controller.dart';
+import 'installed_model_menu.dart';
 
 class VoiceModelTile extends StatelessWidget {
   final VoiceModelState state;
@@ -67,10 +68,10 @@ class VoiceModelTile extends StatelessWidget {
               Icons.check_circle,
               color: Theme.of(context).colorScheme.primary,
             ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: 'Delete',
-              onPressed: onDelete,
+            InstalledModelMenu(
+              onDelete: onDelete,
+              deleteMessage:
+                  'This removes ${state.entry.displayName} from this device.',
             ),
           ],
         );

@@ -40,7 +40,10 @@ class _InstalledController extends ListingDownloadController {
   final String repoId;
   @override
   Future<Map<String, ListingModelState>> build() async => {
-    repoId: const ListingModelState(status: ListingModelStatus.installed),
+    repoId: const ListingModelState(
+      status: ListingModelStatus.installed,
+      installedId: 1,
+    ),
   };
 }
 
@@ -178,6 +181,37 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Installed'), findsOneWidget);
+  });
+
+  testWidgets('an installed card offers a labelled Chat / Delete menu, not '
+      'bare icons', (tester) async {
+    final model = starterModelCatalog.first;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          listingDownloadControllerProvider.overrideWith(
+            () => _InstalledController(model.repoId),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: CuratedModelCard(model: model, totalRamBytes: 8000000000),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.chat_bubble_outline), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    await tester.tap(find.byTooltip('Model actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete model?'), findsOneWidget);
+    expect(find.textContaining(model.displayName), findsWidgets);
   });
 
   testWidgets('a not-installed card has no Installed badge', (tester) async {
