@@ -639,8 +639,18 @@ void main() {
         otp: true,
       );
       expect(find.text('Verification code (hidden)'), findsWidgets);
+      expect(find.text('Hidden for your privacy'), findsOneWidget);
+      expect(find.text('Original'), findsNothing);
       expect(_key('inbox-ask'), findsNothing);
       expect(_key('inbox-open-app'), findsOneWidget);
+    });
+
+    testWidgets('an ordinary notification keeps the Original heading', (
+      tester,
+    ) async {
+      await pumpDetail(tester);
+      expect(find.text('Original'), findsOneWidget);
+      expect(find.text('Hidden for your privacy'), findsNothing);
     });
 
     testWidgets('Open app launches the source app; a missing app is named', (

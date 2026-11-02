@@ -34,9 +34,36 @@ final _code = RegExp(
   '(?<!$_digit)(?:$_digit{4,8}|$_digit{3}[- ]$_digit{3})(?!$_digit)',
 );
 
-/// True when [title] / [text] look like a verification code message.
-bool looksLikeVerificationCode(String title, String text) {
+// Apps whose notifications are very often just a code: SMS apps, the dialer /
+// caller-id app, and authenticator apps. Only these get the bare-code rule.
+const _codeSenders = {
+  'com.google.android.apps.messaging',
+  'com.android.messaging',
+  'com.samsung.android.messaging',
+  'com.android.mms',
+  'com.oneplus.mms',
+  'com.truecaller',
+  'com.google.android.apps.authenticator2',
+  'com.azure.authenticator',
+  'com.microsoft.msa.authenticator',
+};
+
+/// Letter runs of two or more characters: the "words" left once the code is
+/// taken out ("is your code" is 3; the "G" of "G-731942" is none).
+final _wordsLeft = RegExp(r'\p{L}{2,}', unicode: true);
+
+/// True when [title] / [text] look like a verification code message. [pkg] is
+/// the posting app: from an app that commonly sends codes (see `_codeSenders`),
+/// a body that is mostly a code token ("G-731942", "482913 is your code") is
+/// hidden even without verification wording.
+bool looksLikeVerificationCode(String title, String text, {String? pkg}) {
   final all = '$title\n$text';
   final worded = _wordingEn.hasMatch(all) || _wordingHi.hasMatch(all);
-  return worded && _code.hasMatch(all);
+  if (worded && _code.hasMatch(all)) return true;
+  if (pkg == null || !_codeSenders.contains(pkg)) return false;
+  // The text is the message; the title is only the sender, unless the text is
+  // empty and the code sits in the title.
+  final body = text.trim().isEmpty ? title : text;
+  return _code.hasMatch(body) &&
+      _wordsLeft.allMatches(body.replaceAll(_code, ' ')).length <= 3;
 }

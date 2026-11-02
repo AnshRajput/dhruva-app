@@ -48,6 +48,50 @@ void main() {
       }
     });
 
+    test('hides a bare code from an app that commonly sends codes', () {
+      for (final (t, b) in [
+        ('AX-HDFCBK', 'G-731942'),
+        ('', '731942'),
+        ('Messages', '482913 is your code'),
+        ('Messages', 'Code: 4829'),
+        ('731942', ''), // the code sits in the title, text empty
+        ('Messages', '123 456'),
+      ]) {
+        expect(
+          looksLikeVerificationCode(
+            t,
+            b,
+            pkg: 'com.google.android.apps.messaging',
+          ),
+          isTrue,
+          reason: '$t / $b',
+        );
+      }
+    });
+
+    test('the bare-code rule is conservative: sender, and mostly a code', () {
+      const sms = 'com.google.android.apps.messaging';
+      // Same text from an app that is not a code sender: kept.
+      expect(
+        looksLikeVerificationCode('Ravi', 'G-731942', pkg: 'com.whatsapp'),
+        isFalse,
+      );
+      expect(looksLikeVerificationCode('Ravi', 'G-731942'), isFalse);
+      // A real message that happens to contain a number: kept.
+      for (final b in [
+        'Your order 123456 has been shipped and arrives on Tuesday',
+        'Lunch at 1? Table for six is booked',
+        'Call me back on 98765 43210 when you are free please',
+        'Hello', // no code at all
+      ]) {
+        expect(
+          looksLikeVerificationCode('Mum', b, pkg: sms),
+          isFalse,
+          reason: b,
+        );
+      }
+    });
+
     test('keeps ordinary notifications', () {
       for (final (t, b) in [
         ('Ravi', 'Lunch at 1?'),
@@ -433,6 +477,26 @@ void main() {
       // Nor can the code be searched for.
       final index = await kit.hub.store.itemsOf('notifications');
       expect(index.any((i) => i.body.contains('482913')), isFalse);
+    });
+
+    test('a bare code from an SMS app is redacted before storing', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      live().writeAsStringSync(
+        [
+          line(
+            pkg: 'com.google.android.apps.messaging',
+            app: 'Messages',
+            title: 'AX-HDFCBK',
+            text: 'G-731942',
+          ),
+        ].join('\n'),
+      );
+      await kit.hub.notifications.sync();
+      final item = (await kit.hub.store.itemsOf('notifications')).single;
+      expect(item.body, hiddenCodeBody);
+      expect(item.flags[otpFlag], isTrue);
+      expect('${item.title} ${item.body}', isNot(contains('731942')));
     });
 
     test('an empty drain leaves no "Read 0" ledger row but still counts as '

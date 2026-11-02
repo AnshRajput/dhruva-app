@@ -141,7 +141,9 @@ class InboxItemScreen extends ConsumerWidget {
             ],
             SizedBox(height: tokens.spacing.base),
             Text(
-              'Original',
+              item.flags[otpFlag] == true
+                  ? 'Hidden for your privacy'
+                  : 'Original',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.primary,
               ),
