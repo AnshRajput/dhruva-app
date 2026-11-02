@@ -223,6 +223,7 @@ abstract class BaseConnector implements Connector {
           e.state,
           detail: e.message,
           lastSyncAt: account.lastSyncAt,
+          accessRevoked: e.accessRevoked,
         ),
       );
       rethrow;

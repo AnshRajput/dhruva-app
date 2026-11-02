@@ -88,6 +88,7 @@ class FolderConnector extends BaseConnector {
         ConnectorState.needsAttention,
         detail: _gone,
         lastSyncAt: account.lastSyncAt,
+        accessRevoked: true,
       );
     }
     if (account.lastError != null) {
@@ -155,7 +156,11 @@ class FolderConnector extends BaseConnector {
     final isExplicit = _explicit;
     final grant = _grantId(account);
     if (grant == null || !await source.isReachable(grant)) {
-      throw const ConnectorException(ConnectorState.needsAttention, _gone);
+      throw const ConnectorException(
+        ConnectorState.needsAttention,
+        _gone,
+        accessRevoked: true,
+      );
     }
     if (!isExplicit && !await isCharging()) {
       return const SyncResult.skipped(

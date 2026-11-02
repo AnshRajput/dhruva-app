@@ -406,6 +406,31 @@ void main() {
       expect(fake.cancelled.length, greaterThan(before));
     });
 
+    testWidgets('H2: the screen tells the summarizer when its tab is hidden '
+        'and shown again (TickerMode), and when it is gone', (tester) async {
+      final fake = _RecordingSummarizer([]);
+      final shown = ValueNotifier(true);
+      addTearDown(shown.dispose);
+      await pumpConnectorScreen(
+        tester,
+        ValueListenableBuilder<bool>(
+          valueListenable: shown,
+          builder: (_, on, _) =>
+              TickerMode(enabled: on, child: const InboxScreen()),
+        ),
+        overrides: [inboxSummarizerProvider.overrideWith((_) => fake)],
+      );
+      expect(fake.visibility.last, isTrue);
+      shown.value = false;
+      await tester.pump();
+      expect(fake.visibility.last, isFalse);
+      shown.value = true;
+      await tester.pump();
+      expect(fake.visibility.last, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      expect(fake.forgotten, 1);
+    });
+
     testWidgets('opening a row pauses summaries and resumes on return', (
       tester,
     ) async {
@@ -846,10 +871,12 @@ class _RecordingSummarizer
   void resume() => resumed++;
   @override
   void dispose() {}
+  final visibility = <bool>[];
+  int forgotten = 0;
   @override
-  void setVisible(Object owner, bool visible) {}
+  void setVisible(Object owner, bool visible) => visibility.add(visible);
   @override
-  void forget(Object owner) {}
+  void forget(Object owner) => forgotten++;
   @override
   List<int> get done => const [];
 }

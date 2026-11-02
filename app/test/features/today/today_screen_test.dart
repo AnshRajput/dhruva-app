@@ -553,6 +553,31 @@ void main() {
       expect(h.prefs.values['today_brief_v1'], '');
     });
 
+    todayTest('M8: notification access revoked in system settings forgets '
+        'the brief that cites a notification', (tester) async {
+      final h = await pumpToday(
+        tester,
+        writer: FakeBriefWriter(output: faithful),
+        seed: _seedDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('today-brief-rewrite')));
+      await settle(tester);
+      expect(h.prefs.values['today_brief_v1'], contains('WhatsApp'));
+
+      h.kit.notifications.granted = false;
+      await h.kit.hub.notifications.refreshStatus();
+      await settle(tester);
+
+      // Revoked grant is needs-attention in the UI, but it holds no data.
+      expect(
+        h.kit.hub.notifications.currentStatus.state,
+        ConnectorState.needsAttention,
+      );
+      expect(h.kit.hub.notifications.currentStatus.holdsData, isFalse);
+      expect(h.prefs.values['today_brief_v1'], '');
+      expect(find.byKey(const ValueKey('today-brief-kept')), findsNothing);
+    });
+
     todayTest('a fabricated rewrite is rejected whole: the checked version '
         'stays and nothing is cached', (tester) async {
       final h = await pumpToday(
