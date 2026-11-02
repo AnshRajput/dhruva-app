@@ -160,13 +160,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No model installed yet'), findsOneWidget);
-      // Nothing that cannot work yet: no New chat button, folders, Actions,
-      // Personas or Talk.
+      // Nothing that cannot work yet: no New chat button, folders, quick
+      // actions or Talk. The Actions / Personas doors stay.
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(find.text('All'), findsNothing);
-      expect(find.text('Actions'), findsNothing);
-      expect(find.text('Personas'), findsNothing);
+      expect(find.text('Quick actions'), findsNothing);
       expect(find.text('Talk'), findsNothing);
+      expect(find.byTooltip('Actions'), findsOneWidget);
 
       await tester.tap(find.text('Browse models'));
       await tester.pumpAndSettle();

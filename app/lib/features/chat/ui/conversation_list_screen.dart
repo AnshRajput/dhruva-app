@@ -103,9 +103,8 @@ class _ConversationListScreenState
     // installed → Browse models" empty state shows on a fresh install, instead
     // of a "New chat" CTA whose FAB immediately bounces to /models.
     final hasAnyModel = modelsAsync.value?.isNotEmpty ?? false;
-    // No model and nothing to list: one "get a model" screen, none of the
-    // chat chrome (folders, Actions, Personas, Talk, New chat) that cannot work
-    // yet.
+    // No model and nothing to list: one "get a model" screen, without the chat
+    // chrome that cannot work yet (folders, quick actions, Talk, New chat).
     final bare = !hasAnyModel && (state.value?.conversations.isEmpty ?? false);
 
     return Scaffold(
@@ -171,8 +170,17 @@ class _ConversationBody extends ConsumerWidget {
     final tokens = theme.extension<DhruvaTokens>()!;
 
     if (state.conversations.isEmpty && !hasAnyModel) {
-      return NoModelInstalledView(
-        onBrowseModels: () => context.push('/models/hub'),
+      // The two labelled doors stay (they are how people find Actions and
+      // Personas); folders, quick actions, Talk and New chat wait for a model.
+      return Column(
+        children: [
+          const AskEntryPoints(),
+          Expanded(
+            child: NoModelInstalledView(
+              onBrowseModels: () => context.push('/models/hub'),
+            ),
+          ),
+        ],
       );
     }
     return RefreshIndicator(
