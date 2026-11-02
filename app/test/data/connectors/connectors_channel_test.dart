@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/connectors/system_sources.dart';
 import 'package:flutter/foundation.dart';
@@ -129,6 +131,25 @@ void main() {
       handler = (_) => {'id': 'tree:2'};
       expect((await channel.pickFolder())!.name, 'Folder');
     });
+
+    test(
+      'a folder call that never answers times out instead of hanging',
+      () async {
+        final slow = ConnectorsChannel(
+          channel: mc,
+          folderCallTimeout: const Duration(milliseconds: 50),
+        );
+        handler = (_) => Completer<Object?>().future;
+        await expectLater(
+          slow.fetchFolderFile('tree:1', 'doc', '/tmp/x.bin', 1024),
+          throwsA(isA<FolderFetchException>()),
+        );
+        await expectLater(
+          slow.listFolder('tree:1', 10),
+          throwsA(isA<TimeoutException>()),
+        );
+      },
+    );
 
     test('list passes the cap and drops malformed entries', () async {
       handler = (_) => [

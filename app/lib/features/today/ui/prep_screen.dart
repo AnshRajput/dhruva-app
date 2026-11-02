@@ -167,18 +167,8 @@ class _PrepBody extends ConsumerWidget {
               person: p,
               contactsOn: contactsOn,
               colorIndex: i,
-              onTap: () => unawaited(
-                context.push(
-                  askNewLocation(
-                    q: 'What do I know about ${p.name}?',
-                    sources: {
-                      AskSource.calendar,
-                      AskSource.contacts,
-                      AskSource.files,
-                    },
-                  ),
-                ),
-              ),
+              onTap: () =>
+                  unawaited(context.push(prepPersonAskLocation(p, event.id))),
               onOpenMeeting: (m) => unawaited(showEventSheet(context, m)),
             ),
         if (contactsLoaded && !contactsOn && data.people.isNotEmpty)

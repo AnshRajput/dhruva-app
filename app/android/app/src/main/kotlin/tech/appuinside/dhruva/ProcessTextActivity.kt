@@ -91,9 +91,14 @@ object ProcessTextBridge {
     @Synchronized
     fun hasPending(): Boolean = pending?.get() != null
 
-    /** Sets the result for the calling app and finishes the trampoline. */
+    /**
+     * Sets the result for the calling app and finishes the trampoline, only if
+     * [requestToken] is the token of the request still waiting (a stale or
+     * foreign result is refused).
+     */
     @Synchronized
-    fun deliver(text: String): Boolean {
+    fun deliver(text: String, requestToken: String?): Boolean {
+        if (requestToken == null || requestToken != token) return false
         val activity = pending?.get() ?: return false
         pending = null
         token = null

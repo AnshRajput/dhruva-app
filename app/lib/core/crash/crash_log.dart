@@ -19,9 +19,14 @@ const crashMaxStack = 8 * 1024;
 
 /// A FormatException's text carries a slice of the data it failed to parse
 /// (a chat, a file, a model reply): keep only its first line, the reason.
+///
+/// SqliteException / DriftRemoteException append ", parameters: ..." (the bound values)
+/// after the causing SQL: the values are chat or source text, so everything
+/// from there on is dropped (the SQL shape stays).
 String _safeMessage(Object error) {
   final text = error.toString();
-  return error is FormatException ? text.split('\n').first : text;
+  if (error is FormatException) return text.split('\n').first;
+  return text.replaceFirst(RegExp(r',?\s*parameters:[\s\S]*$'), '');
 }
 
 String _cut(String s, int max) =>

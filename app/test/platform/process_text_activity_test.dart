@@ -55,7 +55,7 @@ void main() {
     expect(t, contains('activity.finish()'));
     // ...when Dart asks MainActivity to return text, and only then.
     expect(m, contains('"setProcessTextResult" -> returnProcessText'));
-    expect(m, contains('ProcessTextBridge.deliver(text)'));
+    expect(m, contains('ProcessTextBridge.deliver(text, activeToken)'));
     expect(m, contains('MAX_RESULT_CHARS'));
     // Replaceable needs the trampoline's one-time token (the activity is
     // exported: a bare extra from any app is not trusted).

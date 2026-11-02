@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../data/downloads/download_manager.dart';
+import '../../../voice/voice_model_catalog.dart';
 
 final downloadsControllerProvider =
     AsyncNotifierProvider<DownloadsController, Map<String, DownloadProgress>>(
@@ -65,14 +66,22 @@ class DownloadsController extends AsyncNotifier<Map<String, DownloadProgress>> {
     final progress = state.value?[taskId];
     if (progress == null) return;
     final manager = await ref.read(downloadManagerProvider.future);
-    final request = DownloadRequest(
-      repoId: progress.repoId,
-      fileName: progress.fileName,
-      url: ref
-          .read(hfApiClientProvider)
-          .resolveDownloadUrl(progress.repoId, progress.fileName),
-      expectedSizeBytes: progress.totalBytes ?? 0,
-    );
+    // Voice bundles come from a pinned catalog URL with a pinned sha256: retry
+    // must rebuild them from the catalog, never from a huggingface.co guess
+    // that drops the checksum.
+    final voice = voiceModelCatalog
+        .where((e) => voiceModelDownloadRequest(e).taskId == taskId)
+        .firstOrNull;
+    final request = voice != null
+        ? voiceModelDownloadRequest(voice)
+        : DownloadRequest(
+            repoId: progress.repoId,
+            fileName: progress.fileName,
+            url: ref
+                .read(hfApiClientProvider)
+                .resolveDownloadUrl(progress.repoId, progress.fileName),
+            expectedSizeBytes: progress.totalBytes ?? 0,
+          );
     try {
       final freeBytes =
           (await ref.read(deviceInfoServiceProvider).getStorageInfo())

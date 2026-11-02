@@ -11,6 +11,8 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/di/connector_providers.dart';
+import '../../../core/router/ask_route.dart';
+import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
 import 'today_data.dart';
 
@@ -21,6 +23,7 @@ final class PrepPerson {
     this.email,
     this.photoBase64,
     this.inContacts = false,
+    this.contactId,
     this.otherMeetings = const [],
   });
   final String name;
@@ -29,6 +32,9 @@ final class PrepPerson {
 
   /// True when a contact item matched (name and photo came from Contacts).
   final bool inContacts;
+
+  /// Item id of the matched contact, when there is one.
+  final int? contactId;
 
   /// Other events in the calendar that this person is also in, soonest first.
   final List<ConnectorItem> otherMeetings;
@@ -87,12 +93,24 @@ List<PrepPerson> prepPeople(
         email: p.email,
         photoBase64: photo is String ? photo : null,
         inContacts: c != null,
+        contactId: c?.id,
         otherMeetings: others.take(3).toList(),
       ),
     );
   }
   return out;
 }
+
+/// Ask-composer location for "what do I know about this attendee". The
+/// attendee's name is invite-author-controlled text, so it never goes into the
+/// prefilled question (the trusted slot). The thread is pinned to the contact
+/// (or, with none, the meeting) instead; its text reaches the model only inside
+/// the escaped sources block.
+String prepPersonAskLocation(PrepPerson person, int eventId) => askNewLocation(
+  q: 'What do I know about this person?',
+  sources: {AskSource.calendar, AskSource.contacts, AskSource.files},
+  focus: [person.contactId ?? eventId],
+);
 
 /// Notifications from, or mentioning, one of [names], newest first, at most
 /// [limit]. A notification title is the sender, so a title that is a person's

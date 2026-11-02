@@ -27,8 +27,15 @@ import 'connector_sources.dart';
 /// Thin typed wrapper over the platform channel. Parsing is defensive: a
 /// malformed map from native code is dropped, never thrown.
 class ConnectorsChannel {
-  ConnectorsChannel({MethodChannel? channel})
-    : _ch = channel ?? const MethodChannel(channelName);
+  ConnectorsChannel({
+    MethodChannel? channel,
+    this.folderCallTimeout = const Duration(seconds: 30),
+  }) : _ch = channel ?? const MethodChannel(channelName);
+
+  /// Deadline for the folder calls that run on the native single worker
+  /// thread: one stalled provider read must not hang every later sync and the
+  /// disconnect-and-wipe behind it.
+  final Duration folderCallTimeout;
 
   static const channelName = 'app.dhruva/connectors';
   final MethodChannel _ch;
@@ -111,14 +118,18 @@ class ConnectorsChannel {
   }
 
   Future<bool> folderReachable(String grantId) async =>
-      (await _ch.invokeMethod<bool>('folder.reachable', {'id': grantId})) ??
+      (await _ch
+          .invokeMethod<bool>('folder.reachable', {'id': grantId})
+          .timeout(folderCallTimeout)) ??
       false;
 
   Future<List<FolderEntry>> listFolder(String grantId, int maxFiles) async {
-    final raw = await _ch.invokeListMethod<Object?>('folder.list', {
-      'id': grantId,
-      'maxFiles': maxFiles,
-    });
+    final raw = await _ch
+        .invokeListMethod<Object?>('folder.list', {
+          'id': grantId,
+          'maxFiles': maxFiles,
+        })
+        .timeout(folderCallTimeout);
     final out = <FolderEntry>[];
     for (final m in raw ?? const <Object?>[]) {
       if (m is! Map) continue;
@@ -147,14 +158,18 @@ class ConnectorsChannel {
     int maxBytes,
   ) async {
     try {
-      await _ch.invokeMethod<void>('folder.fetch', {
-        'id': grantId,
-        'entryId': entryId,
-        'dest': destPath,
-        'maxBytes': maxBytes,
-      });
+      await _ch
+          .invokeMethod<void>('folder.fetch', {
+            'id': grantId,
+            'entryId': entryId,
+            'dest': destPath,
+            'maxBytes': maxBytes,
+          })
+          .timeout(folderCallTimeout);
     } on PlatformException catch (e) {
       throw FolderFetchException(e.message ?? e.code);
+    } on TimeoutException {
+      throw const FolderFetchException('The folder took too long to answer');
     }
   }
 
@@ -375,6 +390,8 @@ class SystemFolderSource implements FolderSource {
     try {
       return await _channel.folderReachable(grantId);
     } on PlatformException {
+      return false;
+    } on TimeoutException {
       return false;
     }
   }
