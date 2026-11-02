@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/failures/app_failure.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/models/sampling_params.dart';
 import '../state/chat_controller.dart';
 
@@ -18,23 +19,10 @@ Future<void> showSamplingSettingsSheet(
   BuildContext context,
   ChatRouteArgs args,
 ) {
-  final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-  return showModalBottomSheet<void>(
+  return showDhruvaSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    // Nit 6, chat-spec.md §10: entrance motion.moderate (300ms) / exit
-    // motion.fast (150ms). `AnimationStyle` only reads duration/
-    // reverseDuration for `showModalBottomSheet` — the entrance/exit
-    // CURVE (spec wants decelerate/accelerate) isn't plumbed through by
-    // the public API (verified against bottom_sheet.dart: `curve`/
-    // `reverseCurve` are never read for this call path), so this is a
-    // documented, deliberate partial application, not an oversight —
-    // see chat-spec.md §10's own note next to this line.
-    sheetAnimationStyle: AnimationStyle(
-      duration: tokens.motion.moderate,
-      reverseDuration: tokens.motion.fast,
-    ),
     builder: (context) => SamplingSettingsSheet(args: args),
   );
 }

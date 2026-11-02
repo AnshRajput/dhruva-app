@@ -366,7 +366,8 @@ class _MetadataRowState extends State<_MetadataRow> {
             onPressed: _copy,
             tooltip: _copied ? 'Copied' : 'Copy text',
             icon: AnimatedSwitcher(
-              duration: tokens.motion.instant + const Duration(milliseconds: 20),
+              duration:
+                  tokens.motion.instant + const Duration(milliseconds: 20),
               child: Icon(
                 _copied ? Icons.check : Icons.copy,
                 key: ValueKey(_copied),

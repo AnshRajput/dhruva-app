@@ -26,9 +26,10 @@ class ShorebirdUpdateBanner extends ConsumerWidget {
         : const SizedBox(width: double.infinity);
     // Reduce motion: swap instantly.
     if (MediaQuery.disableAnimationsOf(context)) return card;
+    final motion = Theme.of(context).extension<DhruvaTokens>()!.motion;
     return AnimatedSize(
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutCubic,
+      duration: motion.base,
+      curve: motion.standard,
       alignment: Alignment.topCenter,
       child: card,
     );

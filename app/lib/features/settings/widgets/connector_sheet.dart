@@ -11,6 +11,7 @@ import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/format/when.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/folder_index_status.dart';
 import '../state/connector_copy.dart';
@@ -19,7 +20,7 @@ import 'settings_widgets.dart';
 Future<void> showConnectorSheet(
   BuildContext context, {
   required String connectorId,
-}) => showModalBottomSheet<void>(
+}) => showDhruvaSheet<void>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
@@ -444,7 +445,7 @@ class _NotificationsSection extends ConsumerWidget {
               'Notifications from these apps are never saved.',
             ),
             trailing: const Icon(Icons.chevron_right, size: 20),
-            onTap: () => showModalBottomSheet<void>(
+            onTap: () => showDhruvaSheet<void>(
               context: context,
               isScrollControlled: true,
               useSafeArea: true,

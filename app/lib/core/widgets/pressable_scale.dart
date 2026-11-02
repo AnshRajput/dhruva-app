@@ -35,7 +35,6 @@ class PressableScale extends StatefulWidget {
        semanticLabel = null,
        passive = true;
 
-
   final VoidCallback? onTap;
   final Widget child;
   final String? semanticLabel;

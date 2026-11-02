@@ -48,10 +48,10 @@ class SpeedTestRow extends ConsumerWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            if (!reduceMotion) ...[
-              SizedBox(height: tokens.spacing.xs),
-              const LinearProgressIndicator(),
-            ],
+            SizedBox(height: tokens.spacing.xs),
+            // Reduced motion: a still track (the label carries the status),
+            // not nothing, so the row doesn't change height.
+            LinearProgressIndicator(value: reduceMotion ? 0 : null),
           ],
         ),
       );

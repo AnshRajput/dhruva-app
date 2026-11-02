@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
@@ -121,7 +122,7 @@ Future<void> showSourceSheet(
   required ItemSource source,
   required ConnectorItem? item,
 }) {
-  return showModalBottomSheet<void>(
+  return showDhruvaSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,

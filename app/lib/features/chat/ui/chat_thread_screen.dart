@@ -358,17 +358,28 @@ class _ThreadScaffold extends ConsumerWidget {
                         child: Center(
                           child: IgnorePointer(
                             ignoring: pinnedToBottom,
-                            child: AnimatedOpacity(
-                              opacity: pinnedToBottom ? 0 : 1,
+                            // Fade plus an ~8 px rise (fade only when motion is
+                            // reduced).
+                            child: AnimatedSlide(
+                              offset:
+                                  pinnedToBottom &&
+                                      !MediaQuery.disableAnimationsOf(context)
+                                  ? const Offset(0, 0.2)
+                                  : Offset.zero,
                               duration: tokens.motion.fast,
                               curve: tokens.motion.standard,
-                              child: FilledButton.icon(
-                                onPressed: onScrollToBottom,
-                                icon: const Icon(
-                                  Icons.arrow_downward,
-                                  size: 16,
+                              child: AnimatedOpacity(
+                                opacity: pinnedToBottom ? 0 : 1,
+                                duration: tokens.motion.fast,
+                                curve: tokens.motion.standard,
+                                child: FilledButton.icon(
+                                  onPressed: onScrollToBottom,
+                                  icon: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 16,
+                                  ),
+                                  label: const Text('New message'),
                                 ),
-                                label: const Text('New message'),
                               ),
                             ),
                           ),

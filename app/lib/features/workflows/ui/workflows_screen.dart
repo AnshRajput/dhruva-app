@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../data/workflow_catalog.dart';
 
 class WorkflowsScreen extends StatefulWidget {
@@ -45,7 +46,7 @@ class _WorkflowsScreenState extends State<WorkflowsScreen> {
   }
 
   Future<void> _open(BuildContext context, Workflow workflow) async {
-    final prompt = await showModalBottomSheet<String>(
+    final prompt = await showDhruvaSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

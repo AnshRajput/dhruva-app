@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/format/when.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../state/conversation_list_controller.dart';
 
@@ -161,7 +162,7 @@ class ConversationTile extends ConsumerWidget {
     BuildContext context,
     ConversationListController notifier,
   ) async {
-    final folderId = await showModalBottomSheet<int>(
+    final folderId = await showDhruvaSheet<int>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(

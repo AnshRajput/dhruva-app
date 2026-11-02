@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
 import '../state/brief_facts.dart';
@@ -19,7 +20,7 @@ import 'today_actions.dart';
 import 'today_widgets.dart';
 
 Future<void> showEventSheet(BuildContext context, ConnectorItem event) =>
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -167,7 +168,7 @@ class EventSheet extends ConsumerWidget {
 Future<void> showNotificationSheet(
   BuildContext context,
   NotificationGroup group,
-) => showModalBottomSheet<void>(
+) => showDhruvaSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,

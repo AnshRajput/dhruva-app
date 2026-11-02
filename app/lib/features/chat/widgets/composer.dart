@@ -34,6 +34,7 @@ import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/app_settings.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/docs/document_repository.dart' show DocumentInfo;
 import '../../../vision/image_attach_source.dart';
@@ -220,7 +221,7 @@ class _ComposerState extends ConsumerState<Composer> {
   }
 
   void _openAttachSheet() {
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
