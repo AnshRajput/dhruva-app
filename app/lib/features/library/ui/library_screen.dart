@@ -6,18 +6,20 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/di/connector_actions.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../widgets/folder_block.dart';
 import '../widgets/library_sections.dart';
 
-class LibraryScreen extends StatelessWidget {
+class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
     return ChromeScaffold(
       appBar: AdaptiveAppBar(
@@ -32,19 +34,24 @@ class LibraryScreen extends StatelessWidget {
           ),
         ],
       ),
-      bodyBuilder: (context, inset) => ListView(
-        padding: EdgeInsets.fromLTRB(
-          tokens.spacing.base,
-          inset.top + tokens.spacing.xs,
-          tokens.spacing.base,
-          inset.bottom + tokens.spacing.xl2,
+      // Pull to refresh re-reads every connected source (folder included).
+      bodyBuilder: (context, inset) => RefreshIndicator(
+        onRefresh: ref.read(connectorActionsProvider).refreshAll,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            tokens.spacing.base,
+            inset.top + tokens.spacing.xs,
+            tokens.spacing.base,
+            inset.bottom + tokens.spacing.xl2,
+          ),
+          children: const [
+            FolderBlock(),
+            DocumentsSection(),
+            TodosSection(),
+            SavedSection(),
+          ],
         ),
-        children: const [
-          FolderBlock(),
-          DocumentsSection(),
-          TodosSection(),
-          SavedSection(),
-        ],
       ),
     );
   }

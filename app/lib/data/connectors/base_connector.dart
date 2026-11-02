@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'connector.dart';
+import 'connector_sources.dart' show DevicePermission;
 import 'connector_store.dart';
 
 abstract class BaseConnector implements Connector {
@@ -20,6 +21,54 @@ abstract class BaseConnector implements Connector {
   bool _syncing = false;
   Future<void>? _running;
   bool _cancelled = false;
+  bool _connecting = false;
+  ConnectorStatus _lastConnect = ConnectorStatus.notConnected;
+
+  @override
+  ConnectorStatus get lastConnectStatus => _lastConnect;
+
+  /// A [doConnect] sets this when the user backed out of the OS UI (closed the
+  /// folder picker): [connect] then records nothing and reports `false`.
+  bool backedOut = false;
+
+  /// True after a first-time connect ended in a permission the OS will not ask
+  /// for again: the user was sent to system settings, and when the app comes
+  /// back with the grant in place the hub completes the connection by itself.
+  bool awaitingGrant = false;
+
+  /// Whether the OS permission is in place right now (no prompt). Connectors
+  /// with an in-app permission override it; the hub uses it for
+  /// [awaitingGrant].
+  Future<bool> grantedNow() async => false;
+
+  /// The status after the OS permission prompt ended without a grant. Three
+  /// different situations, three different sentences:
+  ///  - connected before, access since turned off: [revoked] (a fix card);
+  ///  - never connected, the prompt can still be shown (Android's first Deny):
+  ///    [retry], the row stays "Not connected";
+  ///  - never connected, denied for good: [blocked] plus "Open settings".
+  ConnectorStatus deniedStatus(
+    DevicePermission permission,
+    ConnectorAccount? account, {
+    required String retry,
+    required String blocked,
+    required String revoked,
+  }) {
+    if (account != null) {
+      return ConnectorStatus(
+        ConnectorState.permissionDenied,
+        detail: revoked,
+        lastSyncAt: account.lastSyncAt,
+      );
+    }
+    final isFinal = permission == DevicePermission.denied;
+    awaitingGrant = isFinal;
+    return ConnectorStatus(
+      ConnectorState.notConnected,
+      detail: isFinal ? blocked : retry,
+      needsSettings: isFinal,
+    );
+  }
 
   /// Called after [connect] and [revoke] finish (status already emitted). The
   /// hub sets it to keep the background job in step with what is connected.
@@ -68,6 +117,10 @@ abstract class BaseConnector implements Connector {
   /// The read. Throw [ConnectorException] for anything the user can fix.
   Future<SyncResult> doSync(ConnectorAccount account, DateTime? since);
 
+  /// False for a source that is polled often (notifications): a read that
+  /// found nothing then leaves no "Read 0" row in the privacy ledger.
+  bool get logEmptyReads => true;
+
   /// Releases whatever the connector holds besides stored rows (folder grant,
   /// notification capture switch). Runs before the wipe; must not throw.
   Future<void> onRevoke(ConnectorAccount? account) async {}
@@ -76,7 +129,9 @@ abstract class BaseConnector implements Connector {
 
   @override
   Future<void> refreshStatus() async {
-    if (_syncing) return;
+    // Resume fires while the OS prompt closes: a refresh then would overwrite
+    // the denial sentence connect() is about to emit.
+    if (_syncing || _connecting) return;
     emit(await _evaluateSafely(await store.account(id)));
   }
 
@@ -93,13 +148,29 @@ abstract class BaseConnector implements Connector {
   }
 
   @override
-  Future<void> connect() async {
-    final next = await doConnect();
+  Future<bool> connect() async {
+    backedOut = false;
+    awaitingGrant = false;
+    _connecting = true;
+    final ConnectorStatus next;
+    try {
+      next = await doConnect();
+    } finally {
+      _connecting = false;
+    }
+    _lastConnect = next;
+    if (backedOut) {
+      // Nothing changed: no ledger row, no background-job churn. The status is
+      // re-emitted only so a card that showed a spinner settles again.
+      emit(next);
+      return false;
+    }
     if (next.isConnected) {
       await store.addLedger(id, LedgerAction.connect);
     }
     emit(next);
     await onConnectionChanged?.call();
+    return true;
   }
 
   @override
@@ -119,7 +190,11 @@ abstract class BaseConnector implements Connector {
     try {
       final result = await doSync(account, since);
       if (result.skipped == null) {
-        await store.recordSync(id, count: result.read);
+        await store.recordSync(
+          id,
+          count: result.read,
+          ledger: result.read > 0 || logEmptyReads,
+        );
       }
       emit(await _evaluateSafely(await store.account(id)));
       return result;
@@ -173,6 +248,7 @@ abstract class BaseConnector implements Connector {
       // what the user asked for and always runs.
     }
     await store.wipeConnector(id);
+    awaitingGrant = false;
     try {
       await onWiped?.call();
     } catch (_) {

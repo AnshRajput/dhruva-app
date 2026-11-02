@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/notification_connector.dart';
 import 'package:dhruva/data/connectors/notification_queue.dart';
+import 'package:dhruva/data/connectors/otp_guard.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +30,40 @@ String line({
 
 void main() {
   final now = DateTime.utc(2026, 11, 1, 8);
+
+  group('looksLikeVerificationCode', () {
+    test('hides wording plus a 4 to 8 digit code (English and Hindi)', () {
+      for (final (t, b) in [
+        ('Bank', 'Your OTP is 482913. Do not share it.'),
+        ('', 'otp 1234'),
+        ('Login', 'Use 5566 as your one-time password'),
+        ('', 'Your one time passcode: 90210'),
+        ('Verification code', '123-456'),
+        ('Verify', 'Your security code is 99887766'),
+        ('', '482913 is your Google verification code'),
+        ('बैंक', 'आपका ओटीपी 482913 है'),
+        ('', 'आपका कोड ४८२९१३ है'),
+      ]) {
+        expect(looksLikeVerificationCode(t, b), isTrue, reason: '$t / $b');
+      }
+    });
+
+    test('keeps ordinary notifications', () {
+      for (final (t, b) in [
+        ('Ravi', 'Lunch at 1?'),
+        ('Bank', 'Debited 500 at 12:30'),
+        (
+          'Delivery',
+          'Order 123456789012 shipped',
+        ), // long digit run, no wording
+        ('', 'Your OTP will arrive shortly'), // wording, no code
+        ('', 'Call 98765 43210 now'), // digits, no wording
+        ('Cab', 'Ride verified'), // "verified" is not the code wording
+      ]) {
+        expect(looksLikeVerificationCode(t, b), isFalse, reason: '$t / $b');
+      }
+    });
+  });
 
   group('parseQueueLine', () {
     test('accepts a well-formed line', () {
@@ -260,6 +295,22 @@ void main() {
       );
     });
 
+    test('first time: "one more step"; after access was on and is switched '
+        'off: "turned off" (different copy)', () async {
+      await kit.hub.notifications.connect();
+      final pending = kit.hub.notifications.currentStatus.detail!;
+      expect(pending, contains('One more step'));
+
+      kit.notifications.granted = true;
+      await kit.hub.notifications.refreshStatus();
+      kit.notifications.granted = false;
+      await kit.hub.notifications.refreshStatus();
+      final revoked = kit.hub.notifications.currentStatus.detail!;
+      expect(revoked, contains('was turned off'));
+      expect(revoked, contains('Open settings'));
+      expect(revoked, isNot(pending));
+    });
+
     test(
       'status follows the OS grant (granted -> revoked in settings)',
       () async {
@@ -338,6 +389,62 @@ void main() {
       expect(
         kit.hub.notifications.currentStatus.state,
         ConnectorState.needsAttention,
+      );
+    });
+
+    test('verification codes are redacted before storing; the rest is kept '
+        'as is', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      live().writeAsStringSync(
+        [
+          line(
+            pkg: 'com.bank.app',
+            app: 'Bank',
+            title: 'Bank',
+            text: 'Your OTP is 482913. Do not share it.',
+          ),
+          line(text: 'Lunch at 1?'),
+          line(
+            pkg: 'com.shop.app',
+            app: 'Shop',
+            title: '771204 is your code',
+            text: 'Use this verification code to sign in.',
+          ),
+        ].join('\n'),
+      );
+      await kit.hub.notifications.sync();
+      final items = await kit.hub.store.itemsOf('notifications');
+      expect(items.map((i) => i.body), [
+        hiddenCodeBody,
+        'Lunch at 1?',
+        hiddenCodeBody,
+      ]);
+      for (final i in items) {
+        expect('${i.title} ${i.body}', isNot(contains('482913')));
+        expect('${i.title} ${i.body}', isNot(contains('771204')));
+      }
+      final hidden = items.where((i) => i.flags[otpFlag] == true);
+      expect(hidden.map((i) => i.title), unorderedEquals(['Bank', 'Shop']));
+      expect(
+        items.where((i) => i.body == 'Lunch at 1?').single.flags[otpFlag],
+        isNull,
+      );
+      // Nor can the code be searched for.
+      final index = await kit.hub.store.itemsOf('notifications');
+      expect(index.any((i) => i.body.contains('482913')), isFalse);
+    });
+
+    test('an empty drain leaves no "Read 0" ledger row but still counts as '
+        'a sync', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      await kit.hub.notifications.sync();
+      final ledger = await kit.hub.store.ledger(connector: 'notifications');
+      expect(ledger.map((e) => e.action), [LedgerAction.connect]);
+      expect(
+        (await kit.hub.store.account('notifications'))!.lastSyncAt,
+        isNotNull,
       );
     });
 

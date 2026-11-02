@@ -599,18 +599,21 @@ class ConnectorStore {
   /// End of a successful sync: the content ledger row and the account's
   /// lastSyncAt in one transaction, skipped entirely if the connector was
   /// revoked meanwhile.
-  Future<void> recordSync(String connector, {required int count}) =>
-      _db.transaction(() async {
-        if (await account(connector) == null) return;
-        await addLedger(connector, LedgerAction.read, count: count);
-        await saveAccount(
-          connector,
-          status: 'connected',
-          clearError: true,
-          lastSyncAt: now,
-          onlyIfExists: true,
-        );
-      });
+  Future<void> recordSync(
+    String connector, {
+    required int count,
+    bool ledger = true,
+  }) => _db.transaction(() async {
+    if (await account(connector) == null) return;
+    if (ledger) await addLedger(connector, LedgerAction.read, count: count);
+    await saveAccount(
+      connector,
+      status: 'connected',
+      clearError: true,
+      lastSyncAt: now,
+      onlyIfExists: true,
+    );
+  });
 
   /// A failed sync, same revoke guard as [recordSync].
   Future<void> recordFailure(String connector, String message) =>

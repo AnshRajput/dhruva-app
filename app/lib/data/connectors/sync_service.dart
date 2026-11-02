@@ -10,13 +10,11 @@ import 'dart:async';
 
 import 'connector.dart';
 
-/// App-open syncs skip a connector that synced less than this long ago.
+/// App-open syncs skip a connector that synced less than this long ago. It
+/// guards the heavy reads (calendar, folder, contacts); notifications are
+/// exempt because a drain is a cheap local file read and the user expects a
+/// new notification to show up right away.
 const syncOnOpenMinInterval = Duration(minutes: 10);
-
-/// Notifications are a local file queue (no network, no quota), so opening or
-/// returning to Today drains it almost every time: what buzzed a minute ago is
-/// in the brief now, not ten minutes from now.
-const notificationsOnOpenMinInterval = Duration(minutes: 1);
 
 /// How one connector's run ended.
 final class SyncOutcome {
@@ -47,6 +45,7 @@ class SyncService {
   final Map<String, Connector> _connectors;
   final DateTime Function() _clock;
   Future<SyncReport>? _running;
+  Future<SyncOutcome?>? _draining;
 
   /// True while a sync is running.
   bool get isRunning => _running != null;
@@ -57,6 +56,47 @@ class SyncService {
 
   /// Manual refresh / background job: always syncs every connected source.
   Future<SyncReport> refresh() => _run(skipRecent: false);
+
+  /// Moves what the notification listener queued into the store, now, whatever
+  /// the 10-minute throttle says. Called on app resume, when the Inbox opens
+  /// and on pull-to-refresh. Null when notifications are not connected. Shares
+  /// a running drain or full sync instead of starting a second one.
+  Future<SyncOutcome?> drainNotifications() {
+    final draining = _draining;
+    if (draining != null) return draining;
+    final running = _running;
+    final f = (running == null ? _drain() : running.then((_) => null))
+        .whenComplete(() => _draining = null);
+    _draining = f;
+    return f;
+  }
+
+  Future<SyncOutcome?> _drain() async {
+    final c = _connectors[ConnectorIds.notifications];
+    if (c == null) return null;
+    await c.refreshStatus();
+    final state = c.currentStatus.state;
+    if (state != ConnectorState.connected &&
+        state != ConnectorState.needsAttention) {
+      return null;
+    }
+    return _syncOne(c);
+  }
+
+  Future<SyncOutcome> _syncOne(Connector c) async {
+    try {
+      return SyncOutcome.done(await c.sync());
+    } on ConnectorException catch (e) {
+      return SyncOutcome.failed(e);
+    } catch (_) {
+      return SyncOutcome.failed(
+        ConnectorException(
+          ConnectorState.needsAttention,
+          'Could not read ${c.displayName}. Try again.',
+        ),
+      );
+    }
+  }
 
   Future<SyncReport> _run({required bool skipRecent}) {
     // Single flight: a second caller shares the running sync.
@@ -81,24 +121,13 @@ class SyncService {
         continue;
       }
       final last = status.lastSyncAt;
-      final minGap = id == ConnectorIds.notifications
-          ? notificationsOnOpenMinInterval
-          : syncOnOpenMinInterval;
-      if (skipRecent && last != null && _clock().difference(last) < minGap) {
+      if (skipRecent &&
+          id != ConnectorIds.notifications &&
+          last != null &&
+          _clock().difference(last) < syncOnOpenMinInterval) {
         continue;
       }
-      try {
-        outcomes[id] = SyncOutcome.done(await c.sync());
-      } on ConnectorException catch (e) {
-        outcomes[id] = SyncOutcome.failed(e);
-      } catch (_) {
-        outcomes[id] = SyncOutcome.failed(
-          ConnectorException(
-            ConnectorState.needsAttention,
-            'Could not read ${c.displayName}. Try again.',
-          ),
-        );
-      }
+      outcomes[id] = await _syncOne(c);
     }
     return SyncReport(outcomes);
   }

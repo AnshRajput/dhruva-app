@@ -40,11 +40,21 @@ class BriefCard extends ConsumerStatefulWidget {
 class _BriefCardState extends ConsumerState<BriefCard> {
   bool _connecting = false;
 
+  /// Where the last tap on Connect ended when the system permission was not
+  /// granted (same as the Connectors row): the connector's own sentence, and
+  /// whether only system settings is left. Null after a grant.
+  ConnectorStatus? _denied;
+
   Future<void> _connect() async {
     setState(() => _connecting = true);
     final status = await connectCalendar(ref);
     if (!mounted) return;
-    setState(() => _connecting = false);
+    setState(() {
+      _connecting = false;
+      _denied = status != null && status.detail != null && !status.isConnected
+          ? status
+          : null;
+    });
     if (status == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -64,25 +74,36 @@ class _BriefCardState extends ConsumerState<BriefCard> {
 
     if (!loaded) return const _BriefSkeleton();
 
-    final state = calendar?.status.state;
-    if (state == ConnectorState.permissionDenied) {
+    final status = calendar?.status;
+    // The connector words every case; this card only picks the layout. First
+    // Deny on Android: retry sentence, Connect stays. Second Deny: Open
+    // settings (coming back with it on connects by itself). Access switched
+    // off later: the revoked fix.
+    final denied = status?.state == ConnectorState.notConnected
+        ? _denied
+        : null;
+    if (status?.state == ConnectorState.permissionDenied ||
+        (denied?.needsSettings ?? false)) {
+      final revoked = status?.state == ConnectorState.permissionDenied;
       return _ConnectCard(
-        title: 'Calendar access is off',
-        body:
-            'Your brief is built from your calendar. Allow Calendar for this '
-            'app in your phone settings, then come back.',
+        title: revoked ? 'Calendar access is off' : 'Connect your calendar',
+        body: revoked
+            ? 'Your brief is built from your calendar. Allow Calendar for this '
+                  'app in your phone settings, then come back.'
+            : denied!.detail!,
         actionLabel: 'Open settings',
         actionKey: const ValueKey('today-brief-open-settings'),
         onAction: () => openCalendarSettings(ref),
       );
     }
-    if (facts.isEmpty && !(calendar?.status.isConnected ?? false)) {
+    if (facts.isEmpty && !(status?.isConnected ?? false)) {
       return _ConnectCard(
         title: 'Connect your calendar',
         body:
+            denied?.detail ??
             'See your day here and get a short brief, written on this phone. '
-            'It uses the calendar already on your phone: no sign-in, and '
-            'nothing is uploaded.',
+                'It uses the calendar already on your phone: no sign-in, and '
+                'nothing is uploaded.',
         actionLabel: _connecting ? 'Connecting…' : 'Connect your calendar',
         actionKey: const ValueKey('today-brief-connect'),
         onAction: _connecting ? null : _connect,

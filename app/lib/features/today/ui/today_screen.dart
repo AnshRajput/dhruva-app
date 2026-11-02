@@ -18,7 +18,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/crash/crash_banner.dart';
-import '../../../core/di/connector_actions.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/router/inbox_availability.dart';
@@ -71,11 +70,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    // Back from system settings, say: re-read what the OS now allows first, so
-    // a Calendar grant turns the card into the real day.
-    unawaited(
-      resumeConnectors(ref).then((_) => _syncOnResume()).whenComplete(_onOpen),
-    );
+    // The app root already re-reads the OS grants on resume (a Calendar
+    // grant made in system settings connects there, and the card follows the
+    // connector status); Today only catches up on what arrived meanwhile.
+    unawaited(_syncOnResume().whenComplete(_onOpen));
   }
 
   /// Notifications that arrived while the app was away join the brief now.

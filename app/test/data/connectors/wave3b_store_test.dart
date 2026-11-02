@@ -201,11 +201,12 @@ void main() {
       await k.hub.onResume();
       expect(k.hub.notifications.currentStatus.state, ConnectorState.connected);
       expect(scheduler.scheduled, 1);
-      // It read straight away: a sync ledger row exists.
-      final reads = (await k.hub.store.ledger(
-        connector: 'notifications',
-      )).where((e) => e.action == LedgerAction.read);
-      expect(reads, hasLength(1));
+      // It read straight away: the sync was recorded (an empty notification
+      // read writes no ledger row, but it does stamp the last sync time).
+      expect(
+        (await k.hub.store.account('notifications'))!.lastSyncAt,
+        isNotNull,
+      );
     });
 
     test('access taken away is noticed and the job is cancelled when nothing '

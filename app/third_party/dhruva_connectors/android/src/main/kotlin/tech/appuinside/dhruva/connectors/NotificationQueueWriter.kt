@@ -13,7 +13,6 @@ internal object ConnectorPrefs {
     private const val FILE = "dhruva_connectors"
     private const val KEY_CAPTURE = "notif_capture"
     private const val KEY_EXCLUDED = "notif_excluded"
-    private const val KEY_CALENDAR_ASKED = "calendar_asked"
 
     private fun prefs(c: Context) =
         c.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -28,9 +27,10 @@ internal object ConnectorPrefs {
     fun setExcluded(c: Context, packages: Collection<String>) =
         prefs(c).edit().putStringSet(KEY_EXCLUDED, packages.toSet()).apply()
 
-    fun calendarAsked(c: Context) = prefs(c).getBoolean(KEY_CALENDAR_ASKED, false)
-    fun setCalendarAsked(c: Context) =
-        prefs(c).edit().putBoolean(KEY_CALENDAR_ASKED, true).apply()
+    /** Has the system prompt for [name] ("calendar", "contacts") ever been shown? */
+    fun asked(c: Context, name: String) = prefs(c).getBoolean("${name}_asked", false)
+    fun setAsked(c: Context, name: String) =
+        prefs(c).edit().putBoolean("${name}_asked", true).apply()
 }
 
 /**

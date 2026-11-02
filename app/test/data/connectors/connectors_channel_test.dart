@@ -253,6 +253,7 @@ void main() {
     await source.openSettings();
     expect(calls.map((c) => c.method), [
       'calendar.permission',
+      'permission.markAsked',
       'calendar.request',
       'calendar.events',
       'app.settings',

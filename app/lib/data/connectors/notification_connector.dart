@@ -16,6 +16,7 @@ import 'connector.dart';
 import 'connector_sources.dart';
 import 'connector_store.dart';
 import 'notification_queue.dart';
+import 'otp_guard.dart';
 
 /// Notifications older than this are dropped at each sync.
 const notificationRetention = Duration(days: 7);
@@ -29,15 +30,29 @@ class NotificationConnector extends BaseConnector {
 
   final NotificationAccess access;
 
+  // Drained on every resume, Inbox open and pull-to-refresh: an empty drain is
+  // not worth a ledger row.
+  @override
+  bool get logEmptyReads => false;
+
   @override
   String get id => ConnectorIds.notifications;
 
   @override
   String get displayName => 'Notifications';
 
+  /// Access was on once and has since been switched off.
   static const _off =
-      'Notification access is off. Open settings and switch it on for this '
-      'app to see your notification digest.';
+      'Notification access was turned off. Open settings and switch it back '
+      'on to keep your digest current.';
+
+  /// First time: the user has not switched the system toggle on yet.
+  static const _pending =
+      'One more step. Open settings and switch notification access on for '
+      'this app to see your notification digest.';
+
+  /// Config flag: the OS grant has been seen in place at least once.
+  static const _everGranted = 'everGranted';
 
   @override
   ConnectorStatus get currentStatus =>
@@ -56,8 +71,16 @@ class NotificationConnector extends BaseConnector {
     if (!await access.isGranted()) {
       return ConnectorStatus(
         ConnectorState.needsAttention,
-        detail: _off,
+        detail: account.config[_everGranted] == true ? _off : _pending,
         lastSyncAt: account.lastSyncAt,
+      );
+    }
+    if (account.config[_everGranted] != true) {
+      // From here on a missing grant means "revoked", not "not done yet".
+      await store.saveAccount(
+        id,
+        config: {...account.config, _everGranted: true},
+        onlyIfExists: true,
       );
     }
     if (account.lastError != null) {
@@ -91,7 +114,10 @@ class NotificationConnector extends BaseConnector {
     );
     if (await access.isGranted()) return evaluate(await store.account(id));
     await access.openSettings();
-    return const ConnectorStatus(ConnectorState.needsAttention, detail: _off);
+    return const ConnectorStatus(
+      ConnectorState.needsAttention,
+      detail: _pending,
+    );
   }
 
   @override
@@ -109,14 +135,26 @@ class NotificationConnector extends BaseConnector {
     ).drain(now: now, excluded: _excluded(account));
     final drafts = [
       for (final n in batch.notifications)
-        ItemDraft(
-          externalId: n.dedupeId,
-          kind: ItemKind.notification,
-          title: n.title.isEmpty ? n.app : n.title,
-          body: n.text,
-          sentAt: n.time,
-          flags: {'pkg': n.pkg, 'app': n.app},
-        ),
+        if (looksLikeVerificationCode(n.title, n.text))
+          // The code is dropped here, before anything is stored: the title
+          // may carry it too, so the app name stands in for it.
+          ItemDraft(
+            externalId: n.dedupeId,
+            kind: ItemKind.notification,
+            title: n.app,
+            body: hiddenCodeBody,
+            sentAt: n.time,
+            flags: {'pkg': n.pkg, 'app': n.app, otpFlag: true},
+          )
+        else
+          ItemDraft(
+            externalId: n.dedupeId,
+            kind: ItemKind.notification,
+            title: n.title.isEmpty ? n.app : n.title,
+            body: n.text,
+            sentAt: n.time,
+            flags: {'pkg': n.pkg, 'app': n.app},
+          ),
     ];
     final result = await store.upsertItems(id, drafts, requireAccount: true);
     // Only now is it safe to forget the queue files.

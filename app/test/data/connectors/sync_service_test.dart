@@ -1,10 +1,15 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dhruva/data/connectors/background_sync.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
+import 'package:dhruva/data/connectors/notification_queue.dart';
 import 'package:dhruva/data/connectors/sync_service.dart';
 import 'package:dhruva/data/db/database.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/fake_connector_sources.dart';
 
@@ -118,6 +123,63 @@ void main() {
     expect((await kit.hub.sync.syncOnOpen()).outcomes.keys, ['calendar']);
   });
 
+  group('notification drain', () {
+    File live() => File(p.join(kit.queueDir.path, NotificationQueue.liveName));
+    void queue(String text) => live().writeAsStringSync(
+      '${jsonEncode({'v': 1, 'pkg': 'com.chat.app', 'app': 'Chat', 'title': 'Ravi', 'text': text, 't': now.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch})}\n',
+      mode: FileMode.append,
+    );
+
+    test('app-open sync drains notifications even inside the 10-minute '
+        'window, while calendar stays throttled', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      await kit.hub.calendar.connect();
+      await kit.hub.sync.syncOnOpen(); // both synced "now"
+      queue('new one');
+      now = now.add(const Duration(minutes: 2));
+      final report = await kit.hub.sync.syncOnOpen();
+      expect(report.outcomes.keys, ['notifications']);
+      expect(await kit.hub.store.countItems('notifications'), 1);
+    });
+
+    test('drainNotifications reads the queue now; null when notifications '
+        'are not connected', () async {
+      expect(await kit.hub.sync.drainNotifications(), isNull);
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      queue('a');
+      final out = await kit.hub.sync.drainNotifications();
+      expect(out!.ok, isTrue);
+      expect(out.result!.read, 1);
+      queue('b');
+      await kit.hub.sync.drainNotifications();
+      expect(await kit.hub.store.countItems('notifications'), 2);
+      expect(kit.queueDir.listSync(), isEmpty);
+    });
+
+    test('onResume drains what the listener queued (no throttle)', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      await kit.hub.notifications.sync();
+      queue('while you were away');
+      await kit.hub.onResume();
+      expect(
+        (await kit.hub.store.itemsOf('notifications')).single.body,
+        'while you were away',
+      );
+    });
+
+    test('concurrent drains share one run', () async {
+      kit.notifications.granted = true;
+      await kit.hub.notifications.connect();
+      final a = kit.hub.sync.drainNotifications();
+      final b = kit.hub.sync.drainNotifications();
+      expect(identical(a, b), isTrue);
+      await a;
+    });
+  });
+
   test('concurrent callers share one run (single flight)', () async {
     await kit.hub.calendar.connect();
     final a = kit.hub.sync.refresh();
@@ -173,17 +235,14 @@ void main() {
     });
   });
 
-  test('app-open sync drains the local notification queue after a minute, '
-      'not ten', () async {
+  test('app-open sync always drains the local notification queue, while '
+      'calendar keeps its ten-minute throttle', () async {
     kit.notifications.granted = true;
     await kit.hub.notifications.connect();
     await kit.hub.calendar.connect();
     await kit.hub.sync.refresh();
 
     now = now.add(const Duration(seconds: 30));
-    expect((await kit.hub.sync.syncOnOpen()).outcomes, isEmpty);
-
-    now = now.add(notificationsOnOpenMinInterval);
     expect((await kit.hub.sync.syncOnOpen()).outcomes.keys, ['notifications']);
   });
 }

@@ -58,6 +58,7 @@ Future<ConnectorUi> pumpConnectorScreen(
   List<Override> overrides = const [],
   Size surface = const Size(800, 2400),
   bool notificationsSupported = true,
+  ThemeData? theme,
 
   /// Replaces the hub the providers see (e.g. one that never finishes
   /// starting, to show the loading state).
@@ -100,7 +101,10 @@ Future<ConnectorUi> pumpConnectorScreen(
         prefsStoreProvider.overrideWith((ref) async => MemoryPrefsStore()),
         ...overrides,
       ],
-      child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+      child: MaterialApp.router(
+        theme: theme ?? AppTheme.dark,
+        routerConfig: router,
+      ),
     ),
   );
   await tester.pumpAndSettle();

@@ -129,16 +129,34 @@ class _ConnectorRow extends ConsumerStatefulWidget {
 class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
   bool _working = false;
 
+  /// Where the last tap on the action ended when the system permission was
+  /// not granted: the sentence to show inline, and whether the only way on is
+  /// system settings. Null after a grant, or before the first tap.
+  ConnectorStatus? _denied;
+
   Future<void> _connect() async {
     setState(() => _working = true);
     try {
-      await ref
+      final s = await ref
           .read(connectorActionsProvider)
           .connect(widget.entry.connector.id);
+      if (mounted) {
+        setState(() {
+          _denied = s.state == ConnectorState.notConnected && s.detail != null
+              ? s
+              : null;
+        });
+      }
     } finally {
       if (mounted) setState(() => _working = false);
     }
   }
+
+  /// Blocked for good: system settings is the way forward. Coming back with
+  /// the permission on connects by itself (`ConnectorHub.onResume`).
+  Future<void> _openSettings() => ref
+      .read(connectorActionsProvider)
+      .openSystemSettings(widget.entry.connector.id);
 
   @override
   Widget build(BuildContext context) {
@@ -147,11 +165,13 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
     final copy = copyFor(c.id);
     final connected = status.isConnected;
     final line = statusLine(status, when: (d) => _whenText(context, d));
+    final denied = status.state == ConnectorState.notConnected ? _denied : null;
+    final blocked = denied?.needsSettings ?? false;
 
     final action = FilledButton.tonal(
       key: ValueKey('connector-${c.id}-action'),
-      onPressed: _working ? null : _connect,
-      child: Text(copy.connectLabel),
+      onPressed: _working ? null : (blocked ? _openSettings : _connect),
+      child: Text(blocked ? 'Open settings' : copy.connectLabel),
     );
 
     return LayoutBuilder(
@@ -168,6 +188,7 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
           line: line,
           trailing: trailing,
           below: !connected && narrow ? action : null,
+          feedback: denied?.detail,
         );
       },
     );
@@ -179,6 +200,7 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
     required StatusLine line,
     required Widget? trailing,
     required Widget? below,
+    String? feedback,
   }) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
@@ -224,6 +246,20 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (feedback != null) ...[
+                    SizedBox(height: tokens.spacing.sm),
+                    // Announced to screen readers the moment it appears.
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        feedback,
+                        key: ValueKey('connector-${c.id}-feedback'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: tokens.warning,
+                        ),
+                      ),
+                    ),
+                  ],
                   if (below != null) ...[
                     SizedBox(height: tokens.spacing.md),
                     below,

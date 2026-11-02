@@ -15,6 +15,7 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
+import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../state/inbox_grouping.dart';
 
 class InboxItemScreen extends ConsumerWidget {
@@ -156,12 +157,14 @@ class InboxItemScreen extends ConsumerWidget {
               spacing: tokens.spacing.sm,
               runSpacing: tokens.spacing.sm,
               children: [
-                FilledButton(
-                  key: const ValueKey('inbox-ask'),
-                  onPressed: () =>
-                      context.push(askNewLocation(focus: [item.id])),
-                  child: const Text('Ask about this'),
-                ),
+                // A hidden verification code has nothing left to ask about.
+                if (item.flags[otpFlag] != true)
+                  FilledButton(
+                    key: const ValueKey('inbox-ask'),
+                    onPressed: () =>
+                        context.push(askNewLocation(focus: [item.id])),
+                    child: const Text('Ask about this'),
+                  ),
                 OutlinedButton(
                   key: const ValueKey('inbox-open-app'),
                   onPressed: item.packageName.isEmpty

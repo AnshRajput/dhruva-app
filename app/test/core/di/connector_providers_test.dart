@@ -63,11 +63,12 @@ void main() {
     'connector list shows the supported connectors with their status',
     () async {
       final list = await nextList();
+      // Display order: Calendar, Contacts, Notes folder, Notifications.
       expect(list.map((e) => e.connector.id), [
         'calendar',
+        'contacts',
         'folder',
         'notifications',
-        'contacts',
       ]);
       expect(
         list.every((e) => e.status.state == ConnectorState.notConnected),
