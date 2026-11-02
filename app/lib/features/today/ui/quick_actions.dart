@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/edge_fade.dart';
 import '../../../core/widgets/pressable_scale.dart';
 import '../../../data/connectors/ask_sources.dart';
 import '../../../data/connectors/connector.dart';
@@ -124,32 +125,35 @@ class QuickActionsRow extends ConsumerWidget {
     ];
     return SizedBox(
       height: 48,
-      child: ListView(
-        key: const ValueKey('today-quick-actions'),
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final (id, icon, label, onTap) in actions) ...[
+      // The fade tells a cut-off chip that the row scrolls.
+      child: EdgeFade(
+        child: ListView(
+          key: const ValueKey('today-quick-actions'),
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final (id, icon, label, onTap) in actions) ...[
+              PressableScale(
+                onTap: onTap,
+                semanticLabel: label,
+                child: _Pill(
+                  icon: icon,
+                  label: label,
+                  keyValue: 'today-action-$id',
+                ),
+              ),
+              SizedBox(width: tokens.spacing.sm),
+            ],
             PressableScale(
-              onTap: onTap,
-              semanticLabel: label,
-              child: _Pill(
-                icon: icon,
-                label: label,
-                keyValue: 'today-action-$id',
+              onTap: () => context.push('/actions'),
+              semanticLabel: 'All actions',
+              child: const _Pill(
+                icon: Icons.arrow_forward_rounded,
+                label: 'All actions',
+                keyValue: 'today-action-all',
               ),
             ),
-            SizedBox(width: tokens.spacing.sm),
           ],
-          PressableScale(
-            onTap: () => context.push('/actions'),
-            semanticLabel: 'All actions',
-            child: const _Pill(
-              icon: Icons.arrow_forward_rounded,
-              label: 'All actions',
-              keyValue: 'today-action-all',
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

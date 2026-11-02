@@ -44,7 +44,6 @@ import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
 import '../../features/settings/ui/about_me_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
-import '../../features/settings/ui/appearance_screen.dart';
 import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
 import '../../features/settings/ui/ledger_screen.dart';
@@ -158,10 +157,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/about-me',
       builder: (context, state) => const AboutMeScreen(),
-    ),
-    GoRoute(
-      path: '/settings/appearance',
-      builder: (context, state) => const AppearanceScreen(),
     ),
     GoRoute(
       path: '/settings/notifications',

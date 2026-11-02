@@ -31,55 +31,73 @@ class CrashReportBanner extends ConsumerWidget {
     return Container(
       key: const ValueKey('crash-banner'),
       width: double.infinity,
+      // Its own breathing room above and below: it used to sit 12 px over the
+      // greeting and crowd the header.
       margin: EdgeInsets.fromLTRB(
         tokens.spacing.md,
-        tokens.spacing.xs,
+        tokens.spacing.sm,
         tokens.spacing.md,
-        tokens.spacing.xs,
+        tokens.spacing.md,
       ),
-      padding: EdgeInsets.only(
-        left: tokens.spacing.md,
-        right: tokens.spacing.xs,
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.md,
+        tokens.spacing.md,
+        tokens.spacing.sm,
+        tokens.spacing.xs,
       ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(tokens.radius.lg),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Row(
+      // The sentence gets the full width on the first row; the two actions sit
+      // on a second row, with Send tonal (the quiet one: it is the least
+      // important thing on Today, so it must not be the loudest).
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, size: 20, color: tokens.warning),
-          SizedBox(width: tokens.spacing.sm),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  '${AppIdentity.shortName} hit a problem last time. Send a crash report?',
-                  style: theme.textTheme.titleSmall,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, size: 20, color: tokens.warning),
+              SizedBox(width: tokens.spacing.sm),
+              Expanded(
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    '${AppIdentity.shortName} hit a problem last time. Send a crash report?',
+                    style: theme.textTheme.titleSmall,
+                  ),
                 ),
               ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              spacing: tokens.spacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton(
+                  key: const ValueKey('crash-dismiss'),
+                  onPressed: done,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: scheme.onSurfaceVariant,
+                  ),
+                  child: const Text('Dismiss'),
+                ),
+                FilledButton.tonal(
+                  key: const ValueKey('crash-send'),
+                  onPressed: () async {
+                    await shareCrashReport(unseen);
+                    await done();
+                  },
+                  child: const Text('Send'),
+                ),
+              ],
             ),
           ),
-          TextButton(
-            key: const ValueKey('crash-dismiss'),
-            onPressed: done,
-            style: TextButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              foregroundColor: scheme.onSurfaceVariant,
-            ),
-            child: const Text('Dismiss'),
-          ),
-          FilledButton(
-            key: const ValueKey('crash-send'),
-            onPressed: () async {
-              await shareCrashReport(unseen);
-              await done();
-            },
-            child: const Text('Send'),
-          ),
-          SizedBox(width: tokens.spacing.xs),
         ],
       ),
     );

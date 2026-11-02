@@ -144,6 +144,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
       briefControllerProvider.select((s) => s.value?.warming ?? false),
     );
     final inboxAvailable = ref.watch(inboxAvailableProvider);
+    final inboxSetupPossible = inboxSetupPossibleOn(theme.platform);
     final loaded = ref.watch(connectorsLoadedProvider);
     final waiting = needsYou(
       ref.watch(unreadNotificationGroupsProvider),
@@ -235,7 +236,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                     const UpNextSection(),
                     const NeedsYouSection(),
                     const DigestCard(),
-                    if (loaded && !inboxAvailable && waiting.isEmpty) ...[
+                    if (loaded &&
+                        inboxSetupPossible &&
+                        !inboxAvailable &&
+                        waiting.isEmpty) ...[
                       SizedBox(height: tokens.spacing.lg),
                       NextStepCard(
                         icon: Icons.inbox_outlined,

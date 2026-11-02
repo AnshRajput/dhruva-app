@@ -144,6 +144,10 @@ final class Attendee {
   final String? photoBase64;
 }
 
+/// Prep briefs you on the people in a meeting, so it is offered only for events
+/// that have some (a Gym slot or a solo dinner has nothing to prepare).
+bool canPrep(ConnectorItem e) => e.people.isNotEmpty;
+
 /// Attendees of [e], resolved through the contacts directory (lowercase email
 /// to contact item) for names and photos.
 List<Attendee> attendeesOf(
@@ -229,18 +233,21 @@ class AvatarStack extends StatelessWidget {
     super.key,
     required this.people,
     this.max = 3,
+    this.showOverflow = true,
     this.size = 32,
   });
 
   final List<Attendee> people;
   final int max;
+  final bool showOverflow;
   final double size;
 
   @override
   Widget build(BuildContext context) {
     if (people.isEmpty) return const SizedBox.shrink();
     final shown = people.take(max).toList();
-    final extra = people.length - shown.length;
+    // The "+N" chip is dropped where a names line already counts the rest.
+    final extra = showOverflow ? people.length - shown.length : 0;
     final overlap = size * 0.28;
     final theme = Theme.of(context);
     return ExcludeSemantics(

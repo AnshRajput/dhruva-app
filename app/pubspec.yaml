@@ -200,6 +200,8 @@ flutter:
   assets:
     - assets/characters/starter_pack.json
     - shorebird.yaml
+    # Read at startup for the About/version line (features/settings/app_info).
+    - pubspec.yaml
 
   # To add assets to your application, add an assets section, like this:
   # assets:

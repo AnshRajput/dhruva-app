@@ -9,10 +9,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/library_providers.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/library/library_store.dart';
 
 Future<void> showSavedSheet(BuildContext context, SavedAnswer saved) =>
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

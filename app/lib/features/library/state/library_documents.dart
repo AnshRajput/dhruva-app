@@ -63,6 +63,35 @@ final class LibraryDocEntry {
   });
 }
 
+/// One document, one row. An attached file and its folder copy are the same
+/// document, and so is a file attached to two chats: same name (any case) and,
+/// where both sides know it, the same page count. The newest attachment wins.
+/// Neither record carries a content hash or the source URI, so name + pages is
+/// the identity the data offers today.
+/// ponytail: switch to a content hash when the stores keep one.
+List<DocumentInfo> dedupeAttached(
+  List<DocumentInfo> docs,
+  List<FolderFile> folderFiles,
+) {
+  String norm(String n) => n.trim().toLowerCase();
+  bool sameFile(DocumentInfo d, FolderFile f) =>
+      norm(d.name) == norm(f.name) &&
+      (f.pages == null || d.pageCount <= 0 || f.pages == d.pageCount);
+  final out = <DocumentInfo>[];
+  for (final d in [
+    ...docs,
+  ]..sort((a, b) => b.createdAt.compareTo(a.createdAt))) {
+    if (folderFiles.any((f) => sameFile(d, f))) continue;
+    final repeat = out.any(
+      (o) =>
+          norm(o.name) == norm(d.name) &&
+          (o.pageCount <= 0 || d.pageCount <= 0 || o.pageCount == d.pageCount),
+    );
+    if (!repeat) out.add(d);
+  }
+  return out;
+}
+
 final libraryDocumentsProvider = Provider<AsyncValue<List<LibraryDocEntry>>>((
   ref,
 ) {
@@ -74,8 +103,13 @@ final libraryDocumentsProvider = Provider<AsyncValue<List<LibraryDocEntry>>>((
   }
   if (!docs.hasValue && !files.hasValue) return const AsyncLoading();
   final now = DateTime.now();
+  final folderFiles = files.value ?? const <FolderFile>[];
+  final attached = dedupeAttached(
+    docs.value ?? const <DocumentInfo>[],
+    folderFiles,
+  );
   final out = <LibraryDocEntry>[
-    for (final d in docs.value ?? const <DocumentInfo>[])
+    for (final d in attached)
       LibraryDocEntry(
         key: 'doc-${d.id}',
         name: d.name,
@@ -86,7 +120,7 @@ final libraryDocumentsProvider = Provider<AsyncValue<List<LibraryDocEntry>>>((
         at: d.createdAt,
         conversationId: d.conversationId,
       ),
-    for (final f in files.value ?? const <FolderFile>[])
+    for (final f in folderFiles)
       LibraryDocEntry(
         key: 'file-${f.fileId}',
         name: f.name,

@@ -12,13 +12,14 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/connector_providers.dart';
 import '../../../core/router/ask_route.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_sources.dart';
 import '../state/library_documents.dart';
 import '../state/library_text.dart';
 
 Future<void> showFileSheet(BuildContext context, LibraryFile file) =>
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       useSafeArea: true,
       showDragHandle: true,

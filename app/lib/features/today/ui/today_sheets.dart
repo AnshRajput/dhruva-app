@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
 import '../state/brief_facts.dart';
@@ -19,7 +20,7 @@ import 'today_actions.dart';
 import 'today_widgets.dart';
 
 Future<void> showEventSheet(BuildContext context, ConnectorItem event) =>
-    showModalBottomSheet<void>(
+    showDhruvaSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -136,18 +137,20 @@ class EventSheet extends ConsumerWidget {
           SizedBox(height: tokens.spacing.xl),
           Row(
             children: [
-              Expanded(
-                child: FilledButton.icon(
-                  key: const ValueKey('event-prep'),
-                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Prep'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    prepForEvent(context, event);
-                  },
+              if (canPrep(event)) ...[
+                Expanded(
+                  child: FilledButton.icon(
+                    key: const ValueKey('event-prep'),
+                    icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                    label: const Text('Prep'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      prepForEvent(context, event);
+                    },
+                  ),
                 ),
-              ),
-              SizedBox(width: tokens.spacing.sm),
+                SizedBox(width: tokens.spacing.sm),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   key: const ValueKey('event-open-calendar'),
@@ -167,7 +170,7 @@ class EventSheet extends ConsumerWidget {
 Future<void> showNotificationSheet(
   BuildContext context,
   NotificationGroup group,
-) => showModalBottomSheet<void>(
+) => showDhruvaSheet<void>(
   context: context,
   isScrollControlled: true,
   showDragHandle: true,

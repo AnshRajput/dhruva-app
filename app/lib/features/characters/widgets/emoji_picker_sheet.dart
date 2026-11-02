@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 
 const _curatedEmoji = [
   '🙂',
@@ -54,7 +55,7 @@ const _curatedEmoji = [
 
 /// Returns the picked emoji, or null if dismissed.
 Future<String?> showEmojiPickerSheet(BuildContext context) {
-  return showModalBottomSheet<String>(
+  return showDhruvaSheet<String>(
     context: context,
     isScrollControlled: true,
     builder: (context) => const _EmojiPickerSheet(),

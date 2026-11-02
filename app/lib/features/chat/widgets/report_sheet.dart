@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/safety/report_mail.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/chat_repository.dart';
 import '../../../data/safety/report_repository.dart';
 import '../../settings/app_info.dart';
@@ -23,14 +24,9 @@ Future<void> showReportSheet(
   String? modelName,
   required VoidCallback onReported,
 }) {
-  final tokens = Theme.of(context).extension<DhruvaTokens>()!;
-  return showModalBottomSheet<void>(
+  return showDhruvaSheet<void>(
     context: context,
     isScrollControlled: true,
-    sheetAnimationStyle: AnimationStyle(
-      duration: tokens.motion.moderate,
-      reverseDuration: tokens.motion.fast,
-    ),
     builder: (_) => ReportSheet(
       message: message,
       modelName: modelName,

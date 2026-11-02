@@ -248,13 +248,24 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
     final busy = s?.writing ?? false;
     final reduce = MediaQuery.disableAnimationsOf(context);
 
-    void onCite(List<int> cites) {
+    BriefFact? factFor(List<int> cites) {
       for (final f in facts) {
-        if (f.n == cites.first) {
-          openFact(context, ref, f);
-          return;
-        }
+        if (f.n == cites.first) return f;
       }
+      return null;
+    }
+
+    void onCite(List<int> cites) {
+      final f = factFor(cites);
+      if (f != null) openFact(context, ref, f);
+    }
+
+    // `event:0` is "the day timeline" (the shape of the day, a free gap, no
+    // meetings): it is not a source, so it is neither underlined nor tappable
+    // ("See day" is right below).
+    bool canOpen(List<int> cites) {
+      final f = factFor(cites);
+      return f != null && f.ref != 'event:0';
     }
 
     final sources = _sourcesRead(
@@ -283,6 +294,7 @@ class _BriefBodyState extends ConsumerState<_BriefBody> {
               key: const ValueKey('today-brief-text'),
               sentences: sentences,
               onCite: onCite,
+              canOpen: canOpen,
             ),
           ),
           SizedBox(height: tokens.spacing.md),
@@ -573,14 +585,29 @@ class _FactList extends ConsumerWidget {
   }
 }
 
-/// The brief text. A cited span is underlined in the accent colour and opens
-/// its fact on tap; it shows a tinted press state the moment the finger goes
-/// down.
+/// Lines of brief shown before "Read more" (the comps hold about five).
+const _briefCollapsedLines = 6;
+
+/// The brief text. Only a phrase that opens a SOURCE (an event, a notification
+/// group, the to-dos) is underlined in the accent colour and tappable; a phrase
+/// that just summarises the day ([canOpen] false) reads as plain text, so an
+/// underline always means "opens something". A tappable span shows a tinted
+/// press state the moment the finger goes down.
 class CitedText extends StatefulWidget {
-  const CitedText({super.key, required this.sentences, required this.onCite});
+  const CitedText({
+    super.key,
+    required this.sentences,
+    required this.onCite,
+    this.canOpen = _always,
+  });
 
   final List<BriefSentence> sentences;
   final void Function(List<int> cites) onCite;
+
+  /// Whether the fact behind [cites] opens a source of its own.
+  final bool Function(List<int> cites) canOpen;
+
+  static bool _always(List<int> _) => true;
 
   @override
   State<CitedText> createState() => _CitedTextState();
@@ -591,6 +618,7 @@ class _CitedTextState extends State<CitedText> {
   // rebuilds mid-gesture, and a recognizer replaced then would never tap.
   final _recognizers = <int, TapGestureRecognizer>{};
   int? _pressed;
+  bool _expanded = false;
 
   @override
   void dispose() {
@@ -604,9 +632,13 @@ class _CitedTextState extends State<CitedText> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    // Brief text uses the display voice, like the comps.
-    final base = theme.textTheme.titleLarge!.copyWith(
+    // Brief text uses the display voice, like the comps (comps/today-a.png:
+    // about 19 px regular serif, not the 22 px semi-bold title role).
+    final role = theme.textTheme.titleLarge!;
+    final base = role.copyWith(
       color: scheme.onSurfaceVariant,
+      fontSize: role.fontSize! - 3,
+      fontWeight: FontWeight.w500,
       height: 1.4,
     );
     var index = 0;
@@ -614,7 +646,7 @@ class _CitedTextState extends State<CitedText> {
     for (final (si, s) in widget.sentences.indexed) {
       if (si > 0) spans.add(const TextSpan(text: ' '));
       for (final span in s.spans) {
-        if (!span.isCited) {
+        if (!span.isCited || !widget.canOpen(span.cites)) {
           spans.add(TextSpan(text: span.text));
           continue;
         }
@@ -644,6 +676,50 @@ class _CitedTextState extends State<CitedText> {
         );
       }
     }
-    return Text.rich(TextSpan(style: base, children: spans));
+    final text = TextSpan(style: base, children: spans);
+    return LayoutBuilder(
+      builder: (context, c) {
+        final painter = TextPainter(
+          text: text,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: _briefCollapsedLines,
+        )..layout(maxWidth: c.maxWidth);
+        final overflows = painter.didExceedMaxLines;
+        painter.dispose();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text.rich(
+              text,
+              // Only cap lines when collapsed AND truncated; an ellipsis
+              // combined with maxLines: null clips the brief to one line.
+              maxLines: _expanded || !overflows ? null : _briefCollapsedLines,
+              overflow: _expanded || !overflows
+                  ? TextOverflow.clip
+                  : TextOverflow.ellipsis,
+            ),
+            if (overflows)
+              Semantics(
+                button: true,
+                child: GestureDetector(
+                  key: const ValueKey('today-brief-more'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      _expanded ? 'Show less' : 'Read more',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 }

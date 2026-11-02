@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/theme/motion_loop.dart';
 
 /// One star glyph, [size] logical pixels square.
 class DhruvaStar extends StatelessWidget {
@@ -132,15 +133,17 @@ class _TypingIndicatorState extends State<TypingIndicator>
   // still the source of truth once the widget is mounted.
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: TokenMotionDuration.moderate,
-  )..repeat();
+    duration: TokenMotionDuration.pulseMedium,
+  );
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _controller.duration = Theme.of(
       context,
-    ).extension<DhruvaTokens>()!.motion.moderate;
+    ).extension<DhruvaTokens>()!.motion.pulseMedium;
+    // Reduced motion: stop the loop; the stars rest at a fixed opacity below.
+    _controller.loop(context);
   }
 
   @override
@@ -181,7 +184,9 @@ class _TypingIndicatorState extends State<TypingIndicator>
               for (var i = 0; i < 3; i++) ...[
                 if (i > 0) SizedBox(width: tokens.spacing.xs),
                 Opacity(
-                  opacity: _pulseOpacity(curve, _controller.value, i),
+                  opacity: MediaQuery.disableAnimationsOf(context)
+                      ? 0.6
+                      : _pulseOpacity(curve, _controller.value, i),
                   child: DhruvaStar(size: 6, color: color),
                 ),
               ],

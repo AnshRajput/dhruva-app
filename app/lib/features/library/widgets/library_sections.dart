@@ -197,13 +197,9 @@ class DocumentsSection extends ConsumerWidget {
         onRetry: () => ref.invalidate(allDocumentsProvider),
       ),
       data: (list) => list.isEmpty
-          ? NextStepCard(
-              icon: Icons.description_outlined,
+          ? QuietNextStep(
               title: 'No documents yet',
-              body:
-                  'Attach a PDF or text file in Ask and your phone reads it '
-                  'for you. Documents you attach are kept here, and so are the '
-                  'files of a connected folder.',
+              body: 'Files you attach in Ask, and your folder, appear here.',
               actionLabel: 'Read a document',
               actionKey: const ValueKey('library-documents-action'),
               onAction: () => context.push('/actions?id=document'),
@@ -313,13 +309,10 @@ class TodosSection extends ConsumerWidget {
             onRetry: () => ref.invalidate(todosProvider),
           ),
           data: (list) => list.isEmpty
-              ? NextStepCard(
-                  icon: Icons.checklist_rounded,
+              ? QuietNextStep(
                   title: 'No to-dos yet',
                   body:
-                      'Run "Extract to-dos" on any text, then tap the checklist '
-                      'button under the reply. The tasks collect here to '
-                      'check off.',
+                      'Tasks pulled out of any text collect here to check off.',
                   actionLabel: 'Extract to-dos',
                   actionKey: const ValueKey('library-todos-action'),
                   onAction: () => context.push('/actions?id=todos'),
@@ -425,12 +418,9 @@ class SavedSection extends ConsumerWidget {
         onRetry: () => ref.invalidate(savedAnswersProvider),
       ),
       data: (list) => list.isEmpty
-          ? NextStepCard(
-              icon: Icons.bookmark_border_rounded,
+          ? QuietNextStep(
               title: 'Nothing saved yet',
-              body:
-                  'Ask something, then tap the bookmark under a good answer or '
-                  'draft. It will be waiting here.',
+              body: 'Tap the bookmark under a good answer to keep it here.',
               actionLabel: 'Go to Ask',
               actionKey: const ValueKey('library-saved-action'),
               onAction: () => context.go('/ask'),
