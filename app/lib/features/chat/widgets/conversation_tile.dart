@@ -1,5 +1,5 @@
 /// One conversation-list row (chat-spec.md §6.2): swipe-to-delete
-/// (confirmed) + a menu for pin/rename/move-to-folder/delete.
+/// (with Undo) + a menu for pin/rename/move-to-folder/delete.
 library;
 
 import 'package:flutter/material.dart';
@@ -43,8 +43,9 @@ class ConversationTile extends ConsumerWidget {
           color: theme.colorScheme.onErrorContainer,
         ),
       ),
-      confirmDismiss: (_) => _confirmDelete(context),
-      onDismissed: (_) => notifier.delete(conversation.id),
+      // No confirm dialog over a half-swiped row: delete at once with an Undo
+      // snackbar (apple-design "agency": forgiveness over confirmation).
+      onDismissed: (_) => _deleteWithUndo(context, notifier),
       child: ListTile(
         leading: conversation.pinned
             ? Icon(Icons.push_pin, size: 18, color: theme.colorScheme.primary)
@@ -89,25 +90,27 @@ class ConversationTile extends ConsumerWidget {
     );
   }
 
-  Future<bool> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete conversation?'),
-        content: const Text("This can't be undone."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+  void _deleteWithUndo(
+    BuildContext context,
+    ConversationListController notifier,
+  ) {
+    // The tile is gone once the row is removed: grab the messenger first.
+    final messenger = ScaffoldMessenger.of(context);
+    final id = conversation.id;
+    notifier.deleteWithUndo(id);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          persist: false,
+          duration: const Duration(seconds: 4),
+          content: const Text('Conversation deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => notifier.undoDelete(id),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    return confirmed ?? false;
+        ),
+      );
   }
 
   Future<void> _handleAction(
@@ -123,9 +126,7 @@ class ConversationTile extends ConsumerWidget {
       case _TileAction.move:
         await _move(context, notifier);
       case _TileAction.delete:
-        if (await _confirmDelete(context)) {
-          await notifier.delete(conversation.id);
-        }
+        _deleteWithUndo(context, notifier);
     }
   }
 

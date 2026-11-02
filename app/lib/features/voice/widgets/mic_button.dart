@@ -55,16 +55,27 @@ class _MicButtonState extends ConsumerState<MicButton>
   // would run forever and never let `pumpAndSettle` (or a real device's
   // battery) rest once the idle/no-model/permission-denied states are
   // reached.
-  void _syncPulse(bool listening) {
-    if (listening && !_pulse.isAnimating) {
+  //
+  // Reduced motion: no pulse movement; the error-container colour already
+  // signals "recording".
+  void _syncPulse(bool listening, {required bool reduceMotion}) {
+    if (listening && !reduceMotion && !_pulse.isAnimating) {
       _pulse.repeat(reverse: true);
-    } else if (!listening && _pulse.isAnimating) {
+    } else if ((!listening || reduceMotion) && _pulse.isAnimating) {
       _pulse.stop();
       _pulse.value = 0;
     }
   }
 
+  /// Press feedback is visual first: set before awaiting the capture start.
+  bool _down = false;
+
+  void _setDown(bool v) {
+    if (_down != v && mounted) setState(() => _down = v);
+  }
+
   Future<void> _onTapDown() async {
+    _setDown(true);
     final notifier = ref.read(voiceInputControllerProvider.notifier);
     await notifier.startHold();
     final phase = ref.read(voiceInputControllerProvider).phase;
@@ -76,6 +87,7 @@ class _MicButtonState extends ConsumerState<MicButton>
   }
 
   Future<void> _onTapUp() async {
+    _setDown(false);
     final notifier = ref.read(voiceInputControllerProvider.notifier);
     final text = await notifier.endHold();
     if (!mounted) return;
@@ -88,7 +100,8 @@ class _MicButtonState extends ConsumerState<MicButton>
     final tokens = theme.extension<DhruvaTokens>()!;
     final input = ref.watch(voiceInputControllerProvider);
     final listening = input.phase == VoiceInputPhase.listening;
-    _syncPulse(listening);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    _syncPulse(listening, reduceMotion: reduce);
 
     return Semantics(
       button: true,
@@ -102,8 +115,16 @@ class _MicButtonState extends ConsumerState<MicButton>
           child: AnimatedBuilder(
             animation: _pulse,
             builder: (context, child) {
-              final scale = listening ? 1.0 + (_pulse.value * 0.15) : 1.0;
-              return Transform.scale(scale: scale, child: child);
+              final pulse = listening ? 1.0 + (_pulse.value * 0.15) : 1.0;
+              // 0.95 press-in (pointer-down, 100ms ease-out), no movement
+              // under reduced motion.
+              final press = _down && !reduce ? 0.95 : 1.0;
+              return AnimatedScale(
+                scale: press,
+                duration: tokens.motion.instant,
+                curve: tokens.motion.decelerate,
+                child: Transform.scale(scale: pulse, child: child),
+              );
             },
             child: Container(
               width: 40,

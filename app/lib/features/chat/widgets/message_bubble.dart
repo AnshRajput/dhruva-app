@@ -26,6 +26,10 @@ import 'answer_source_chips.dart';
 import 'reasoning_block.dart';
 import 'sources_block.dart';
 
+/// How long the "copied" check stays (a confirmation needs time to be read;
+/// a motion token is not a timeout).
+const _copiedHold = Duration(milliseconds: 1200);
+
 class MessageBubble extends StatelessWidget {
   final MessageInfo message;
   final bool isStreaming;
@@ -323,7 +327,7 @@ class _MetadataRowState extends State<_MetadataRow> {
     await Clipboard.setData(ClipboardData(text: widget.message.content));
     if (!mounted) return;
     setState(() => _copied = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    await Future<void>.delayed(_copiedHold);
     if (mounted) setState(() => _copied = false);
   }
 
@@ -361,10 +365,14 @@ class _MetadataRowState extends State<_MetadataRow> {
           IconButton(
             onPressed: _copy,
             tooltip: _copied ? 'Copied' : 'Copy text',
-            icon: Icon(
-              _copied ? Icons.check : Icons.copy,
-              size: 16,
-              color: _copied ? tokens.success : color,
+            icon: AnimatedSwitcher(
+              duration: tokens.motion.instant + const Duration(milliseconds: 20),
+              child: Icon(
+                _copied ? Icons.check : Icons.copy,
+                key: ValueKey(_copied),
+                size: 16,
+                color: _copied ? tokens.success : color,
+              ),
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -627,7 +635,7 @@ class _CodeBlockState extends State<_CodeBlock> {
     await Clipboard.setData(ClipboardData(text: widget.code));
     if (!mounted) return;
     setState(() => _copied = true);
-    await Future<void>.delayed(widget.tokens.motion.moderate);
+    await Future<void>.delayed(_copiedHold);
     if (mounted) setState(() => _copied = false);
   }
 
@@ -687,10 +695,16 @@ class _CodeBlockState extends State<_CodeBlock> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              _copied ? Icons.check : Icons.copy,
-                              size: 13,
-                              color: copyColor,
+                            AnimatedSwitcher(
+                              duration:
+                                  tokens.motion.instant +
+                                  const Duration(milliseconds: 20),
+                              child: Icon(
+                                _copied ? Icons.check : Icons.copy,
+                                key: ValueKey(_copied),
+                                size: 13,
+                                color: copyColor,
+                              ),
                             ),
                             SizedBox(width: tokens.spacing.xs),
                             Text(

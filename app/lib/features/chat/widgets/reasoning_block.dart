@@ -33,6 +33,9 @@ class _ReasoningBlockState extends State<ReasoningBlock> {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
     final onSurfaceVariant = theme.colorScheme.onSurfaceVariant;
+    // Reduced motion: no height/rotation animation (same as Sources).
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    Duration expandDuration(Duration d) => reduce ? Duration.zero : d;
     final label = widget.isOpen
         ? 'Reasoning…'
         : (widget.durationMs != null
@@ -64,7 +67,7 @@ class _ReasoningBlockState extends State<ReasoningBlock> {
                   children: [
                     AnimatedRotation(
                       turns: _expanded ? 0.25 : 0,
-                      duration: tokens.motion.fast,
+                      duration: expandDuration(tokens.motion.fast),
                       curve: tokens.motion.standard,
                       child: Icon(
                         Icons.chevron_right,
@@ -86,7 +89,7 @@ class _ReasoningBlockState extends State<ReasoningBlock> {
             ),
           ),
           AnimatedSize(
-            duration: tokens.motion.moderate,
+            duration: expandDuration(tokens.motion.base),
             curve: tokens.motion.standard,
             alignment: Alignment.topLeft,
             child: _expanded

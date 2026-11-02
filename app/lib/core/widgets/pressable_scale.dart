@@ -21,11 +21,26 @@ class PressableScale extends StatefulWidget {
     required this.onTap,
     required this.child,
     this.semanticLabel,
-  });
+  }) : passive = false,
+       passiveEnabled = true;
+
+  /// Press feedback only, for a child that already handles its own tap (an
+  /// `IconButton`, a hold-to-talk button): no gesture detector or semantics
+  /// are added, so the child's behaviour and accessibility stay untouched.
+  const PressableScale.passive({
+    super.key,
+    required this.child,
+    this.passiveEnabled = true,
+  }) : onTap = null,
+       semanticLabel = null,
+       passive = true;
+
 
   final VoidCallback? onTap;
   final Widget child;
   final String? semanticLabel;
+  final bool passive;
+  final bool passiveEnabled;
 
   @override
   State<PressableScale> createState() => _PressableScaleState();
@@ -46,39 +61,45 @@ class _PressableScaleState extends State<PressableScale> {
 
   @override
   Widget build(BuildContext context) {
-    final enabled = widget.onTap != null;
+    final enabled = widget.passive
+        ? widget.passiveEnabled
+        : widget.onTap != null;
     final reduce = MediaQuery.disableAnimationsOf(context);
+    final scaled = Listener(
+      onPointerDown: enabled
+          ? (e) {
+              _origin = e.position;
+              _set(true);
+            }
+          : null,
+      onPointerMove: (e) {
+        final o = _origin;
+        if (o != null && (e.position - o).distance > kTouchSlop) _release();
+      },
+      onPointerUp: (_) => _release(),
+      onPointerCancel: (_) => _release(),
+      child: AnimatedScale(
+        // Reduced motion keeps the state change but drops the movement.
+        scale: _down && !reduce ? 0.97 : 1,
+        duration: _down
+            ? const Duration(milliseconds: 120)
+            : const Duration(milliseconds: 100),
+        curve: TokenMotionCurve.decelerate,
+        child: widget.passive
+            ? widget.child
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onTap,
+                onTapCancel: _release,
+                child: widget.child,
+              ),
+      ),
+    );
+    if (widget.passive) return scaled;
     return Semantics(
       button: enabled,
       label: widget.semanticLabel,
-      child: Listener(
-        onPointerDown: enabled
-            ? (e) {
-                _origin = e.position;
-                _set(true);
-              }
-            : null,
-        onPointerMove: (e) {
-          final o = _origin;
-          if (o != null && (e.position - o).distance > kTouchSlop) _release();
-        },
-        onPointerUp: (_) => _release(),
-        onPointerCancel: (_) => _release(),
-        child: AnimatedScale(
-          // Reduced motion keeps the state change but drops the movement.
-          scale: _down && !reduce ? 0.97 : 1,
-          duration: _down
-              ? const Duration(milliseconds: 120)
-              : const Duration(milliseconds: 100),
-          curve: TokenMotionCurve.decelerate,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onTap,
-            onTapCancel: _release,
-            child: widget.child,
-          ),
-        ),
-      ),
+      child: scaled,
     );
   }
 }
