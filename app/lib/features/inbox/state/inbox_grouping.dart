@@ -34,27 +34,41 @@ final class AppFilter {
   const AppFilter(this.package, this.label, this.count);
 }
 
-/// Items of [filterPackage] (all when null), newest first, split into Today
-/// (the local calendar day of [now]) and Earlier. Empty sections are left out.
+/// Title of the section that holds messages asking the user something.
+const needsReplyTitle = 'Needs reply';
+
+/// Items of [filterPackage] (all when null), newest first, split into Needs
+/// reply ([needsReplyIds], above everything), Today (the local calendar day of
+/// [now]) and Earlier. Empty sections are left out.
 List<InboxSection> groupInbox(
   List<ConnectorItem> items,
   DateTime now, {
   String? filterPackage,
+  Set<int> needsReplyIds = const {},
 }) {
   final start = DateTime(now.year, now.month, now.day);
   final picked = [
     for (final i in items)
       if (filterPackage == null || i.packageName == filterPackage) i,
   ]..sort((a, b) => b.when.compareTo(a.when));
-  final today = [
+  final reply = [
     for (final i in picked)
+      if (needsReplyIds.contains(i.id)) i,
+  ];
+  final rest = [
+    for (final i in picked)
+      if (!needsReplyIds.contains(i.id)) i,
+  ];
+  final today = [
+    for (final i in rest)
       if (!i.when.isBefore(start)) i,
   ];
   final earlier = [
-    for (final i in picked)
+    for (final i in rest)
       if (i.when.isBefore(start)) i,
   ];
   return [
+    if (reply.isNotEmpty) InboxSection(needsReplyTitle, reply),
     if (today.isNotEmpty) InboxSection('Today', today),
     if (earlier.isNotEmpty) InboxSection('Earlier', earlier),
   ];

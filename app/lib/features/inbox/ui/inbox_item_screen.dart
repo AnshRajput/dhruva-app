@@ -18,6 +18,7 @@ import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../state/inbox_grouping.dart';
+import '../state/inbox_rules.dart';
 
 class InboxItemScreen extends ConsumerWidget {
   const InboxItemScreen({super.key, required this.itemId});
@@ -96,7 +97,7 @@ class InboxItemScreen extends ConsumerWidget {
         final when = MaterialLocalizations.of(
           context,
         ).formatTimeOfDay(TimeOfDay.fromDateTime(item.when));
-        final summary = item.summary;
+        final summary = usableSummary(item);
         return ListView(
           padding: EdgeInsets.all(tokens.spacing.base),
           children: [
