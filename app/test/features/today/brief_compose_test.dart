@@ -59,6 +59,28 @@ void main() {
       ]);
     });
 
+    test('one app owning every notification is named once', () {
+      final shell = [
+        for (var i = 0; i < 7; i++)
+          notification(
+            40 + i,
+            'com.shell',
+            'Shell',
+            'Shell',
+            'Fuel offer $i',
+            at(6, 10 + i),
+          ),
+      ];
+      final b = compose(events: [designSync], groups: [notifGroup(shell)]);
+      expect(plain(b).last, 'You also have 7 notifications from Shell.');
+      expect(plain(b).join(' '), isNot(contains('other')));
+      // Three apps still list the top ones.
+      expect(
+        plain(compose(groups: groups)).last,
+        'You also have 7 other notifications: 4 from Swiggy and 3 from HDFC.',
+      );
+    });
+
     test('every tappable span cites the fact that says it', () {
       final b = compose(
         events: [budgetReview, designSync],
