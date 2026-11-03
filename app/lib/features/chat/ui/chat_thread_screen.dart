@@ -17,6 +17,7 @@ import '../../../core/di/ask_providers.dart';
 import '../../../core/di/library_providers.dart';
 import '../../../core/di/model_download.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/di/small_model.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
 import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
@@ -485,10 +486,34 @@ class _ThreadScaffold extends ConsumerWidget {
               // Ask: "Search in" chips (not for persona/roleplay threads).
               header: state.characterId != null
                   ? null
-                  : _SearchInRow(
-                      args: args,
-                      hasDocuments: state.documents.isNotEmpty,
-                      isAction: actionTitleOf(state.systemPrompt) != null,
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isSmallModel(state.model))
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: Theme.of(
+                                context,
+                              ).extension<DhruvaTokens>()!.spacing.xs,
+                            ),
+                            child: Text(
+                              smallModelNote,
+                              key: const ValueKey('small-model-note'),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        _SearchInRow(
+                          args: args,
+                          hasDocuments: state.documents.isNotEmpty,
+                          isAction: actionTitleOf(state.systemPrompt) != null,
+                        ),
+                      ],
                     ),
               initialText: args.initialDraft,
               onChanged: (text) =>

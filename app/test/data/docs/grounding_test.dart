@@ -194,11 +194,62 @@ void main() {
     test(
       'an uncited or "not in the document" answer lists everything read',
       () {
-        expect(citedSources('The document does not say.', [s2, s4]), [s2, s4]);
+        final none = citedSources('The document does not say.', [s2, s4]);
+        expect(none.map((s) => s.page), [2, 4]);
+        // They were read, not cited: the row says "Looked at".
+        expect(none.every((s) => !s.cited), isTrue);
         // A cite for a page that was never offered is ignored.
-        expect(citedSources('Maybe [p.99].', [s2, s4]), [s2, s4]);
+        expect(citedSources('Maybe [p.99].', [s2, s4]), hasLength(2));
       },
     );
+  });
+
+  group('readPagesNote', () {
+    final corpus = [
+      for (var i = 0; i < 6; i++) chunk(i, 'text $i', page: i + 1),
+    ];
+
+    test('says which pages were read when the document did not fit', () {
+      final note = readPagesNote(
+        corpus: corpus,
+        excerpts: corpus.sublist(0, 3),
+        pageCount: 80,
+      );
+      expect(note, 'Read pages 1–3 of 80');
+    });
+
+    test('lists gaps and a single page plainly', () {
+      expect(
+        readPagesNote(
+          corpus: corpus,
+          excerpts: [corpus[0], corpus[1], corpus[4]],
+          pageCount: 6,
+        ),
+        'Read pages 1–2, 5 of 6',
+      );
+      expect(
+        readPagesNote(corpus: corpus, excerpts: [corpus[3]], pageCount: 6),
+        'Read page 4 of 6',
+      );
+    });
+
+    test('says nothing when the whole document was included', () {
+      expect(
+        readPagesNote(corpus: corpus, excerpts: corpus, pageCount: 6),
+        isNull,
+      );
+    });
+
+    test('the note survives persistence', () {
+      const s = DocSource(
+        docName: 'a',
+        page: 1,
+        paged: true,
+        snippet: 'x',
+        readNote: 'Read pages 1–3 of 80',
+      );
+      expect(decodeSources(encodeSources([s])).single.readNote, s.readNote);
+    });
   });
 
   group('source persistence', () {

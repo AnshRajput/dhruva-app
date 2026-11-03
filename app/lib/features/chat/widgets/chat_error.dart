@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../state/repetition_guard.dart';
 
 enum ChatRecoveryAction {
   retry,
@@ -139,6 +140,13 @@ ChatErrorContent chatErrorContentFor(
             'of doing the task. Nothing was changed. Try again.',
         primaryAction: ChatRecoveryAction.retry,
         primaryLabel: 'Try again',
+      );
+    // A grounded answer that looped (repetition_guard.dart).
+    case degenerateErrorKind:
+      return const ChatErrorContent(
+        message: degenerateNotice,
+        primaryAction: ChatRecoveryAction.retry,
+        primaryLabel: 'Retry',
       );
     case 'EngineDecodeFailure':
     case 'EngineValidationFailure':

@@ -352,6 +352,8 @@ final class LlamaEngineService implements EngineService {
             topK: params.topK,
             topP: params.topP,
             seed: params.seed,
+            repeatPenalty: params.repeatPenalty,
+            penaltyLastN: params.penaltyLastN,
           );
 
     final chat = messages?.map(_toChatMessage).toList();

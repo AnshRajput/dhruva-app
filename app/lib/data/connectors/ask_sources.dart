@@ -286,11 +286,16 @@ final class ItemSource {
   /// Short chip text: "Ravi, Q4 budget" / "Mon 2 Nov, Design sync" / a file
   /// name.
   final String label;
+
+  /// False when the answer cited no `[n]` and this chip is only something the
+  /// search read: the row says "Looked at", not "Sources".
+  final bool cited;
   const ItemSource({
     required this.itemId,
     required this.source,
     required this.kind,
     required this.label,
+    this.cited = true,
   });
 
   Map<String, Object> toJson() => {
@@ -299,6 +304,7 @@ final class ItemSource {
     'src': source,
     'kind': kind.name,
     'label': label,
+    if (!cited) 'cited': false,
   };
 
   static ItemSource? tryFromJson(Object? json) {
@@ -312,7 +318,13 @@ final class ItemSource {
     }
     final k = ItemKind.values.where((v) => v.name == kind).firstOrNull;
     if (k == null) return null;
-    return ItemSource(itemId: id, source: src, kind: k, label: label);
+    return ItemSource(
+      itemId: id,
+      source: src,
+      kind: k,
+      label: label,
+      cited: json['cited'] != false,
+    );
   }
 
   @override
@@ -321,10 +333,11 @@ final class ItemSource {
       other.itemId == itemId &&
       other.source == source &&
       other.kind == kind &&
-      other.label == label;
+      other.label == label &&
+      other.cited == cited;
 
   @override
-  int get hashCode => Object.hash(itemId, source, kind, label);
+  int get hashCode => Object.hash(itemId, source, kind, label, cited);
 }
 
 String _personName(Person p) {
@@ -335,7 +348,7 @@ String _personName(Person p) {
 }
 
 /// The chip for [item].
-ItemSource itemSourceFor(ConnectorItem item) {
+ItemSource itemSourceFor(ConnectorItem item, {bool cited = true}) {
   final title = item.title.trim();
   final String label;
   switch (item.kind) {
@@ -365,6 +378,7 @@ ItemSource itemSourceFor(ConnectorItem item) {
     source: item.source,
     kind: item.kind,
     label: label.isEmpty ? item.kind.name : label,
+    cited: cited,
   );
 }
 
@@ -406,7 +420,7 @@ List<ItemSource> citedItemSources(
   final seen = <String>{};
   final out = <ItemSource>[];
   for (final item in items) {
-    final s = itemSourceFor(item);
+    final s = itemSourceFor(item, cited: picked.isNotEmpty);
     if (seen.add('${s.source}|${s.kind.name}|${s.label}')) out.add(s);
   }
   return out;

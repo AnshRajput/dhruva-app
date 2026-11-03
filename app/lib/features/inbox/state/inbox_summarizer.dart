@@ -297,11 +297,7 @@ class InboxSummarizer with WidgetsBindingObserver {
             const ChatTurn.system(summaryInstruction),
             ChatTurn.user('${block.text}\n\nSummary:'),
           ],
-          params: const EngineGenerateParams(
-            maxTokens: 48,
-            temperature: 0.2,
-            greedy: true,
-          ),
+          params: const EngineGenerateParams(maxTokens: 48, temperature: 0.2),
         )
         .timeout(const Duration(seconds: 45));
     await for (final e in stream) {

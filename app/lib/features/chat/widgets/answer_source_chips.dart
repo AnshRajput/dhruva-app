@@ -44,7 +44,7 @@ class AnswerSourceChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Sources',
+            sources.every((s) => s.cited) ? 'Sources' : 'Looked at',
             style: theme.textTheme.labelMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
