@@ -33,6 +33,8 @@ class _SourcesBlockState extends State<SourcesBlock> {
         ? Duration.zero
         : tokens.motion.fast;
     final summary = sources.map((s) => s.label).join(', ');
+    final heading = sources.every((s) => s.cited) ? 'Sources' : 'Looked at';
+    final readNote = sources.map((s) => s.readNote).nonNulls.firstOrNull;
 
     return Padding(
       padding: EdgeInsets.only(top: tokens.spacing.xs),
@@ -42,7 +44,7 @@ class _SourcesBlockState extends State<SourcesBlock> {
           Semantics(
             button: true,
             expanded: _expanded,
-            label: 'Sources: $summary',
+            label: '$heading: $summary',
             excludeSemantics: true,
             onTap: () => setState(() => _expanded = !_expanded),
             child: Material(
@@ -68,7 +70,7 @@ class _SourcesBlockState extends State<SourcesBlock> {
                         SizedBox(width: tokens.spacing.xs),
                         Flexible(
                           child: Text(
-                            'Sources · $summary',
+                            '$heading · $summary',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelMedium?.copyWith(
@@ -95,6 +97,17 @@ class _SourcesBlockState extends State<SourcesBlock> {
               ),
             ),
           ),
+          if (readNote != null)
+            Padding(
+              padding: EdgeInsets.only(left: tokens.spacing.md),
+              child: Text(
+                readNote,
+                key: const ValueKey('sources-read-note'),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           AnimatedSize(
             duration: duration,
             curve: tokens.motion.standard,

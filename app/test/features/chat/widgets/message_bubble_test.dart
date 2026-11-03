@@ -402,6 +402,31 @@ void main() {
       },
     );
 
+    testWidgets('bubble action buttons are full 48 dp touch targets', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        Column(
+          children: [
+            MessageBubble(
+              message: _message(role: MessageRole.assistant, content: 'Hi'),
+            ),
+            MessageBubble(
+              message: _message(role: MessageRole.user, content: 'question'),
+              onEdit: () {},
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final tip in ['Copy text', 'Edit message']) {
+        final size = tester.getSize(find.byTooltip(tip));
+        expect(size.width, greaterThanOrEqualTo(48), reason: tip);
+        expect(size.height, greaterThanOrEqualTo(48), reason: tip);
+      }
+    });
+
     testWidgets(
       'WS3: every assistant reply with content shows a copy affordance',
       (tester) async {

@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/device_info/model_tier.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/better_answers_label.dart';
 import '../state/listing_download_controller.dart';
 import '../state/recommended_models_provider.dart';
 import 'listing_download_button.dart';
@@ -24,16 +25,10 @@ class CuratedModelCard extends ConsumerWidget {
   /// name/best-for/size without blocking on the verdict.
   final int? totalRamBytes;
 
-  /// Hide the verdict chip when it would only say "Comfortable": under a
-  /// "Runs great on your phone" heading, that word on every card carries no
-  /// signal. "Possible" and "Not recommended" always show.
-  final bool hideComfortableVerdict;
-
   const CuratedModelCard({
     super.key,
     required this.model,
     required this.totalRamBytes,
-    this.hideComfortableVerdict = false,
   });
 
   @override
@@ -121,15 +116,15 @@ class CuratedModelCard extends ConsumerWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        if (tier != null &&
-                            ram != null &&
-                            !(hideComfortableVerdict &&
-                                tier == ModelTier.comfortable))
+                        if (tier != null && ram != null)
                           ModelVerdictChip(
                             tier: tier,
                             fileSizeBytes: model.approxSizeBytes,
                             totalRamBytes: ram,
                           ),
+                        if (model.betterAnswers &&
+                            tier == ModelTier.comfortable)
+                          const BetterAnswersLabel(),
                       ],
                     ),
                     if (dl?.download?.transferLabel case final detail?

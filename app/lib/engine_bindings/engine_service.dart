@@ -198,6 +198,13 @@ final class EngineGenerateParams {
   /// Deterministic argmax sampling; overrides temperature/top-k/top-p/seed.
   final bool greedy;
 
+  /// Multiplicative repeat penalty over the last [penaltyLastN] tokens; `1.0`
+  /// disables. Ignored when [greedy] is set (the package's greedy sampler
+  /// skips every other stage), so grounded tasks use a low temperature
+  /// instead of greedy.
+  final double repeatPenalty;
+  final int penaltyLastN;
+
   const EngineGenerateParams({
     this.maxTokens = 256,
     this.temperature = 0.7,
@@ -205,6 +212,8 @@ final class EngineGenerateParams {
     this.topP = 0.95,
     this.seed = 0xFFFFFFFF,
     this.greedy = false,
+    this.repeatPenalty = 1.1,
+    this.penaltyLastN = 64,
   });
 }
 

@@ -5,6 +5,7 @@ import 'dart:async' show unawaited;
 import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,6 +17,7 @@ import '../../../core/di/ask_providers.dart';
 import '../../../core/di/library_providers.dart';
 import '../../../core/di/model_download.dart';
 import '../../../core/di/providers.dart';
+import '../../../core/di/small_model.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/intents/process_text.dart';
 import '../../../core/router/ask_route.dart' show sanitizeAskAbout;
@@ -484,10 +486,34 @@ class _ThreadScaffold extends ConsumerWidget {
               // Ask: "Search in" chips (not for persona/roleplay threads).
               header: state.characterId != null
                   ? null
-                  : _SearchInRow(
-                      args: args,
-                      hasDocuments: state.documents.isNotEmpty,
-                      isAction: actionTitleOf(state.systemPrompt) != null,
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (isSmallModel(state.model))
+                          Padding(
+                            padding: EdgeInsets.only(
+                              bottom: Theme.of(
+                                context,
+                              ).extension<DhruvaTokens>()!.spacing.xs,
+                            ),
+                            child: Text(
+                              smallModelNote,
+                              key: const ValueKey('small-model-note'),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        _SearchInRow(
+                          args: args,
+                          hasDocuments: state.documents.isNotEmpty,
+                          isAction: actionTitleOf(state.systemPrompt) != null,
+                        ),
+                      ],
                     ),
               initialText: args.initialDraft,
               onChanged: (text) =>
@@ -777,14 +803,23 @@ class _ThreadScaffold extends ConsumerWidget {
     WidgetRef ref,
     MessageInfo message,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
     final failure = await ref
         .read(processTextBridgeProvider)
         .returnResult(message.content);
-    if (failure != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(processTextFailureMessage(failure))),
-      );
+    // Some apps ignore the result, so a handed-back reply is also copied.
+    if (failure == null) {
+      await Clipboard.setData(ClipboardData(text: message.content.trim()));
     }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failure == null
+              ? 'Replaced. Also copied, in case this app ignores it.'
+              : processTextFailureMessage(failure),
+        ),
+      ),
+    );
   }
 
   ReplyEnd? _replyEnd(MessageInfo m) {

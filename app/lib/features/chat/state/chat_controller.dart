@@ -55,6 +55,7 @@ import 'answer_guard.dart';
 import 'ask_selection.dart';
 import 'engine_session.dart';
 import 'message_info_x.dart';
+import 'repetition_guard.dart';
 import 'think_tag_parser.dart';
 
 /// Route args for a chat thread: an existing conversation, or a draft
@@ -512,6 +513,15 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// can be recognised ([isScaffoldEcho]); null when ungrounded.
   String? _activePrompt;
 
+  /// "Read pages 1–3 of 80" for the reply being generated, when the attached
+  /// document did not fit whole ([readPagesNote]); null otherwise.
+  String? _activeReadNote;
+
+  /// A grounded reply looped ([hasRepeatLoop] while streaming,
+  /// [isDegenerateReply] at the end): the row ends as an error with
+  /// [degenerateErrorKind], a retry and no source chips.
+  bool _repeatBlocked = false;
+
   /// The reply parroted the grounded prompt: the thread shows [echoNotice]
   /// instead, live and at completion, whatever the stop reason.
   bool _echoBlocked = false;
@@ -520,6 +530,9 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
   /// as an error with no text, so the thread offers a retry and nothing that
   /// could write the echo anywhere.
   bool _actionEchoBlocked = false;
+
+  static const _groundedTemp = 0.2;
+  static const _groundedMaxTokens = 320;
 
   @override
   Future<ChatThreadState> build() async {
@@ -1226,7 +1239,24 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         promptChars: promptChars + reservedChars,
       ),
     );
-    return buildGroundedPrompt(question: question, excerpts: excerpts);
+    final built = buildGroundedPrompt(question: question, excerpts: excerpts);
+    final doc = excerpts.isEmpty
+        ? null
+        : state.value!.documents
+              .where((d) => d.id == excerpts.first.docId)
+              .firstOrNull;
+    return GroundedPrompt(
+      built.prompt,
+      built.sources,
+      excerptsText: built.excerptsText,
+      readNote: doc == null
+          ? null
+          : readPagesNote(
+              corpus: corpus,
+              excerpts: excerpts,
+              pageCount: doc.pageCount,
+            ),
+    );
   }
 
   /// Decides what this turn is grounded in and builds the user turn that
@@ -1328,7 +1358,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (block == null) {
       return docs == null
           ? null
-          : _Grounding(docs.prompt, docs.sources, const []);
+          : _Grounding(
+              docs.prompt,
+              docs.sources,
+              const [],
+              readNote: docs.readNote,
+            );
     }
     return _Grounding(
       buildSourcedPrompt(
@@ -1339,6 +1374,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       ),
       docs?.sources ?? const [],
       block.items,
+      readNote: docs?.readNote,
     );
   }
 
@@ -1483,6 +1519,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _outputBlocked = false;
     _echoBlocked = false;
     _actionEchoBlocked = false;
+    _repeatBlocked = false;
     _pushedContent = continued?.content ?? '';
     _pushedReasoning = continued?.reasoningContent ?? '';
     _reasoningStartedAt = null;
@@ -1517,6 +1554,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _activeSources = const [];
     _activeItems = const [];
     _activePrompt = null;
+    _activeReadNote = null;
     try {
       // A continuation extends an already-grounded answer; never re-ground.
       final grounded = continued != null
@@ -1538,6 +1576,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
             images: turns[last].images,
           );
           _activeSources = grounded.docSources;
+          _activeReadNote = grounded.readNote;
           _activeItems = grounded.items;
           _activePrompt = grounded.prompt;
         }
@@ -1548,9 +1587,18 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       _onError(e);
       return;
     }
+    // A grounded answer (sources, documents, a person) reports what the
+    // sources say: low temperature and a capped length, never the chat's
+    // creative setting. The repeat penalty is on for every reply. (Greedy is
+    // not used: the sampler skips the penalty when greedy.)
+    final isGrounded = _activePrompt != null;
     final engineParams = EngineGenerateParams(
-      maxTokens: samplingParams.maxTokens,
-      temperature: samplingParams.temperature,
+      maxTokens: isGrounded && samplingParams.maxTokens > _groundedMaxTokens
+          ? _groundedMaxTokens
+          : samplingParams.maxTokens,
+      temperature: isGrounded && samplingParams.temperature > _groundedTemp
+          ? _groundedTemp
+          : samplingParams.temperature,
       topK: samplingParams.topK,
       topP: samplingParams.topP,
       seed: samplingParams.seed ?? 0xFFFFFFFF,
@@ -1658,6 +1706,28 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
       if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
     }
     if (_actionEchoBlocked) {
+      _seedRaw = '';
+      split = splitThinkContent('');
+    }
+
+    // A grounded reply stuck in a loop: stop generating as soon as a four-word
+    // run has come round three times, and judge the finished text by its
+    // repetition ratio. Either way the row ends as an error (retry, no text,
+    // no source chips).
+    if (!_outputBlocked &&
+        !_echoBlocked &&
+        !_actionEchoBlocked &&
+        !_repeatBlocked &&
+        !isAction &&
+        _activePrompt != null &&
+        !_continuing &&
+        (isFinal
+            ? isDegenerateReply(split.content)
+            : hasRepeatLoop(split.content))) {
+      _repeatBlocked = true;
+      if (!isFinal) unawaited(ref.read(engineServiceProvider).cancel());
+    }
+    if (_repeatBlocked) {
       _seedRaw = '';
       split = splitThinkContent('');
     }
@@ -1817,7 +1887,12 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     if (id == null) return;
     // `_flush(isFinal)` above already swapped an echoed reply for the notice,
     // so it counts as a finished (not stopped/truncated) answer.
-    final status = _actionEchoBlocked
+    final failedKind = _actionEchoBlocked
+        ? actionEchoErrorKind
+        : _repeatBlocked
+        ? degenerateErrorKind
+        : null;
+    final status = failedKind != null
         ? MessageStatus.error
         : _outputBlocked || _echoBlocked
         ? MessageStatus.complete
@@ -1832,7 +1907,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
         status: status,
         tokCount: event.tokenCount,
         genMs: event.elapsedMs,
-        errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
+        errorKind: failedKind,
       ),
     );
     final current = state.value;
@@ -1843,7 +1918,10 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     final answer = _pushedContent;
     final sources = _activeSources.isEmpty || answer.trim().isEmpty
         ? const <DocSource>[]
-        : citedSources(answer, _activeSources);
+        : [
+            for (final s in citedSources(answer, _activeSources))
+              s.copyWith(readNote: _activeReadNote),
+          ];
     final itemSources = _activeItems.isEmpty || answer.trim().isEmpty
         ? const <ItemSource>[]
         : citedItemSources(answer, _activeItems);
@@ -1856,7 +1934,7 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
           m.copyWith(
             status: status,
             content: answer,
-            errorKind: _actionEchoBlocked ? actionEchoErrorKind : null,
+            errorKind: failedKind,
             tokCount: event.tokenCount,
             genMs: event.elapsedMs,
             sources: sources.isEmpty ? null : sources,
@@ -1945,9 +2023,11 @@ class ChatController extends AsyncNotifier<ChatThreadState> {
     _activeAssistantId = null;
     _activeSources = const [];
     _activePrompt = null;
+    _activeReadNote = null;
     _outputBlocked = false;
     _echoBlocked = false;
     _actionEchoBlocked = false;
+    _repeatBlocked = false;
     _rawBuffer = '';
     _pushedContent = '';
     _pushedReasoning = '';
@@ -2088,5 +2168,6 @@ final class _Grounding {
   final String prompt;
   final List<DocSource> docSources;
   final List<ConnectorItem> items;
-  const _Grounding(this.prompt, this.docSources, this.items);
+  final String? readNote;
+  const _Grounding(this.prompt, this.docSources, this.items, {this.readNote});
 }

@@ -28,6 +28,7 @@ import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../../../data/connectors/sources_block.dart';
 import '../../../engine_bindings/engine_service.dart';
+import '../../today/state/brief_grounding.dart' show ungrounded;
 
 /// Instruction for the model: one short line, quoted data only.
 const summaryInstruction =
@@ -36,7 +37,11 @@ const summaryInstruction =
     'what is being asked. No quotes, no preamble.';
 
 /// Cleans model output into one display line, or null when nothing usable.
-String? cleanSummary(String raw) {
+///
+/// With a [source], a summary that uses a number or capitalised word the
+/// source lacks is replaced by the source's first sentence (small models
+/// invent), trimmed to the row length.
+String? cleanSummary(String raw, {String? source}) {
   var s = raw.replaceAll(RegExp(r'<think>[\s\S]*?</think>'), '').trim();
   s = s
       .split('\n')
@@ -44,9 +49,15 @@ String? cleanSummary(String raw) {
       .firstWhere((l) => l.isNotEmpty, orElse: () => '');
   s = s.replaceAll(RegExp(r'''^["'`*_\-•\s]+|["'`*_\s]+$'''), '').trim();
   if (s.isEmpty) return null;
-  if (s.length > 120) s = '${s.substring(0, 119).trimRight()}…';
-  return s;
+  if (source != null && ungrounded(s, source, lenient: true) != null) {
+    s = source.trim().split(RegExp(r'(?<=[.?!])\s+|\n+')).first.trim();
+    if (s.isEmpty) return null;
+  }
+  return _row(s);
 }
+
+String _row(String s) =>
+    s.length > 120 ? '${s.substring(0, 119).trimRight()}…' : s;
 
 class InboxSummarizer with WidgetsBindingObserver {
   InboxSummarizer(this._ref, {bool Function()? isForeground})
@@ -286,11 +297,7 @@ class InboxSummarizer with WidgetsBindingObserver {
             const ChatTurn.system(summaryInstruction),
             ChatTurn.user('${block.text}\n\nSummary:'),
           ],
-          params: const EngineGenerateParams(
-            maxTokens: 48,
-            temperature: 0.2,
-            greedy: true,
-          ),
+          params: const EngineGenerateParams(maxTokens: 48, temperature: 0.2),
         )
         .timeout(const Duration(seconds: 45));
     await for (final e in stream) {
@@ -299,7 +306,14 @@ class InboxSummarizer with WidgetsBindingObserver {
         return null;
       }
     }
-    return cleanSummary(out.toString());
+    return cleanSummary(
+      out.toString(),
+      source: [
+        item.title,
+        item.body,
+        ...item.people.map((p) => p.name),
+      ].join('\n'),
+    );
   }
 }
 

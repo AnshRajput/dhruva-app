@@ -383,6 +383,10 @@ void main() {
       final s = citedItemSources('I could not find that.', retrieved);
       expect(s, hasLength(uncitedFallbackChips));
       expect(s.first.itemId, 1);
+      expect(s.every((x) => !x.cited), isTrue);
+      expect(citedItemSources('Ravi wrote [2].', retrieved).single.cited, true);
+      final back = ItemSource.tryFromJson(s.first.toJson());
+      expect(back!.cited, isFalse);
     });
 
     test('nothing retrieved (ungrounded) gives no chips', () {

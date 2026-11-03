@@ -131,6 +131,11 @@ Future<void> openFact(
     }
     return;
   }
+  if (kind == 'inbox') {
+    // The Inbox is a tab of the shell: switch to it, never push it.
+    context.go('/inbox');
+    return;
+  }
   if (kind == 'todos') {
     // The Library is a tab of the shell: switch to it, never push it.
     context.go('/library');

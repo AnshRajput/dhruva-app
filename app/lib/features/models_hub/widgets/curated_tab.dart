@@ -60,6 +60,11 @@ class CuratedTab extends ConsumerWidget {
       });
       larger.sort((a, b) => a.approxSizeBytes.compareTo(b.approxSizeBytes));
     }
+    // Same pick as onboarding: the two surfaces must agree.
+    if (ram != null) {
+      final pick = recommendedStarterModel(ram);
+      if (fitting.remove(pick)) fitting.insert(0, pick);
+    }
     final recommended = fitting.isNotEmpty ? fitting.first : null;
     // D12: "Recommended" means "start here". Once that model is installed the
     // pill is noise above an Installed card, so it goes away.
@@ -80,12 +85,7 @@ class CuratedTab extends ConsumerWidget {
             _RecommendedBadge(),
             SizedBox(height: tokens.spacing.xs),
           ],
-          CuratedModelCard(
-            model: model,
-            totalRamBytes: ram,
-            // "Comfortable" once, on the recommended pick, not on every card.
-            hideComfortableVerdict: !identical(model, recommended),
-          ),
+          CuratedModelCard(model: model, totalRamBytes: ram),
         ],
       ),
     );

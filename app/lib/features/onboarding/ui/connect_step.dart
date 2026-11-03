@@ -1,10 +1,11 @@
-/// Onboarding step 3: "Start with your day" (comp onboarding-connect.png).
+/// Onboarding step 2: "Start with your day" (comp onboarding-connect.png).
 ///
 /// One primary action, Connect your calendar (the phone's own calendar, no
 /// sign-in), and an always-there "Not now". Folder and, on Android,
 /// Notifications are optional extras. If the OS says no, the step says what
-/// to do (Open settings) instead of failing quietly. A slim strip at the top
-/// keeps the background model download visible, with its recovery.
+/// to do (Open settings) instead of failing quietly. It comes BEFORE the model
+/// pick: the Today brief is rule-written and needs no model, so the user gets
+/// value while the model downloads.
 library;
 
 import 'dart:async';
@@ -17,20 +18,16 @@ import '../../../core/di/connector_providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../data/connectors/connector.dart';
-import '../state/onboarding_controller.dart';
 
 class ConnectStep extends ConsumerStatefulWidget {
-  const ConnectStep({
-    super.key,
-    required this.onDone,
-    required this.onRetryDownload,
-  });
+  const ConnectStep({super.key, required this.onNext, required this.onSkip});
 
-  /// Marks onboarding complete and goes to Today (also what Skip does).
-  final Future<void> Function() onDone;
+  /// On to the model pick (Continue, Not now, or a calendar allowed in
+  /// system settings).
+  final VoidCallback onNext;
 
-  /// Restarts the model download after a failure.
-  final VoidCallback onRetryDownload;
+  /// Marks onboarding complete and goes to Today.
+  final Future<void> Function() onSkip;
 
   @override
   ConsumerState<ConnectStep> createState() => _ConnectStepState();
@@ -101,7 +98,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
     if (connected && (_denied?.needsSettings ?? false) && !_finished) {
       _finished = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(widget.onDone());
+        if (mounted) widget.onNext();
       });
     }
     final notifications = _status(ConnectorIds.notifications);
@@ -113,16 +110,14 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
         children: [
           Row(
             children: [
-              const Expanded(child: _StepBars(active: 2)),
+              const Expanded(child: OnboardingStepBars(active: 1)),
               TextButton(
                 key: const ValueKey('connect-skip'),
-                onPressed: () => widget.onDone(),
+                onPressed: () => widget.onSkip(),
                 child: const Text('Skip'),
               ),
             ],
           ),
-          SizedBox(height: tokens.spacing.md),
-          _DownloadStrip(onRetry: widget.onRetryDownload),
           SizedBox(height: tokens.spacing.lg),
           Text('Start with your day', style: theme.textTheme.headlineLarge),
           SizedBox(height: tokens.spacing.md),
@@ -162,8 +157,8 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             SizedBox(height: tokens.spacing.md),
             FilledButton(
               key: const ValueKey('connect-continue'),
-              onPressed: () => widget.onDone(),
-              child: const Text('Continue to Today'),
+              onPressed: widget.onNext,
+              child: const Text('Continue'),
             ),
           ] else if (blocked) ...[
             Row(
@@ -191,7 +186,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             ),
             TextButton(
               key: const ValueKey('connect-not-now'),
-              onPressed: () => widget.onDone(),
+              onPressed: widget.onNext,
               child: const Text('Not now'),
             ),
           ] else ...[
@@ -219,7 +214,7 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
             ),
             TextButton(
               key: const ValueKey('connect-not-now'),
-              onPressed: () => widget.onDone(),
+              onPressed: widget.onNext,
               child: const Text('Not now'),
             ),
           ],
@@ -279,9 +274,9 @@ class _ConnectStepState extends ConsumerState<ConnectStep> {
   }
 }
 
-/// Four thin bars, [active] of them lit (welcome, model, calendar, Today).
-class _StepBars extends StatelessWidget {
-  const _StepBars({required this.active});
+/// Four thin bars, [active] of them lit (welcome, calendar, model, Today).
+class OnboardingStepBars extends StatelessWidget {
+  const OnboardingStepBars({super.key, required this.active});
   final int active;
 
   @override
@@ -306,92 +301,6 @@ class _StepBars extends StatelessWidget {
             SizedBox(width: tokens.spacing.xs),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// The model download, carried along: progress while it runs, "ready" when it
-/// lands, and the same recovery as the download step when it fails.
-class _DownloadStrip extends ConsumerWidget {
-  const _DownloadStrip({required this.onRetry});
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dl = ref.watch(onboardingDownloadControllerProvider).value;
-    final status = dl?.status ?? OnboardingDownloadStatus.idle;
-    if (status == OnboardingDownloadStatus.idle) {
-      return const SizedBox.shrink();
-    }
-    final theme = Theme.of(context);
-    final tokens = theme.extension<DhruvaTokens>()!;
-    final scheme = theme.colorScheme;
-    final failed = status == OnboardingDownloadStatus.failed;
-    final done = status == OnboardingDownloadStatus.installed;
-    final pct = ((dl?.progress ?? 0) * 100).round();
-    final finishing = dl?.finishing ?? false;
-    final label = failed
-        ? "Download didn't finish. ${dl?.errorMessage ?? ''}".trim()
-        : done
-        ? 'Your model is ready.'
-        : finishing
-        ? 'Finishing up…'
-        : pct > 0
-        ? 'Your model is downloading in the background · $pct%'
-        : 'Getting your model ready in the background…';
-    return DecoratedBox(
-      key: const ValueKey('connect-download-strip'),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(tokens.radius.lg),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.md,
-          vertical: tokens.spacing.sm,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  failed
-                      ? Icons.error_outline
-                      : done
-                      ? Icons.check_circle
-                      : Icons.downloading_rounded,
-                  size: 18,
-                  color: failed
-                      ? scheme.error
-                      : done
-                      ? tokens.success
-                      : scheme.primary,
-                ),
-                SizedBox(width: tokens.spacing.sm),
-                Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-                if (failed)
-                  TextButton(
-                    key: const ValueKey('connect-download-retry'),
-                    onPressed: onRetry,
-                    child: const Text('Try again'),
-                  ),
-              ],
-            ),
-            if (!failed && !done)
-              Padding(
-                padding: EdgeInsets.only(top: tokens.spacing.xs),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(tokens.radius.full),
-                  child: LinearProgressIndicator(
-                    minHeight: 4,
-                    value: (dl?.progress ?? 0) > 0 ? dl!.progress : null,
-                  ),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }

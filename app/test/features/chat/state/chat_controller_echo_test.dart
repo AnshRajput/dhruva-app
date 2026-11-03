@@ -12,6 +12,7 @@ import 'package:dhruva/engine_bindings/fake_engine_service.dart';
 import 'package:dhruva/features/chat/state/answer_guard.dart';
 import 'package:dhruva/features/chat/state/ask_selection.dart';
 import 'package:dhruva/features/chat/state/chat_controller.dart';
+import 'package:dhruva/features/chat/state/repetition_guard.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -172,6 +173,53 @@ void main() {
     await ctrl.sendMessage('What meetings do I have today?');
     await expectNotice(c, args, shown);
     expect(shown, contains(echoNotice));
+  });
+
+  test('a looped grounded answer is a retryable error with no chips', () async {
+    final (c, ctrl, args) = await boot(
+      FakeEngineService(
+        scriptedTokens: const [
+          '[1]. Ana Costa is an individual with a valid contact phone ',
+          'number provided by Ana Costa, Ana Costa, with Ana Costa, ',
+          'with Ana Costa.',
+        ],
+        tokenDelay: const Duration(milliseconds: 5),
+      ),
+    );
+    await ctrl.sendMessage('What meetings do I have today?');
+    final reply = c.read(chatControllerProvider(args)).value!.messages.last;
+    expect(reply.status, MessageStatus.error);
+    expect(reply.errorKind, degenerateErrorKind);
+    expect(reply.content, isEmpty);
+    expect(reply.itemSources, isEmpty);
+  });
+
+  test('a streaming loop is cut off and never shown', () async {
+    final (c, ctrl, args) = await boot(
+      FakeEngineService(
+        scriptedTokens: List.filled(60, 'the budget review is at nine '),
+        tokenDelay: const Duration(milliseconds: 20),
+      ),
+    );
+    final shown = watch(c, args);
+    await ctrl.sendMessage('What meetings do I have today?');
+    final reply = c.read(chatControllerProvider(args)).value!.messages.last;
+    expect(reply.errorKind, degenerateErrorKind);
+    expect(shown.where((t) => t.length > 150), isEmpty);
+  });
+
+  test('a grounded turn samples cool, capped, with a repeat penalty', () async {
+    final engine = FakeEngineService(
+      scriptedTokens: const ['Budget review is at 9:00 ', '[1].'],
+      tokenDelay: const Duration(milliseconds: 5),
+    );
+    final (_, ctrl, _) = await boot(engine);
+    await ctrl.sendMessage('What meetings do I have today?');
+    final p = engine.lastParams!;
+    expect(p.temperature, lessThanOrEqualTo(0.3));
+    expect(p.maxTokens, lessThanOrEqualTo(320));
+    expect(p.repeatPenalty, 1.1);
+    expect(p.penaltyLastN, 64);
   });
 
   test('a real answer is left alone', () async {

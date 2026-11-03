@@ -1,9 +1,20 @@
 import 'package:dhruva/core/theme/app_theme.dart';
+import 'package:dhruva/features/chat/state/repetition_guard.dart';
 import 'package:dhruva/features/chat/widgets/chat_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('a looped answer says so in plain words and offers Retry', () {
+    final c = chatErrorContentFor(degenerateErrorKind);
+    expect(
+      c.message,
+      'That answer repeated itself. Try again, or pick a bigger model.',
+    );
+    expect(c.primaryAction, ChatRecoveryAction.retry);
+    expect(c.primaryLabel, 'Retry');
+  });
+
   test('errorKind mapping covers the full chat-spec.md §8 taxonomy', () {
     // D2: every load failure leads with Try again, then Use a smaller model.
     for (final kind in [

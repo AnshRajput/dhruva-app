@@ -133,6 +133,9 @@ Future<TodayHarness> pumpToday(
   Future<void> Function(TodayHarness h)? seed,
   Widget? home,
   List<Override> overrides = const [],
+
+  /// Captured notifications the Inbox rule counts (none by default).
+  List<ConnectorItem> inbox = const [],
   DeviceHealth? health,
 
   /// A model download running right now (null: none).
@@ -179,6 +182,7 @@ Future<TodayHarness> pumpToday(
         builder: (_, state) =>
             PrepScreen(eventId: int.parse(state.pathParameters['id']!)),
       ),
+      stub('/inbox'),
       stub('/ask/new'),
       stub('/actions'),
       stub('/settings'),
@@ -211,6 +215,8 @@ Future<TodayHarness> pumpToday(
         deviceGuardStoreProvider.overrideWith(
           (ref) async => MemoryGuardStore(),
         ),
+        // Existing Today tests predate the reply count: none by default.
+        inboxNotificationsProvider.overrideWith((ref) => Stream.value(inbox)),
         ...overrides,
       ],
       child: MaterialApp.router(

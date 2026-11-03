@@ -119,7 +119,7 @@ class EngineBriefWriter implements BriefWriter {
                 messages: [ChatTurn.system(system), ChatTurn.user(prompt)],
                 params: const EngineGenerateParams(
                   maxTokens: 260,
-                  temperature: 0.3,
+                  temperature: 0.2,
                   topP: 0.9,
                 ),
               )

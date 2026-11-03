@@ -31,7 +31,9 @@ Future<T?> showDhruvaSheet<T>({
   final reduce = MediaQuery.disableAnimationsOf(context);
   return showModalBottomSheet<T>(
     context: context,
-    builder: builder,
+    // `useSafeArea` leaves the bottom open, so every sheet clears the gesture
+    // bar here, once. Under the keyboard the inset is already consumed.
+    builder: (context) => SafeArea(top: false, child: builder(context)),
     backgroundColor: backgroundColor,
     isScrollControlled: isScrollControlled,
     showDragHandle: showDragHandle,
