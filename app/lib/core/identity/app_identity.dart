@@ -17,6 +17,10 @@ abstract final class AppIdentity {
   /// Text of the wordmark shown beside the brand star in headers.
   static const wordmark = 'Dhruva';
 
+  /// The app's own Android package id (matches `applicationId` in
+  /// `android/app/build.gradle`); its own notifications are never "yours".
+  static const androidPackage = 'app.dhruva.mobile';
+
   /// One line that says what the app is.
   static const tagline = 'A private assistant that runs on your phone.';
 }

@@ -4,22 +4,9 @@
 library;
 
 import '../../../data/connectors/connector.dart';
+import '../../../data/connectors/needs_reply.dart' show InboxItem;
 
-/// What an [InboxEntry] row needs, read out of the item's flags.
-extension InboxItem on ConnectorItem {
-  String get appLabel {
-    final a = flags['app'];
-    if (a is String && a.trim().isNotEmpty) return a.trim();
-    final p = packageName;
-    return p.isEmpty ? 'App' : p;
-  }
-
-  String get packageName => (flags['pkg'] as String?) ?? '';
-
-  bool get isRead => flags['read'] == true;
-
-  DateTime get when => sentAt ?? updatedAt;
-}
+export '../../../data/connectors/needs_reply.dart' show InboxItem;
 
 final class InboxSection {
   final String title;

@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/di/speed_providers.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/benchmark/speed_result.dart';
 import '../../../data/downloads/storage_manager.dart';
@@ -140,7 +141,7 @@ class _InstallMorePrompt extends ConsumerWidget {
         : 'You have one model installed. Add one more to compare two side by '
               'side, like the example below.';
     return ListView(
-      padding: EdgeInsets.all(tokens.spacing.md),
+      padding: EdgeInsets.all(tokens.spacing.md).withBottomInset(context),
       children: [
         Row(
           children: [
@@ -375,7 +376,7 @@ class _CompareBody extends ConsumerWidget {
     final bFastest = bothDone && !aFastest;
 
     return ListView(
-      padding: EdgeInsets.all(tokens.spacing.md),
+      padding: EdgeInsets.all(tokens.spacing.md).withBottomInset(context),
       children: [
         Text(
           'One prompt, two models. Your phone runs one model at a time, so '
@@ -801,7 +802,7 @@ class _AiNewsTab extends ConsumerWidget {
     final controller = ref.read(aiNewsControllerProvider.notifier);
 
     return ListView(
-      padding: EdgeInsets.all(tokens.spacing.md),
+      padding: EdgeInsets.all(tokens.spacing.md).withBottomInset(context),
       children: [
         switch (digest) {
           AsyncData(:final value) when value == null => _DigestCard(

@@ -41,12 +41,17 @@ final class StarterModel {
   /// affordance — only a "Vision" label.
   final bool isVision;
 
+  /// A ~3B model that answers noticeably better than the 1-2B picks. Cards
+  /// label it "Better answers" when the device runs it comfortably.
+  final bool betterAnswers;
+
   const StarterModel({
     required this.repoId,
     required this.displayName,
     required this.bestFor,
     required this.approxSizeBytes,
     this.isVision = false,
+    this.betterAnswers = false,
   });
 }
 
@@ -57,7 +62,7 @@ const starterModelCatalog = <StarterModel>[
   StarterModel(
     repoId: 'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
     displayName: 'Qwen2.5 0.5B Instruct',
-    bestFor: 'Best for instant replies on any phone',
+    bestFor: 'Fastest, least accurate',
     approxSizeBytes: 397808192, // ~379 MB
   ),
   StarterModel(
@@ -102,12 +107,14 @@ const starterModelCatalog = <StarterModel>[
     displayName: 'Qwen2.5 3B Instruct',
     bestFor: 'Best for stronger reasoning and coding',
     approxSizeBytes: 1929903264, // ~1.8 GB
+    betterAnswers: true,
   ),
   StarterModel(
     repoId: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
     displayName: 'Llama 3.2 3B Instruct',
     bestFor: 'Best for the most capable everyday chat',
     approxSizeBytes: 2019377696, // ~1.9 GB
+    betterAnswers: true,
   ),
   StarterModel(
     repoId: 'bartowski/Phi-3.5-mini-instruct-GGUF',
@@ -135,32 +142,28 @@ final _friendlyNamesByRepo = {
   for (final m in starterModelCatalog) m.repoId: m.displayName,
 };
 
-/// The single model onboarding pre-selects and badges "Recommended" (PRD v0.3
-/// WS2): the FASTEST text model that still runs comfortably — i.e. the
-/// SMALLEST comfortable pick — so a first-timer's very first reply streams
-/// instantly and wins their trust. (This deliberately matches the Discover
-/// tab's "Recommended" badge, which also picks smallest-comfortable — the two
-/// surfaces must agree.)
-///
-/// Why smallest, not largest: on-device decode speed scales inversely with
-/// model size, and a snappy first impression matters far more to a new user
-/// than a marginally smarter but slower answer. They can step up to a bigger
-/// model any time from the full curated list.
+/// The text-model size cap for the first-run pick (~1.5B class). Qwen2.5 1.5B
+/// (986 MB) fits; SmolLM2 1.7B (1.06 GB) and the 2B+ models do not.
+const _starterCapBytes = 1000000000;
+
+/// The single model onboarding pre-selects and badges "Recommended": the
+/// LARGEST text model up to ~1.5B that runs comfortably, so first answers are
+/// as good as a phone can give while still streaming quickly. The 0.5B model
+/// is the low-RAM fallback ("Fastest, least accurate"); ~3B models are offered
+/// as a separate "Better answers" option, never the default.
 ///
 /// Rules, in order:
-/// 1. Smallest catalog entry classified [ModelTier.comfortable] on the device.
+/// 1. Largest entry up to [_starterCapBytes] classified [ModelTier.comfortable].
 /// 2. Else the smallest entry that's at least [ModelTier.possible].
-/// 3. Else (RAM unknown, or nothing fits) the smallest entry — always
+/// 3. Else (RAM unknown, or nothing fits) the smallest entry, always
 ///    runnable, never a dead-end.
 ///
-/// Vision models are excluded: the first-run pick is a chat model (vision is
-/// a specialty the catalog surfaces separately). The catalog is ordered
-/// smallest → largest, so the FIRST match in a pass is the smallest.
+/// Vision models are excluded. The catalog is ordered smallest to largest.
 StarterModel recommendedStarterModel(int? totalRamBytes) {
   final textModels = starterModelCatalog.where((m) => !m.isVision).toList();
   if (totalRamBytes == null) return textModels.first;
 
-  StarterModel? smallestComfortable;
+  StarterModel? largestComfortable;
   StarterModel? smallestPossible;
   for (final m in textModels) {
     final tier = classifyModelTier(
@@ -169,12 +172,12 @@ StarterModel recommendedStarterModel(int? totalRamBytes) {
     );
     switch (tier) {
       case ModelTier.comfortable:
-        smallestComfortable ??= m;
+        if (m.approxSizeBytes <= _starterCapBytes) largestComfortable = m;
       case ModelTier.possible:
         smallestPossible ??= m;
       case ModelTier.notRecommended:
         break;
     }
   }
-  return smallestComfortable ?? smallestPossible ?? textModels.first;
+  return largestComfortable ?? smallestPossible ?? textModels.first;
 }

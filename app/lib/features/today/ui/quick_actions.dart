@@ -172,18 +172,27 @@ class _Pill extends StatelessWidget {
     return DecoratedBox(
       key: ValueKey(keyValue),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        // Filled and outlined: `surface` on the page's own surface vanished.
+        color: theme.colorScheme.surfaceContainerHigh,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(tokens.radius.full),
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: theme.colorScheme.primary),
-            SizedBox(width: tokens.spacing.sm),
-            Text(label, style: theme.textTheme.labelLarge),
-          ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.base),
+          // Vertical centring inside the 48 dp minimum.
+          child: Center(
+            widthFactor: 1,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: theme.colorScheme.primary),
+                SizedBox(width: tokens.spacing.sm),
+                Text(label, style: theme.textTheme.labelLarge),
+              ],
+            ),
+          ),
         ),
       ),
     );

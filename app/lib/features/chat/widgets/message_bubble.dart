@@ -406,8 +406,10 @@ class _MetadataRowState extends ConsumerState<_MetadataRow> {
             )
           : Icon(icon, size: 16, color: iconColor ?? color),
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(
+        minWidth: kMinInteractiveDimension,
+        minHeight: kMinInteractiveDimension,
+      ),
     );
 
     return Row(
@@ -549,8 +551,10 @@ class _EditAffordance extends StatelessWidget {
         tooltip: 'Edit message',
         icon: Icon(Icons.edit_outlined, size: 16, color: color),
         padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
+        ),
       ),
     );
   }

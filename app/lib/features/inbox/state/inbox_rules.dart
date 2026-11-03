@@ -14,8 +14,9 @@
 library;
 
 import '../../../data/connectors/connector.dart';
-import '../../../data/connectors/otp_guard.dart' show otpFlag;
-import 'inbox_grouping.dart';
+
+export '../../../data/connectors/needs_reply.dart'
+    show hasPersonSender, needsReply, needsReplyIds, senderOf;
 
 final _metaStart = RegExp(
   r'^(?:'
@@ -66,61 +67,3 @@ String firstLineOf(String body) {
 /// first line of the body.
 String rowLineOf(ConnectorItem item) =>
     usableSummary(item) ?? firstLineOf(item.body);
-
-/// Who the item is from. The notification title is the conversation or person
-/// for chat and mail apps; when it is empty or only repeats the app name, the
-/// app label is all there is.
-String senderOf(ConnectorItem item) {
-  final t = item.title.trim();
-  if (t.isEmpty || t.toLowerCase() == item.appLabel.toLowerCase()) {
-    return item.appLabel;
-  }
-  return t;
-}
-
-/// True when [senderOf] is a real sender, not just the posting app.
-bool hasPersonSender(ConnectorItem item) =>
-    senderOf(item).toLowerCase() != item.appLabel.toLowerCase();
-
-final _personName = RegExp(
-  r"^\p{Lu}[\p{L}'.\-]*(?:\s+\p{L}[\p{L}'.\-]*){0,2}$",
-  unicode: true,
-);
-
-final _requestWords = RegExp(
-  r'\b(?:please|pls|plz|can you|could you|would you|will you|need you|'
-  r'need your|let me know|confirm|approve|ok to|okay to|send me|call me|'
-  r'get back|reply|respond|waiting for|awaiting|remind me|sign off|'
-  r'your thoughts|your ok|your okay)\b',
-  caseSensitive: false,
-);
-
-/// Money and marketing text is addressed to everyone, not asking you.
-final _bulk = RegExp(
-  r'\b(?:debited|credited|otp|cashback|discount|coupon|unsubscribe|'
-  r'out for delivery|statement)\b|% off',
-  caseSensitive: false,
-);
-
-/// A message from a person that is asking you something and is still unread.
-/// [knownContacts] are lower-cased contact names.
-bool needsReply(ConnectorItem item, {Set<String> knownContacts = const {}}) {
-  if (item.flags[otpFlag] == true || item.isRead) return false;
-  final sender = senderOf(item);
-  final known = knownContacts.contains(sender.toLowerCase());
-  final person =
-      known || (hasPersonSender(item) && _personName.hasMatch(sender));
-  if (!person) return false;
-  final text = item.body;
-  if (!known && _bulk.hasMatch(text)) return false;
-  return text.contains('?') || _requestWords.hasMatch(text);
-}
-
-/// Ids of the items in [items] that need a reply.
-Set<int> needsReplyIds(
-  Iterable<ConnectorItem> items, {
-  Set<String> knownContacts = const {},
-}) => {
-  for (final i in items)
-    if (needsReply(i, knownContacts: knownContacts)) i.id,
-};

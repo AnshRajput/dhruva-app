@@ -18,6 +18,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/actions/action_prompt.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
 import '../data/workflow_catalog.dart';
 
@@ -123,7 +124,7 @@ class _WorkflowsScreenState extends State<WorkflowsScreen> {
           tokens.spacing.xs,
           tokens.spacing.md,
           tokens.spacing.xl,
-        ),
+        ).withBottomInset(context),
         children: [
           Text(
             shared.isEmpty

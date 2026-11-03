@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/failures/app_failure.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../../../data/characters/character_card.dart';
@@ -196,7 +197,9 @@ class _GalleryBody extends ConsumerWidget {
           ref.read(charactersControllerProvider.notifier).refresh(),
       child: ListView(
         // Bottom room so the extended Create FAB never covers the last row.
-        padding: EdgeInsets.all(tokens.spacing.md).copyWith(bottom: 96),
+        padding: EdgeInsets.all(
+          tokens.spacing.md,
+        ).copyWith(bottom: 96).withBottomInset(context),
         children: [
           if (mine.isNotEmpty) ...[
             heading('Yours'),

@@ -1,5 +1,7 @@
-// The guided first-run flow (v2): welcome -> pick a model (download continues
-// in the background) -> connect your calendar -> Today. "pick" shows the
+// The guided first-run flow (v3): welcome -> connect your calendar -> pick a
+// model (download continues in the background) -> morning-brief opt-in ->
+// Today. The calendar comes first: the Today brief is rule-written and needs
+// no model, so the user gets value while the model downloads. "pick" shows the
 // curated catalog ONLY (no raw HF firehose, no quant menu) with the
 // device-appropriate model badged "Recommended" and pre-selected; skipping
 // anywhere marks onboarding done (shown once) and lands on Today.
@@ -7,6 +9,9 @@
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/identity/app_identity.dart';
+import 'package:dhruva/core/intents/app_settings.dart';
+import 'package:dhruva/core/notifications/morning_brief.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/core/theme/brand_star.dart';
@@ -21,6 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../support/fake_connector_sources.dart';
+import '../../../support/fake_notification_gateway.dart';
 
 class _FakeOnboardingStore implements OnboardingStore {
   bool complete = false;
@@ -79,7 +85,7 @@ const _fakeDeviceInfo = FakeDeviceInfoService(
   storage: DeviceStorageInfo(totalBytes: 64000000000, freeBytes: 32000000000),
 );
 
-final prefs = MemoryPrefsStore();
+var prefs = MemoryPrefsStore();
 
 class _Pumped {
   _Pumped(this.store, this.kit);
@@ -91,7 +97,10 @@ Future<_Pumped> _pumpFlow(
   WidgetTester tester, {
   OnboardingDownloadController Function()? controller,
   bool notificationsSupported = true,
+  FakeGateway? gateway,
+  void Function()? onOpenSettings,
 }) async {
+  prefs = MemoryPrefsStore();
   await tester.binding.setSurfaceSize(const Size(420, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -120,6 +129,11 @@ Future<_Pumped> _pumpFlow(
     ProviderScope(
       overrides: [
         deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
+        notificationGatewayProvider.overrideWithValue(gateway ?? FakeGateway()),
+        openAppSettingsProvider.overrideWithValue(() async {
+          onOpenSettings?.call();
+          return true;
+        }),
         onboardingStoreProvider.overrideWith((ref) async => store),
         prefsStoreProvider.overrideWith((ref) async => prefs),
         appDatabaseProvider.overrideWithValue(db),
@@ -148,22 +162,42 @@ Future<_Pumped> _pumpFlow(
 Future<_FakeOnboardingStore> _pump(WidgetTester tester) async =>
     (await _pumpFlow(tester)).store;
 
-/// welcome -> pick -> Download (the controller stub lands its result).
+/// welcome -> connect your calendar.
 Future<void> _toConnect(WidgetTester tester) async {
   await tester.tap(find.text('Get started'));
   await tester.pumpAndSettle();
+}
+
+/// welcome -> connect ("Not now") -> pick.
+Future<void> _toPick(WidgetTester tester) async {
+  await _toConnect(tester);
+  await tester.tap(find.byKey(const ValueKey('connect-not-now')));
+  await tester.pumpAndSettle();
+}
+
+/// ... -> pick -> Download (the controller stub lands its result).
+Future<void> _toFinish(WidgetTester tester) async {
+  await _toPick(tester);
   await tester.tap(find.textContaining('Download'));
   await tester.pumpAndSettle();
 }
 
+Finder _briefSwitch() => find.byKey(const ValueKey('finish-morning-brief'));
+
 void main() {
-  testWidgets('welcome states what Dhruva is and the value', (tester) async {
+  testWidgets('welcome is about the day, and names the product from '
+      'AppIdentity', (tester) async {
     await _pump(tester);
-    expect(find.text('Welcome to Dhruva'), findsOneWidget);
+    expect(find.text('Your day, on your phone'), findsOneWidget);
     expect(
-      find.text('A private AI that runs entirely on your phone.'),
+      find.text(
+        'A morning brief, answers from your calendar, contacts and files, '
+        'and replies you approve, all private, all offline.',
+      ),
       findsOneWidget,
     );
+    expect(find.text(AppIdentity.productName), findsOneWidget);
+    expect(find.textContaining('Welcome to'), findsNothing);
     expect(find.text('Get started'), findsOneWidget);
   });
 
@@ -211,8 +245,7 @@ void main() {
     'no firehose and no quant menu',
     (tester) async {
       await _pump(tester);
-      await tester.tap(find.text('Get started'));
-      await tester.pumpAndSettle();
+      await _toPick(tester);
 
       expect(find.text('Pick your first model'), findsOneWidget);
       // Exactly one device-appropriate default is badged.
@@ -231,13 +264,15 @@ void main() {
     tester,
   ) async {
     await _pump(tester);
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
+    await _toPick(tester);
 
     int cards() =>
         find.byIcon(Icons.radio_button_checked).evaluate().length +
         find.byIcon(Icons.radio_button_unchecked).evaluate().length;
     expect(cards(), 3);
+    // The default is the largest comfortable ~1.5B model, badged once.
+    expect(find.text('Qwen2.5 1.5B Instruct'), findsOneWidget);
+    expect(find.text('Recommended'), findsOneWidget);
     expect(find.text('Other models'), findsOneWidget);
     expect(find.textContaining(RegExp(r'^Download · \d')), findsOneWidget);
 
@@ -247,27 +282,24 @@ void main() {
     expect(find.text('Other models'), findsNothing);
   });
 
-  group('connect your calendar', () {
-    testWidgets('an installed model moves on to "Start with your day"', (
-      tester,
-    ) async {
-      await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+  group('connect your calendar (before the model pick)', () {
+    testWidgets('Get started lands on "Start with your day", with no model '
+        'download strip yet', (tester) async {
+      await _pump(tester);
       await _toConnect(tester);
       expect(find.text('Start with your day'), findsOneWidget);
       expect(find.text('Connect your calendar'), findsOneWidget);
-      expect(find.text('Your model is ready.'), findsOneWidget);
       expect(find.text('Example. Yours will appear on Today.'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('connect-download-strip')),
+        findsNothing,
+      );
+      expect(find.text('Pick your first model'), findsNothing);
     });
 
-    testWidgets('Allow connects the calendar, then Continue lands on Today '
-        'and marks onboarding done', (tester) async {
-      final p = await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+    testWidgets('Allow connects the calendar, then Continue goes on to the '
+        'model pick (onboarding is not finished yet)', (tester) async {
+      final p = await _pumpFlow(tester);
       p.kit.calendar.afterRequest = DevicePermission.granted;
       await _toConnect(tester);
       await tester.tap(find.byKey(const ValueKey('connect-allow')));
@@ -280,16 +312,13 @@ void main() {
       expect(p.store.complete, isFalse);
       await tester.tap(find.byKey(const ValueKey('connect-continue')));
       await tester.pumpAndSettle();
-      expect(p.store.complete, isTrue);
-      expect(find.text('chat-home'), findsOneWidget);
+      expect(find.text('Pick your first model'), findsOneWidget);
+      expect(p.store.complete, isFalse);
     });
 
     testWidgets('first Deny: retry sentence and Allow stays; second Deny: '
-        'Open settings works, Not now still finishes', (tester) async {
-      final p = await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+        'Open settings works, Not now moves on to the pick', (tester) async {
+      final p = await _pumpFlow(tester);
       // Android's first Deny: the system will still ask.
       p.kit.calendar.afterRequest = DevicePermission.notDetermined;
       await _toConnect(tester);
@@ -317,16 +346,13 @@ void main() {
       expect(p.kit.calendar.settingsOpened, 1);
       await tester.tap(find.byKey(const ValueKey('connect-not-now')));
       await tester.pumpAndSettle();
-      expect(p.store.complete, isTrue);
-      expect(find.text('chat-home'), findsOneWidget);
+      expect(find.text('Pick your first model'), findsOneWidget);
+      expect(p.store.complete, isFalse);
     });
 
     testWidgets('blocked, then allowed in system settings: coming back moves '
-        'on by itself, no second tap', (tester) async {
-      final p = await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+        'on to the pick by itself, no second tap', (tester) async {
+      final p = await _pumpFlow(tester);
       p.kit.calendar.afterRequest = DevicePermission.denied;
       await _toConnect(tester);
       await tester.tap(find.byKey(const ValueKey('connect-allow')));
@@ -340,21 +366,18 @@ void main() {
         find.byKey(const ValueKey('connect-calendar-denied')),
         findsOneWidget,
       );
-      expect(p.store.complete, isFalse);
+      expect(find.text('Pick your first model'), findsNothing);
 
       // Allowed in settings, back to the app.
       p.kit.calendar.perm = DevicePermission.granted;
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
-      expect(p.store.complete, isTrue);
-      expect(find.text('chat-home'), findsOneWidget);
+      expect(find.text('Pick your first model'), findsOneWidget);
+      expect(p.store.complete, isFalse);
     });
 
-    testWidgets('Skip is always there', (tester) async {
-      final p = await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+    testWidgets('Skip is always there and finishes onboarding', (tester) async {
+      final p = await _pumpFlow(tester);
       await _toConnect(tester);
       await tester.tap(find.byKey(const ValueKey('connect-skip')));
       await tester.pumpAndSettle();
@@ -362,44 +385,10 @@ void main() {
       expect(find.text('chat-home'), findsOneWidget);
     });
 
-    testWidgets('the download carries on: "Continue while it downloads" shows '
-        'progress on the connect step', (tester) async {
-      await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_downloading),
-      );
-      await _toConnect(tester);
-      expect(find.text('Continue while it downloads'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('onboarding-continue')));
-      await tester.pumpAndSettle();
-      expect(find.text('Start with your day'), findsOneWidget);
-      expect(
-        find.text('Your model is downloading in the background · 42%'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('download errors keep their recovery on the download step', (
-      tester,
-    ) async {
-      await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_failed),
-      );
-      await _toConnect(tester);
-      expect(find.text("Download didn't finish"), findsOneWidget);
-      expect(find.text('Not enough storage space.'), findsOneWidget);
-      expect(find.text('Try again'), findsOneWidget);
-      expect(find.text('Pick another model'), findsOneWidget);
-    });
-
     testWidgets('extras: Folder and (Android) Notifications can be added', (
       tester,
     ) async {
-      final p = await _pumpFlow(
-        tester,
-        controller: () => _DownloadResultController(_installed),
-      );
+      final p = await _pumpFlow(tester);
       p.kit.folder.nextPick = const FolderGrant(id: 'g', name: 'Notes');
       await _toConnect(tester);
       await tester.ensureVisible(
@@ -415,11 +404,7 @@ void main() {
     });
 
     testWidgets('iOS: no notifications row', (tester) async {
-      await _pumpFlow(
-        tester,
-        notificationsSupported: false,
-        controller: () => _DownloadResultController(_installed),
-      );
+      await _pumpFlow(tester, notificationsSupported: false);
       await _toConnect(tester);
       expect(
         find.byKey(const ValueKey('connect-extra-notifications')),
@@ -432,17 +417,140 @@ void main() {
     });
   });
 
+  group('download and the last step', () {
+    testWidgets('an installed model moves on to "You\'re set"', (tester) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toFinish(tester);
+      expect(find.text("You're set"), findsOneWidget);
+      expect(find.text('Your model is ready.'), findsOneWidget);
+    });
+
+    testWidgets('the download carries on: "Continue while it downloads" shows '
+        'progress on the last step', (tester) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_downloading),
+      );
+      await _toFinish(tester);
+      expect(find.text('Continue while it downloads'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('onboarding-continue')));
+      await tester.pumpAndSettle();
+      expect(find.text("You're set"), findsOneWidget);
+      expect(
+        find.text('Your model is downloading in the background · 42%'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('download errors keep their recovery on the download step', (
+      tester,
+    ) async {
+      await _pumpFlow(
+        tester,
+        controller: () => _DownloadResultController(_failed),
+      );
+      await _toFinish(tester);
+      expect(find.text("Download didn't finish"), findsOneWidget);
+      expect(find.text('Not enough storage space.'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Pick another model'), findsOneWidget);
+    });
+
+    testWidgets('Go to Today finishes onboarding; the morning brief is off '
+        'unless asked for', (tester) async {
+      final gateway = FakeGateway();
+      final p = await _pumpFlow(
+        tester,
+        gateway: gateway,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toFinish(tester);
+      expect(tester.widget<SwitchListTile>(_briefSwitch()).value, isFalse);
+      await tester.tap(find.byKey(const ValueKey('finish-continue')));
+      await tester.pumpAndSettle();
+      expect(p.store.complete, isTrue);
+      expect(find.text('chat-home'), findsOneWidget);
+      expect(gateway.permissionRequests, 0);
+      expect(gateway.scheduled, isEmpty);
+      expect(prefs.values['morning_brief_enabled'], isNull);
+    });
+
+    testWidgets('the morning-brief switch asks permission, schedules the '
+        'generic notification and saves the choice', (tester) async {
+      final gateway = FakeGateway();
+      await _pumpFlow(
+        tester,
+        gateway: gateway,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toFinish(tester);
+      expect(
+        find.textContaining('Your brief is ready to read'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('finish-morning-brief')));
+      await tester.pumpAndSettle();
+      expect(gateway.permissionRequests, 1);
+      expect(gateway.scheduled.length, scheduleDays);
+      expect(
+        gateway.scheduled.every((s) => s.body == morningBriefBody),
+        isTrue,
+      );
+      expect(prefs.values['morning_brief_enabled'], 'true');
+      expect(tester.widget<SwitchListTile>(_briefSwitch()).value, isTrue);
+    });
+
+    testWidgets('permission refused: the switch stays off and says how to '
+        'fix it', (tester) async {
+      final gateway = FakeGateway(permitted: false);
+      var opened = 0;
+      await _pumpFlow(
+        tester,
+        gateway: gateway,
+        onOpenSettings: () => opened++,
+        controller: () => _DownloadResultController(_installed),
+      );
+      await _toFinish(tester);
+      await tester.tap(find.byKey(const ValueKey('finish-morning-brief')));
+      await tester.pumpAndSettle();
+      expect(gateway.scheduled, isEmpty);
+      expect(prefs.values['morning_brief_enabled'], isNull);
+      expect(tester.widget<SwitchListTile>(_briefSwitch()).value, isFalse);
+      expect(
+        find.byKey(const ValueKey('finish-brief-blocked')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('finish-open-settings')));
+      expect(opened, 1);
+    });
+  });
+
   testWidgets('skip on the pick step also marks onboarding done', (
     tester,
   ) async {
     final store = await _pump(tester);
-    await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
+    await _toPick(tester);
 
     await tester.tap(find.text('Skip for now'));
     await tester.pumpAndSettle();
 
     expect(store.complete, isTrue);
     expect(find.text('chat-home'), findsOneWidget);
+  });
+
+  testWidgets('system back walks back one step: pick -> connect -> welcome', (
+    tester,
+  ) async {
+    await _pump(tester);
+    await _toPick(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Start with your day'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Your day, on your phone'), findsOneWidget);
   });
 }

@@ -18,7 +18,10 @@ void main() {
     final all = networkFacts.map((f) => '${f.title} ${f.body}').join(' ');
     expect(all, contains('Hugging Face'));
     expect(all, contains('patch number'));
-    expect(all, contains('Gmail'));
+    expect(all, contains('Shorebird'));
+    expect(all, contains('IP address'));
+    expect(all, contains('Automatic when you open the app'));
+    expect(all, isNot(contains('Gmail')));
     expect(all.toLowerCase(), isNot(contains('analytics')));
     expect(noServerFact, 'There is no Dhruva server.');
     expect(backupsOffFact, contains('Backups are off'));

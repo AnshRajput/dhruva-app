@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/crash/crash_actions.dart';
 import '../../../core/crash/crash_log.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 
 /// Settings -> Crash reports. Local only; sharing is always the user's call.
 class CrashReportsScreen extends ConsumerWidget {
@@ -41,7 +42,9 @@ class CrashReportsScreen extends ConsumerWidget {
         ],
       ),
       body: ListView(
-        padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+        padding: EdgeInsets.symmetric(
+          vertical: tokens.spacing.sm,
+        ).withBottomInset(context),
         children: [
           Padding(
             padding: EdgeInsets.all(tokens.spacing.md),
