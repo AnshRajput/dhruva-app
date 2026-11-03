@@ -7,6 +7,7 @@ import 'package:dhruva/core/actions/action_prompt.dart';
 import 'package:dhruva/core/device_info/device_info_service.dart';
 import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/di/providers.dart';
+import 'package:dhruva/core/di/small_model.dart';
 import 'package:dhruva/core/theme/app_theme.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/db/database.dart';
@@ -102,6 +103,7 @@ void main() {
           deviceInfoServiceProvider.overrideWithValue(_fakeDeviceInfo),
           engineServiceProvider.overrideWithValue(engine),
           externalOpenerProvider.overrideWithValue(opener),
+          activeModelIsSmallProvider.overrideWith((ref) async => true),
           ...deviceHealthTestOverrides(),
         ],
         child: MaterialApp(
@@ -137,6 +139,8 @@ void main() {
     // N1: nothing of the user's calendar/files/contacts was searched.
     expect(find.text('Written from this message only.'), findsOneWidget);
     expect(find.text('Open in WhatsApp'), findsOneWidget);
+    // Under a small model the sheet says so, once, in its caption.
+    expect(find.textContaining(smallModelNote), findsOneWidget);
     expect(find.byKey(const ValueKey('draft-copy')), findsOneWidget);
     expect(find.byKey(const ValueKey('draft-share')), findsOneWidget);
     expect(find.byKey(const ValueKey('draft-save')), findsOneWidget);

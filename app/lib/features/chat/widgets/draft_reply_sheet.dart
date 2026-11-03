@@ -21,6 +21,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/actions/action_prompt.dart';
 import '../../../core/di/connector_providers.dart' show externalOpenerProvider;
 import '../../../core/di/library_providers.dart';
+import '../../../core/di/small_model.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../data/chat/chat_repository.dart';
@@ -190,6 +191,7 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
     final canOpen =
         (widget.args.sourcePackage ?? '').isNotEmpty && _ctrl.text.isNotEmpty;
     final empty = _ctrl.text.trim().isEmpty;
+    final small = ref.watch(activeModelIsSmallProvider).value ?? false;
     final selection = ref.watch(askSelectionProvider(widget.args)).selection;
     final pinned = selection.auto
         ? const <String>[]
@@ -264,7 +266,9 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
                   child: Text(
                     _rewriting
                         ? 'Rewriting, on this phone'
-                        : '$words words · written on this phone',
+                        : '$words words · written on this phone'
+                              '${small ? '\n$smallModelNote' : ''}',
+                    key: const ValueKey('draft-caption'),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
