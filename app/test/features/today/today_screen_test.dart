@@ -7,7 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dhruva/core/device_health/device_health.dart';
-import 'package:dhruva/core/di/connector_providers.dart';
 import 'package:dhruva/core/settings/prefs_store.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
