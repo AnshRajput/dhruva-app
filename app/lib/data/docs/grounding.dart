@@ -51,12 +51,31 @@ final class DocSource {
   final bool paged;
   final String snippet;
 
+  /// "Read pages 1–3 of 80" when the document did not fit whole; null when it
+  /// did. Set on every source of the answer (see [readPagesNote]).
+  final String? readNote;
+
+  /// False when the answer cited no `[p.N]` and this is only a page that was
+  /// read: the row says "Looked at", not "Sources".
+  final bool cited;
+
   const DocSource({
     required this.docName,
     required this.page,
     required this.paged,
     required this.snippet,
+    this.readNote,
+    this.cited = true,
   });
+
+  DocSource copyWith({String? readNote, bool? cited}) => DocSource(
+    docName: docName,
+    page: page,
+    paged: paged,
+    snippet: snippet,
+    readNote: readNote ?? this.readNote,
+    cited: cited ?? this.cited,
+  );
 
   /// "p.3" for a PDF, "part 3" for a plain-text file.
   String get label => paged ? 'p.$page' : 'part $page';
@@ -66,6 +85,8 @@ final class DocSource {
     'page': page,
     'paged': paged,
     'snippet': snippet,
+    'read': ?readNote,
+    if (!cited) 'cited': false,
   };
 
   static DocSource? tryFromJson(Object? json) {
@@ -79,6 +100,8 @@ final class DocSource {
       page: page,
       paged: json['paged'] != false,
       snippet: snippet,
+      readNote: json['read'] is String ? json['read'] as String : null,
+      cited: json['cited'] != false,
     );
   }
 }
@@ -171,15 +194,55 @@ List<StoredChunk> selectExcerpts({
   return [for (final k in keys) picked[k]!];
 }
 
+/// "Read pages 1–3 of 80": which pages of the one attached document
+/// [excerpts] cover, or null when they hold every chunk of it (nothing was
+/// left out) or several documents are in play. [pageCount] is the document's
+/// own page (or part) count; [corpus] every stored chunk.
+// ponytail: single-document only; add a per-document note if multi-doc Ask
+// needs one.
+String? readPagesNote({
+  required List<StoredChunk> corpus,
+  required List<StoredChunk> excerpts,
+  required int pageCount,
+}) {
+  if (excerpts.isEmpty || pageCount <= 0) return null;
+  final id = excerpts.first.docId;
+  if (excerpts.any((e) => e.docId != id)) return null;
+  if (excerpts.length >= corpus.where((c) => c.docId == id).length) {
+    return null;
+  }
+  final pages = {for (final e in excerpts) e.page}.toList()..sort();
+  final ranges = <String>[];
+  for (var i = 0; i < pages.length;) {
+    var j = i;
+    while (j + 1 < pages.length && pages[j + 1] == pages[j] + 1) {
+      j++;
+    }
+    ranges.add(j > i ? '${pages[i]}–${pages[j]}' : '${pages[i]}');
+    i = j + 1;
+  }
+  final noun = excerpts.first.paged ? 'page' : 'part';
+  return 'Read ${pages.length > 1 ? '${noun}s' : noun} ${ranges.join(', ')} '
+      'of $pageCount';
+}
+
 /// The grounded user turn plus the citations it offers.
 final class GroundedPrompt {
   final String prompt;
   final List<DocSource> sources;
 
+  /// See [readPagesNote]; set by the caller that knows the whole corpus.
+  final String? readNote;
+
   /// Just the tagged excerpts ("Excerpts:\n[p.3]\n..."), for Ask turns that
   /// also search connector sources and need one combined prompt.
   final String excerptsText;
-  const GroundedPrompt(this.prompt, this.sources, {this.excerptsText = ''});
+  const GroundedPrompt(
+    this.prompt,
+    this.sources, {
+    this.excerptsText = '',
+    this.readNote,
+  });
 }
 
 /// Builds the user turn that replaces the plain [question] when documents
@@ -259,5 +322,7 @@ List<DocSource> citedSources(String answer, List<DocSource> retrieved) {
     for (final s in retrieved)
       if (pages.contains(s.page)) s,
   ];
-  return cited.isEmpty ? retrieved : cited;
+  return cited.isEmpty
+      ? [for (final s in retrieved) s.copyWith(cited: false)]
+      : cited;
 }

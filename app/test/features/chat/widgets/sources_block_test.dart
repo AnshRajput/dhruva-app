@@ -53,6 +53,23 @@ void main() {
     expect(find.text('The warranty lasts two years.'), findsNothing);
   });
 
+  testWidgets('pages that were read but not cited read "Looked at"', (
+    tester,
+  ) async {
+    await pump(tester, [for (final s in _sources) s.copyWith(cited: false)]);
+    expect(find.text('Looked at · p.2, p.4'), findsOneWidget);
+    expect(find.textContaining('Sources'), findsNothing);
+  });
+
+  testWidgets('says which pages were read when the document was cut', (
+    tester,
+  ) async {
+    await pump(tester, [
+      for (final s in _sources) s.copyWith(readNote: 'Read pages 1–3 of 80'),
+    ]);
+    expect(find.text('Read pages 1–3 of 80'), findsOneWidget);
+  });
+
   testWidgets('several documents: each row names its file', (tester) async {
     await pump(tester, const [
       DocSource(docName: 'a.pdf', page: 1, paged: true, snippet: 's1'),

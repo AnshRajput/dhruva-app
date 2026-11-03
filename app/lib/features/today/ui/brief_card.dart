@@ -17,6 +17,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/di/connector_actions.dart';
 import '../../../core/di/model_download.dart';
+import '../../../core/di/small_model.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/model_download_line.dart';
@@ -425,7 +426,8 @@ class _RewriteRow extends ConsumerWidget {
             onPressed: ctl.useOriginal,
             child: const Text('Show original'),
           ),
-        ] else
+        ] else if (!(ref.watch(activeModelIsSmallProvider).value ?? false))
+          // Under 1B the rewrite is hidden: it mostly fails the check.
           TextButton.icon(
             key: const ValueKey('today-brief-rewrite'),
             onPressed: ctl.rewrite,
