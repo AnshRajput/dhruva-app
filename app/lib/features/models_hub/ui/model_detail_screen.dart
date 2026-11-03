@@ -19,6 +19,7 @@ import '../../../core/failures/failure_message.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/downloads/download_manager.dart';
 import '../../../data/hf_api/default_quant.dart';
@@ -102,7 +103,7 @@ class _DetailBody extends StatelessWidget {
         : null;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16).withBottomInset(context),
       children: [
         // D5: title block. The human name is the headline, the repo id a
         // small caption underneath.

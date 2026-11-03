@@ -19,6 +19,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/di/providers.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../data/characters/character_repository.dart';
@@ -92,7 +93,7 @@ class _DetailBody extends ConsumerWidget {
         ],
       ),
       body: ListView(
-        padding: EdgeInsets.all(tokens.spacing.md),
+        padding: EdgeInsets.all(tokens.spacing.md).withBottomInset(context),
         children: [
           Center(
             child: Column(

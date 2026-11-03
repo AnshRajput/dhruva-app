@@ -87,6 +87,7 @@ List<BriefSpan> _joinCited(List<String> texts, List<int> n) {
 /// * "No meetings" is said only once the calendar is [calendarConnected] AND
 ///   has finished a sync ([calendarSynced]): right after connecting the store
 ///   is empty, and an empty store is not an empty day.
+/// * [needsReplyCount] is how many messages the Inbox says need a reply.
 /// * [name] (About me) opens the first sentence; [openTodos] adds a line when
 ///   there are open to-dos in the Library.
 DayBrief composeBrief({
@@ -99,9 +100,11 @@ DayBrief composeBrief({
   Map<String, String> contactNames = const {},
   String? name,
   int openTodos = 0,
+  int needsReplyCount = 0,
   bool? use24,
 }) {
   String t(DateTime d) => clock(d, use24: use24);
+  notificationGroups = withoutSystemApps(notificationGroups);
   final cands = <_Candidate>[];
 
   final timed = [
@@ -116,6 +119,23 @@ DayBrief composeBrief({
   String withPeople(ConnectorItem e) {
     final who = attendeeNames(e, contactNames);
     return who.isEmpty ? '' : ' with ${_people(who)}';
+  }
+
+  // 0. Messages that need a reply, counted by the Inbox's own rule: first.
+  if (needsReplyCount > 0) {
+    final core =
+        '$needsReplyCount ${_plural(needsReplyCount, 'message needs', 'messages need')} a reply';
+    cands.add(
+      _Candidate(
+        -1,
+        -1,
+        [(FactKind.notification, '$core.', 'inbox:')],
+        (n) => [
+          BriefSpan(core, [n[0]]),
+          const BriefSpan('.'),
+        ],
+      ),
+    );
   }
 
   // 1. The first (or next, or current) meeting, or why there is none.

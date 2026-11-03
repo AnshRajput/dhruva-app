@@ -100,7 +100,7 @@ void main() {
   ) async {
     await _pumpTab(tester);
 
-    // Best-fit-first on an 8GB device leads with the smallest comfortable pick.
+    // The 0.5B pick is on the first screen on an 8GB device.
     final first = starterModelCatalog
         .where((m) => !m.isVision)
         .reduce((a, b) => a.approxSizeBytes <= b.approxSizeBytes ? a : b);
@@ -235,11 +235,53 @@ void main() {
     expect(find.text('Installed'), findsNothing);
   });
 
-  testWidgets('Comfortable is said once (the pick), not on every card', (
+  testWidgets('every card carries the same fit label, not just the pick', (
     tester,
   ) async {
     await _pumpTab(tester);
-    expect(find.text('Comfortable'), findsOneWidget);
+    final cards = find.byType(CuratedModelCard).evaluate().length;
+    expect(cards, 3);
+    expect(find.text('Comfortable'), findsNWidgets(cards));
+  });
+
+  testWidgets('Discover leads with the same pick as onboarding', (
+    tester,
+  ) async {
+    await _pumpTab(tester);
+    final first = tester.widget<CuratedModelCard>(
+      find.byType(CuratedModelCard).first,
+    );
+    expect(first.model.repoId, recommendedStarterModel(8000000000).repoId);
+    expect(find.text('Recommended'), findsOneWidget);
+  });
+
+  testWidgets('a comfortable ~3B model is labelled "Better answers"; a 1B '
+      'model is not', (tester) async {
+    Future<void> card(StarterModel m, int ram) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            listingDownloadControllerProvider.overrideWith(_StubController.new),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark,
+            home: Scaffold(
+              body: CuratedModelCard(model: m, totalRamBytes: ram),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final three = starterModelCatalog.firstWhere((m) => m.betterAnswers);
+    await card(three, 16 * 1024 * 1024 * 1024);
+    expect(find.text('Better answers'), findsOneWidget);
+    // Possible, not comfortable: the label would oversell it.
+    await card(three, 7 * 1024 * 1024 * 1024);
+    expect(find.text('Better answers'), findsNothing);
+    await card(starterModelCatalog.first, 16 * 1024 * 1024 * 1024);
+    expect(find.text('Better answers'), findsNothing);
   });
 
   testWidgets('one pick and two alternatives up front, the rest under '

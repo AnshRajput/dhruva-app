@@ -8,12 +8,14 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/di/ask_providers.dart' show askContactNamesProvider;
 import '../../../core/di/connector_providers.dart';
 import '../../../core/di/library_providers.dart';
 import '../../../core/profile/user_profile.dart';
 import '../../../core/settings/prefs_store.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
+import '../../../data/connectors/needs_reply.dart';
 import 'brief_compose.dart';
 import 'brief_facts.dart';
 
@@ -197,6 +199,20 @@ final openTodoCountProvider = Provider<int>((ref) {
   return todos.where((t) => !t.done).length;
 });
 
+/// How many captured messages the Inbox lists under "Needs reply": the same
+/// rule (`needsReply`) over the same items, minus system packages and what the
+/// user marked read on Today.
+int needsReplyCount(
+  List<ConnectorItem> items,
+  Set<String> knownContacts,
+  DateTime? readAt,
+) => needsReplyIds([
+  for (final i in items)
+    if (!systemPackages.contains(i.packageName) &&
+        (readAt == null || i.when.isAfter(readAt)))
+      i,
+], knownContacts: knownContacts).length;
+
 /// The rule-written brief (see `brief_compose.dart`): sentences and the facts
 /// they cite. Empty until every input has answered, so a half-loaded day never
 /// reads as a different day.
@@ -220,6 +236,15 @@ final dayBriefProvider = Provider<DayBrief>((ref) {
     calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
     openTodos: ref.watch(openTodoCountProvider),
+    needsReplyCount: needsReplyCount(
+      ref.watch(inboxNotificationsProvider).value ?? const [],
+      {
+        for (final n
+            in ref.watch(askContactNamesProvider).value ?? const <String>[])
+          n.toLowerCase(),
+      },
+      readAt.value,
+    ),
   );
 });
 

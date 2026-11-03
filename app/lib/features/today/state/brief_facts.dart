@@ -12,6 +12,7 @@ library;
 
 import 'dart:ui' show PlatformDispatcher;
 
+import '../../../core/identity/app_identity.dart';
 import '../../../data/connectors/connector.dart';
 import '../../../data/connectors/connector_store.dart';
 
@@ -168,6 +169,21 @@ List<String> attendeeNames(ConnectorItem e, Map<String, String> contactNames) {
   return names;
 }
 
+/// Packages that are the phone's own plumbing or this app, never "your
+/// notifications": they must not become facts or counts.
+const systemPackages = {
+  'android',
+  'com.android.shell',
+  'com.android.systemui',
+  AppIdentity.androidPackage,
+};
+
+/// [groups] without the system and app-own packages ([systemPackages]).
+List<NotificationGroup> withoutSystemApps(List<NotificationGroup> groups) => [
+  for (final g in groups)
+    if (!systemPackages.contains(g.package)) g,
+];
+
 /// [groups] without anything the user already marked read ("Mark all read"
 /// on the digest): notifications at or before [readAt] are gone, apps left
 /// with nothing are dropped. A read notification is neither a fact nor a
@@ -176,6 +192,7 @@ List<NotificationGroup> unreadGroups(
   List<NotificationGroup> groups,
   DateTime? readAt,
 ) {
+  groups = withoutSystemApps(groups);
   if (readAt == null) return groups;
   final out = <NotificationGroup>[];
   for (final g in groups) {

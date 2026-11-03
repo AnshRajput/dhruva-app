@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/intents/app_settings.dart';
 import '../../../core/notifications/morning_brief.dart';
+import '../../../core/notifications/morning_brief_toggle.dart';
 import '../../../core/settings/bool_pref.dart';
 import '../widgets/settings_widgets.dart';
 
@@ -29,24 +30,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   bool _blocked = false;
 
   Future<void> _setBrief(bool on) async {
-    final enabled = ref.read(morningBriefEnabledProvider.notifier);
-    final scheduler = ref.read(morningBriefSchedulerProvider);
-    if (!on) {
-      setState(() => _blocked = false);
-      await enabled.set(false);
-      await scheduler.disable();
-      return;
-    }
-    final minutes = await ref.read(morningBriefMinutesProvider.future);
-    bool granted;
-    try {
-      granted = await scheduler.enable(minutes);
-    } on Object {
-      granted = false;
-    }
-    if (!mounted) return;
-    setState(() => _blocked = !granted);
-    if (granted) await enabled.set(true);
+    if (!on) setState(() => _blocked = false);
+    final ok = await setMorningBrief(ref, on: on);
+    if (mounted && on) setState(() => _blocked = !ok);
   }
 
   Future<void> _pickTime() async {

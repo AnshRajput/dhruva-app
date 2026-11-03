@@ -14,6 +14,7 @@ import '../../../core/di/providers.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/safety/report_mail.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/bottom_inset.dart';
 import '../../../data/safety/report_repository.dart';
 
 class SafetyScreen extends ConsumerWidget {
@@ -30,7 +31,9 @@ class SafetyScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Safety & reports')),
       body: ListView(
-        padding: EdgeInsets.symmetric(vertical: tokens.spacing.sm),
+        padding: EdgeInsets.symmetric(
+          vertical: tokens.spacing.sm,
+        ).withBottomInset(context),
         children: [
           Padding(
             padding: EdgeInsets.all(tokens.spacing.md),

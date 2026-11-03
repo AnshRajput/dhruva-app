@@ -43,15 +43,17 @@ const networkFacts = <NetworkFact>[
     icon: Icons.system_update_alt_rounded,
     title: 'Update checks',
     body:
-        'The app version and patch number, so a fix can reach you. Never '
-        'your chats, files or anything you typed.',
+        'Automatic when you open the app: asks Shorebird\'s update server '
+        'whether a fix exists, sending only the app version and patch number '
+        '(like any website, it sees your IP address). Never your chats, files '
+        'or anything you typed.',
   ),
   NetworkFact(
     icon: Icons.link_outlined,
     title: 'Your own accounts',
     body:
-        'Once you connect one, such as Gmail, this phone talks to it '
-        'directly with your sign-in. Nothing passes through us.',
+        'Once you connect one, this phone talks to it directly with your '
+        'sign-in. Nothing passes through us.',
   ),
 ];
 

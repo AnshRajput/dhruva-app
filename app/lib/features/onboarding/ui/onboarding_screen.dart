@@ -1,8 +1,11 @@
 /// First-run onboarding flow, v2 (daily assistant). Skippable at any point,
 /// shown ONCE (the store flag is written on finish OR skip):
 ///
-///   welcome -> pick your model (download continues in the background)
-///           -> connect your calendar -> Today with real events
+///   welcome -> connect your calendar -> pick your model (download continues
+///   in the background) -> morning-brief opt-in -> Today with real events
+///
+/// The calendar comes first: the Today brief is rule-written and needs no
+/// model, so the user gets value while the model downloads.
 ///
 /// A fresh install reaches a useful Today without seeing the raw Hugging Face
 /// firehose or a quant menu: the "pick" step is the curated catalog only, with
@@ -23,11 +26,13 @@ import '../../../core/identity/app_identity.dart';
 import '../../../core/settings/what_moved.dart';
 import '../../../core/theme/brand_star.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
+import '../../../core/widgets/better_answers_label.dart';
 import '../../../data/models/starter_catalog.dart';
 import '../state/onboarding_controller.dart';
 import 'connect_step.dart';
+import 'finish_step.dart';
 
-enum _Step { welcome, pick, download, connect }
+enum _Step { welcome, connect, pick, download, finish }
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -104,7 +109,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.listen(onboardingDownloadControllerProvider, (_, next) {
       if (next.value?.status == OnboardingDownloadStatus.installed &&
           _step == _Step.download) {
-        setState(() => _step = _Step.connect);
+        setState(() => _step = _Step.finish);
       }
     });
 
@@ -119,11 +124,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         switch (_step) {
           case _Step.welcome:
             break; // nothing behind the first step — stay put
-          case _Step.pick:
+          case _Step.connect:
             setState(() => _step = _Step.welcome);
+          case _Step.pick:
+            setState(() => _step = _Step.connect);
           case _Step.download:
             _cancelDownload();
-          case _Step.connect:
+          case _Step.finish:
             break; // the download carries on behind this step; stay put
         }
       },
@@ -135,7 +142,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           body: SafeArea(
             child: switch (_step) {
               _Step.welcome => _WelcomeStep(
-                onStart: () => setState(() => _step = _Step.pick),
+                onStart: () => setState(() => _step = _Step.connect),
+                onSkip: _finish,
+              ),
+              _Step.connect => ConnectStep(
+                onNext: () => setState(() => _step = _Step.pick),
                 onSkip: _finish,
               ),
               _Step.pick => _PickStep(
@@ -153,10 +164,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 onDownloadAnyway: _downloadAnyway,
                 onPickAnother: () => setState(() => _step = _Step.pick),
                 onCancel: _cancelDownload,
-                onContinue: () => setState(() => _step = _Step.connect),
+                onContinue: () => setState(() => _step = _Step.finish),
                 onSkip: _finish,
               ),
-              _Step.connect => ConnectStep(
+              _Step.finish => FinishStep(
                 onDone: _finish,
                 onRetryDownload: () {
                   final m = _selected;
@@ -211,35 +222,27 @@ class _WelcomeStep extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           DhruvaStar(size: 96, color: theme.colorScheme.primary),
-          SizedBox(height: tokens.spacing.lg),
+          SizedBox(height: tokens.spacing.md),
           Text(
-            'Welcome to ${AppIdentity.shortName}',
+            AppIdentity.productName,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          Text(
+            'Your day, on your phone',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
           SizedBox(height: tokens.spacing.md),
           Text(
-            'A private AI that runs entirely on your phone.',
+            'A morning brief, answers from your calendar, contacts and '
+            'files, and replies you approve, all private, all offline.',
             textAlign: TextAlign.center,
             style: theme.textTheme.titleMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.sm),
-          Text(
-            'Chat, brainstorm, and get answers — fully offline, once a model '
-            'is on your device. Nothing is ever sent to a server.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.md),
-          Text(
-            'Your AI. Your phone. Nobody else\'s business.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontStyle: FontStyle.italic,
             ),
           ),
           SizedBox(height: tokens.spacing.xl),
@@ -511,10 +514,8 @@ class _ModelOption extends StatelessWidget {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        // "Runs great" on every card says nothing: it shows on
-                        // the recommended pick, and any warning always shows.
-                        if (tier != null &&
-                            (recommended || tier != ModelTier.comfortable)) ...[
+                        // Every card carries the same fit label.
+                        if (tier != null) ...[
                           SizedBox(width: tokens.spacing.sm),
                           Text(
                             '·  ${_tierLabel(tier)}',
@@ -522,6 +523,11 @@ class _ModelOption extends StatelessWidget {
                               color: _tierColor(theme, tokens, tier),
                             ),
                           ),
+                        ],
+                        if (model.betterAnswers &&
+                            tier == ModelTier.comfortable) ...[
+                          SizedBox(width: tokens.spacing.sm),
+                          const BetterAnswersLabel(),
                         ],
                       ],
                     ),
@@ -579,7 +585,7 @@ class _DownloadStep extends ConsumerWidget {
   final VoidCallback onPickAnother;
   final VoidCallback onCancel;
 
-  /// "Keep going while it downloads": on to the calendar step.
+  /// "Keep going while it downloads": on to the last step.
   final VoidCallback onContinue;
   final Future<void> Function() onSkip;
 

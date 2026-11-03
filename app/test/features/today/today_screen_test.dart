@@ -317,6 +317,26 @@ void main() {
       expect(find.byKey(const ValueKey('event-sheet-title')), findsOneWidget);
     });
 
+    todayTest('"N messages need a reply" leads the brief and opens the Inbox', (
+      tester,
+    ) async {
+      final ask = notification(
+        900,
+        'com.whatsapp',
+        'WhatsApp',
+        'Ravi Menon',
+        'Can you send the deck?',
+        at(7, 0),
+      );
+      final h = await pumpToday(tester, seed: _seedDay, inbox: [ask]);
+      expect(_briefText(tester), startsWith('1 message needs a reply. '));
+      await tester.tap(find.byKey(const ValueKey('today-brief-how')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('fact-1')));
+      await settle(tester);
+      expect(h.visited, contains('/inbox'));
+    });
+
     todayTest('Mark all read removes the notification facts', (tester) async {
       await pumpToday(tester, seed: _seedDay);
       expect(_briefText(tester), contains('Ravi Menon on WhatsApp'));

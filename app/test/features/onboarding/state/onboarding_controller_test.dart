@@ -121,11 +121,37 @@ void main() {
       );
     });
 
-    test('recommends the fastest (smallest) comfortable model for a snappy '
-        'first run, not the largest — and agrees with the Discover tab', () {
+    test('recommends the LARGEST comfortable model up to ~1.5B, never a 3B '
+        'one, even when everything is comfortable', () {
       const ram = 34359738368; // 32 GiB — everything is comfortable.
+      expect(
+        recommendedStarterModel(ram).repoId,
+        'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+      );
+    });
+
+    test('a 4GB phone (nothing comfortable) falls back to the smallest '
+        'runnable model', () {
       final smallestText = starterModelCatalog.firstWhere((m) => !m.isVision);
-      expect(recommendedStarterModel(ram).repoId, smallestText.repoId);
+      expect(
+        recommendedStarterModel(4 * 1024 * 1024 * 1024).repoId,
+        smallestText.repoId,
+      );
+    });
+
+    test('the 0.5B card says "Fastest, least accurate"', () {
+      final tiny = starterModelCatalog.firstWhere(
+        (m) => m.repoId == 'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
+      );
+      expect(tiny.bestFor, 'Fastest, least accurate');
+    });
+
+    test('only the ~3B models are "Better answers" options', () {
+      final better = starterModelCatalog.where((m) => m.betterAnswers);
+      expect(better.map((m) => m.repoId), [
+        'bartowski/Qwen2.5-3B-Instruct-GGUF',
+        'bartowski/Llama-3.2-3B-Instruct-GGUF',
+      ]);
     });
   });
 
