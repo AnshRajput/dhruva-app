@@ -382,12 +382,15 @@ bool _isCapitalised(String w) {
 
 /// Why [sentence] is not backed by [factsText], or null when it is. [names]
 /// are extra allowed words (the user's own name). [rewrites] is the rule-written
-/// sentence this one rewords: its words are not new content either.
+/// sentence this one rewords: its words are not new content either. [lenient]
+/// checks only times, numbers and names (a paraphrase may use new plain words,
+/// and its first word may be any capitalised verb).
 String? ungrounded(
   String sentence,
   String factsText, {
   Set<String> names = const {},
   String rewrites = '',
+  bool lenient = false,
 }) {
   // Times: must be a time in the facts, 12/24 h agnostic.
   final factTimes = _times(factsText);
@@ -417,10 +420,11 @@ String? ungrounded(
     final w = _plainWord(raw);
     if (w.isEmpty) continue;
     if (_alwaysAllowed.contains(w) || allowed.contains(w)) continue;
-    if (isFirst && _commonInitial.contains(w)) continue;
+    if (isFirst && (lenient || _commonInitial.contains(w))) continue;
     if (w.split('-').every((p) => factWords.contains(p))) continue;
     return 'the word "$raw"';
   }
+  if (lenient) return null;
   // Lowercase content words: a claim can hide in "cancelled" or "furious".
   final known = {..._stems(factsText), ..._stems(rewrites)};
   for (final m in _word.allMatches(plain)) {

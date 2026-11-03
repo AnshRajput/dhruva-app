@@ -41,7 +41,9 @@ const draftTones = ['Short', 'Warm', 'Formal'];
 String draftReplyInstruction(String tone) =>
     'Write a $tone reply to the message inside the <text> tags. Answer every '
     'question and request in it. Keep it brief and ready to send. Output only '
-    'the reply, no preamble and no explanation.';
+    'the reply, no preamble and no explanation. Never claim to attach, send '
+    'or confirm availability or a time, and never promise anything that is '
+    'not in the message.';
 
 /// The system prompt of a Draft reply chat in [tone].
 String draftReplySystemPrompt(String tone) => actionSystemPrompt(
@@ -181,4 +183,67 @@ List<String> draftOmissions(String source, String draft, {int max = 3}) {
 String? omissionNote(String source, String draft) {
   final o = draftOmissions(source, draft);
   return o.isEmpty ? null : "Didn't cover: ${o.join('; ')}";
+}
+
+// ---- invented claims ------------------------------------------------------
+
+/// A claim the draft makes that the message never asked for.
+enum DraftInvention {
+  attachment('Mentions an attachment. Check before sending'),
+  availability("Says you're free. Check your calendar"),
+  promise('Promises something. Check before sending');
+
+  const DraftInvention(this.warning);
+  final String warning;
+}
+
+final _claims = <DraftInvention, RegExp>{
+  DraftInvention.attachment: RegExp(
+    r'\battach\w*|\benclosed\b|\bnotes from\b|\bsending you\b',
+    caseSensitive: false,
+  ),
+  DraftInvention.availability: RegExp(
+    r"\bI am free\b|\bI'm free\b|\bavailable\b|\bworks for me\b|\bsee you at\b",
+    caseSensitive: false,
+  ),
+  DraftInvention.promise: RegExp(
+    r"\bI will send\b|\bI'll send\b|\bI will share\b|\bI'll share\b",
+    caseSensitive: false,
+  ),
+};
+
+/// The kinds of claim in [draft] that appear in neither the [source] message
+/// nor [userEdits] (text the user typed themselves). Warns only; a rule check.
+List<DraftInvention> draftInventions(
+  String draft,
+  String source, {
+  String userEdits = '',
+}) {
+  final known = '$source\n$userEdits'.toLowerCase();
+  return [
+    for (final e in _claims.entries)
+      if (e.value
+          .allMatches(draft)
+          .any((m) => !known.contains(m.group(0)!.toLowerCase())))
+        e.key,
+  ];
+}
+
+/// The sentences of [current] that are not in [generated]: what the user typed.
+String userEditsOf(String generated, String current) {
+  final had = generated.toLowerCase();
+  return current
+      .split(RegExp(r'(?<=[.?!])\s+|\n+'))
+      .where(
+        (s) => s.trim().isNotEmpty && !had.contains(s.trim().toLowerCase()),
+      )
+      .join('\n');
+}
+
+/// The label of the Draft sheet's open button: "Open in WhatsApp", or "Open
+/// app" when the label is missing or just a package name.
+String openAppLabel(String? app) {
+  final a = app?.trim() ?? '';
+  final pkg = RegExp(r'^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$', caseSensitive: false);
+  return a.isEmpty || pkg.hasMatch(a) ? 'Open app' : 'Open in $a';
 }

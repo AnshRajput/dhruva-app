@@ -5,6 +5,7 @@ import 'dart:async' show unawaited;
 import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -777,14 +778,23 @@ class _ThreadScaffold extends ConsumerWidget {
     WidgetRef ref,
     MessageInfo message,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
     final failure = await ref
         .read(processTextBridgeProvider)
         .returnResult(message.content);
-    if (failure != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(processTextFailureMessage(failure))),
-      );
+    // Some apps ignore the result, so a handed-back reply is also copied.
+    if (failure == null) {
+      await Clipboard.setData(ClipboardData(text: message.content.trim()));
     }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failure == null
+              ? 'Replaced. Also copied, in case this app ignores it.'
+              : processTextFailureMessage(failure),
+        ),
+      ),
+    );
   }
 
   ReplyEnd? _replyEnd(MessageInfo m) {
