@@ -15,6 +15,7 @@ import 'package:dhruva/features/chat/ui/chat_thread_screen.dart';
 import 'package:dhruva/features/chat/widgets/reply_status.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,6 +110,27 @@ void main() {
         home: ChatThreadScreen(args: args),
       ),
     );
+  }
+
+  /// Records what the app puts on the clipboard; returns the last text.
+  String? Function() mockClipboard(WidgetTester tester) {
+    String? clip;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clip = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    return () => clip;
   }
 
   void tall(WidgetTester tester) {
@@ -359,6 +381,7 @@ void main() {
         'tap hands the text back', (tester) async {
       tall(tester);
       final bridge = _FakeBridge();
+      mockClipboard(tester);
       await tester.pumpWidget(
         app(
           FakeEngineService(),
@@ -373,6 +396,28 @@ void main() {
       await tester.tap(find.text('Replace selected text'));
       await tester.pump();
       expect(bridge.sent, ['A tidier sentence.']);
+    });
+
+    testWidgets('a hand-back also copies and says so', (tester) async {
+      tall(tester);
+      final clip = mockClipboard(tester);
+      await tester.pumpWidget(
+        app(
+          FakeEngineService(),
+          await doneThread(),
+          replaceable: true,
+          bridge: _FakeBridge(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replace selected text'));
+      await tester.pump();
+      await tester.pump();
+      expect(clip(), 'A tidier sentence.');
+      expect(
+        find.text('Replaced. Also copied, in case this app ignores it.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a refused hand-back explains and points at Copy', (

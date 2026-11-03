@@ -153,6 +153,22 @@ void main() {
     });
   });
 
+  group('summary grounding (pure)', () {
+    const body = 'Invoice 4471 from Acme is due in 15 days. Please confirm.';
+    test('a grounded summary is kept', () {
+      expect(
+        cleanSummary('Asks you to confirm Acme invoice 4471.', source: body),
+        'Asks you to confirm Acme invoice 4471.',
+      );
+    });
+    test('an invented number or name falls back to the first sentence', () {
+      expect(
+        cleanSummary('Acme wants 9000 by Zorblax.', source: body),
+        'Invoice 4471 from Acme is due in 15 days.',
+      );
+    });
+  });
+
   group('states', () {
     testWidgets('nothing connected: a set-up card with a working action', (
       tester,
