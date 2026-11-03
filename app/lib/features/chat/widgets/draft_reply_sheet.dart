@@ -69,6 +69,7 @@ class DraftReplySheet extends ConsumerStatefulWidget {
 class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
   late final TextEditingController _ctrl;
   late String _tone;
+  late String _generated;
   bool _rewriting = false;
 
   ChatController get _controller =>
@@ -81,6 +82,7 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
     _ctrl = TextEditingController(
       text: s == null ? '' : (latestReply(s)?.content ?? ''),
     );
+    _generated = _ctrl.text;
     _tone = s == null ? 'Warm' : draftToneOf(s.systemPrompt);
     _ctrl.addListener(() => setState(() {}));
   }
@@ -121,6 +123,7 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
       _rewriting = false;
       if (!failed && fresh != null && fresh.content.trim().isNotEmpty) {
         _ctrl.text = fresh.content.trim();
+        _generated = _ctrl.text;
       }
     });
   }
@@ -173,6 +176,13 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
     final thread = ref.watch(chatControllerProvider(widget.args)).value;
     final source = thread == null ? '' : originalMessageOf(thread);
     final note = _rewriting ? null : omissionNote(source, _ctrl.text);
+    final invented = _rewriting
+        ? const <DraftInvention>[]
+        : draftInventions(
+            _ctrl.text,
+            source,
+            userEdits: userEditsOf(_generated, _ctrl.text),
+          );
     final words = _ctrl.text.trim().isEmpty
         ? 0
         : _ctrl.text.trim().split(RegExp(r'\s+')).length;
@@ -288,6 +298,24 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
                   ],
                 ),
               ),
+            for (final i in invented)
+              Padding(
+                padding: EdgeInsets.only(bottom: tokens.spacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber, size: 18, color: tokens.warning),
+                    SizedBox(width: tokens.spacing.sm),
+                    Expanded(
+                      child: Text(
+                        i.warning,
+                        key: ValueKey('draft-invention-${i.name}'),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             FilledButton.icon(
               key: const ValueKey('draft-copy'),
               icon: const Icon(Icons.copy, size: 18),
@@ -311,7 +339,7 @@ class _DraftReplySheetState extends ConsumerState<DraftReplySheet> {
                   OutlinedButton.icon(
                     key: const ValueKey('draft-open-source'),
                     icon: const Icon(Icons.open_in_new, size: 18),
-                    label: Text('Open in ${app ?? 'the app'}'),
+                    label: Text(openAppLabel(app)),
                     onPressed: _rewriting
                         ? null
                         : () => unawaited(_openSource()),

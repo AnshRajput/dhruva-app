@@ -69,4 +69,53 @@ void main() {
       expect(draftOmissions(many, 'Sure, thanks'), hasLength(3));
     });
   });
+
+  group('draft inventions', () {
+    const source =
+        'Are you free tomorrow? Also paste your notes from the vendor doc';
+    const draft =
+        'Yes, I am free tomorrow. Please find attached my notes from the '
+        'vendor doc.';
+
+    test('an invented attachment and availability both fire', () {
+      expect(
+        draftInventions(draft, source),
+        containsAll([DraftInvention.attachment, DraftInvention.availability]),
+      );
+    });
+
+    test('a claim the user typed themselves does not fire', () {
+      expect(
+        draftInventions(
+          draft,
+          source,
+          userEdits: 'Yes, I am free tomorrow. Please find attached.',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('userEditsOf keeps only what the model did not write', () {
+      expect(
+        userEditsOf('Hi. Thanks.', 'Hi. I am free at 5.'),
+        'I am free at 5.',
+      );
+    });
+
+    test('a promise fires, a plain reply does not', () {
+      expect(draftInventions("I'll share it.", 'Hi'), [DraftInvention.promise]);
+      expect(draftInventions('Sounds good, thanks.', source), isEmpty);
+    });
+
+    test('the instruction forbids inventing', () {
+      expect(draftReplyInstruction('Warm'), contains('Never claim to attach'));
+    });
+  });
+
+  test('open label: "Open app" for a missing, empty or package label', () {
+    expect(openAppLabel('WhatsApp'), 'Open in WhatsApp');
+    for (final bad in [null, '', '  ', 'com.android.shell']) {
+      expect(openAppLabel(bad), 'Open app');
+    }
+  });
 }
