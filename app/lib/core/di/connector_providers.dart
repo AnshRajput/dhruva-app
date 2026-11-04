@@ -159,12 +159,10 @@ final folderFilesProvider = StreamProvider<List<FolderFile>>((ref) {
   return ref.watch(connectorStoreProvider).watchFolderFiles();
 });
 
-/// Captured notifications of the last week, newest first (Inbox rows).
-final inboxNotificationsProvider = StreamProvider<List<ConnectorItem>>((ref) {
+/// Captured notifications and mail of the last week, newest first (Inbox rows).
+final inboxItemsProvider = StreamProvider<List<ConnectorItem>>((ref) {
   final store = ref.watch(connectorStoreProvider);
-  return store.watchNotifications(
-    since: store.now.subtract(notificationRetention),
-  );
+  return store.watchInbox(since: store.now.subtract(notificationRetention));
 });
 
 /// Opens a folder file in the OS viewer / launches a source app. Tests

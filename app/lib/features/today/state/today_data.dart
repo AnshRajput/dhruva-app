@@ -236,15 +236,12 @@ final dayBriefProvider = Provider<DayBrief>((ref) {
     calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
     openTodos: ref.watch(openTodoCountProvider),
-    needsReplyCount: needsReplyCount(
-      ref.watch(inboxNotificationsProvider).value ?? const [],
-      {
-        for (final n
-            in ref.watch(askContactNamesProvider).value ?? const <String>[])
-          n.toLowerCase(),
-      },
-      readAt.value,
-    ),
+    needsReplyCount:
+        needsReplyCount(ref.watch(inboxItemsProvider).value ?? const [], {
+          for (final n
+              in ref.watch(askContactNamesProvider).value ?? const <String>[])
+            n.toLowerCase(),
+        }, readAt.value),
   );
 });
 

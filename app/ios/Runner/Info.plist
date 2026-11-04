@@ -22,6 +22,24 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<!-- Gmail sign-in callback (google_sign_in). GMAIL_IOS_URL_SCHEME is set in
+	     Flutter/Debug.xcconfig and Release.xcconfig: a harmless placeholder
+	     until the iOS OAuth client exists, then the client's reversed id
+	     (com.googleusercontent.apps.<id>). The client id itself comes from
+	     --dart-define=GMAIL_IOS_CLIENT_ID, not from this file. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>gmail-sign-in</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GMAIL_IOS_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

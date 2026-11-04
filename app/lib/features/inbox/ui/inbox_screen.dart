@@ -1,7 +1,7 @@
-/// Inbox: notifications (Android) in one calm list, matching the approved
-/// inbox comp: filter chips (All, then one per app), sections Today / Earlier,
-/// rows with an app avatar, the notification title, a one-line summary and the
-/// time. Mail rows join with Gmail in 0.7b.
+/// Inbox: Gmail mail and notifications (Android) in one calm list, matching the
+/// approved inbox comp: filter chips (All, then one per app; Gmail is one),
+/// sections Needs reply / Today / Earlier, rows with an avatar, the sender, a
+/// one-line summary and the time.
 ///
 /// Summaries are written on the phone, lazily, only for the rows built on
 /// screen while the app is in the foreground (`InboxSummarizer`); until one is
@@ -90,14 +90,23 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<DhruvaTokens>()!;
     final list = ref.watch(connectorListProvider).value;
-    final notifications = list
-        ?.where((e) => e.connector.id == ConnectorIds.notifications)
+    final sources = [
+      for (final e in list ?? const <ConnectorEntry>[])
+        if (ConnectorIds.inboxSources.contains(e.connector.id)) e,
+    ];
+    final connected = sources.any((e) => e.status.isConnected);
+    // The first inbox source that needs the user (access off, sign-in expired).
+    final fix = sources
+        .where(
+          (e) =>
+              e.status.state == ConnectorState.needsAttention ||
+              e.status.state == ConnectorState.permissionDenied,
+        )
         .firstOrNull;
-    final connected = notifications?.status.isConnected ?? false;
-    final needsFix =
-        notifications != null &&
-        (notifications.status.state == ConnectorState.needsAttention ||
-            notifications.status.state == ConnectorState.permissionDenied);
+    final needsFix = fix != null;
+    final mailConnected = sources.any(
+      (e) => e.connector.id == ConnectorIds.mail && e.status.isConnected,
+    );
 
     // The tab only exists once an inbox source is connected, so the list is
     // loaded by the time anyone sees it; the set-up route and a deep link can
@@ -118,26 +127,31 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
         ),
       );
     } else {
-      final items = ref.watch(inboxNotificationsProvider);
+      final items = ref.watch(inboxItemsProvider);
       body = items.when(
         loading: () => const _InboxSkeleton(),
         error: (e, _) => ErrorStateView(
           error: e,
-          onRetry: () => ref.invalidate(inboxNotificationsProvider),
+          onRetry: () => ref.invalidate(inboxItemsProvider),
         ),
         data: (all) {
           if (all.isEmpty) {
             return _Padded(
               child: Column(
                 children: [
-                  if (needsFix) _AccessBanner(entry: notifications),
+                  if (fix != null) _AccessBanner(entry: fix),
                   NextStepCard(
-                    icon: Icons.notifications_none,
+                    icon: mailConnected
+                        ? Icons.mail_outline
+                        : Icons.notifications_none,
                     title: 'Nothing here yet',
-                    body:
-                        'Notifications from your apps show up here as they '
-                        'arrive, newest first. Apps you skip are never saved.',
-                    actionLabel: 'Choose apps to skip',
+                    body: mailConnected
+                        ? 'Mail from the last 7 days shows up here, newest first.'
+                        : 'Notifications from your apps show up here as they '
+                              'arrive, newest first. Apps you skip are never saved.',
+                    actionLabel: mailConnected
+                        ? 'Manage connectors'
+                        : 'Choose apps to skip',
                     actionKey: const ValueKey('inbox-empty-action'),
                     onAction: () => context.push('/settings/connectors'),
                   ),
@@ -150,7 +164,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             filter: _filter,
             onFilter: (p) => setState(() => _filter = p),
             onOpen: _openItem,
-            banner: needsFix ? _AccessBanner(entry: notifications) : null,
+            banner: fix != null ? _AccessBanner(entry: fix) : null,
           );
         },
       );
@@ -198,6 +212,7 @@ class _AccessBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
+    final mail = entry.connector.id == ConnectorIds.mail;
     return Padding(
       padding: EdgeInsets.only(bottom: tokens.spacing.md),
       child: DecoratedBox(
@@ -213,7 +228,7 @@ class _AccessBanner extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Notification access is off',
+                mail ? 'Gmail needs you' : 'Notification access is off',
                 style: theme.textTheme.titleMedium,
               ),
               SizedBox(height: tokens.spacing.xs),
@@ -226,10 +241,14 @@ class _AccessBanner extends ConsumerWidget {
               SizedBox(height: tokens.spacing.md),
               FilledButton(
                 key: const ValueKey('inbox-open-settings'),
-                onPressed: () => ref
-                    .read(connectorActionsProvider)
-                    .openSystemSettings(ConnectorIds.notifications),
-                child: const Text('Open settings'),
+                onPressed: () {
+                  final actions = ref.read(connectorActionsProvider);
+                  // Gmail has no OS page: the fix is signing in again.
+                  mail
+                      ? actions.connect(ConnectorIds.mail)
+                      : actions.openSystemSettings(ConnectorIds.notifications);
+                },
+                child: Text(mail ? 'Reconnect Gmail' : 'Open settings'),
               ),
             ],
           ),

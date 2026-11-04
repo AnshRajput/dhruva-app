@@ -21,7 +21,9 @@ void main() {
     expect(all, contains('Shorebird'));
     expect(all, contains('IP address'));
     expect(all, contains('Automatic when you open the app'));
-    expect(all, isNot(contains('Gmail')));
+    // Gmail (read only) is named, with the only hosts it may reach.
+    expect(all, contains('gmail.googleapis.com'));
+    expect(all, isNot(contains('compose')));
     expect(all.toLowerCase(), isNot(contains('analytics')));
     expect(noServerFact, 'There is no Dhruva server.');
     expect(backupsOffFact, contains('Backups are off'));

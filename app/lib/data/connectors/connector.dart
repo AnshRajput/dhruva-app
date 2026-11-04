@@ -21,14 +21,15 @@ abstract final class ConnectorIds {
   static const folder = 'folder';
   static const notifications = 'notifications';
 
-  /// Reserved for Gmail (0.7b). No connector uses it yet, so Ask hides Mail.
+  /// Gmail (0.7b, read only). Absent from the app in a build without OAuth
+  /// client ids, so Ask hides Mail there.
   static const mail = 'gmail';
 
   /// Sync order: contacts resolve people found by the others, so it runs last.
-  static const syncOrder = [calendar, folder, notifications, contacts];
+  static const syncOrder = [calendar, folder, notifications, mail, contacts];
 
-  /// Sources that fill the Inbox tab (mail later joins this set).
-  static const inboxSources = {notifications};
+  /// Sources that fill the Inbox tab.
+  static const inboxSources = {notifications, mail};
 }
 
 /// What the Settings card shows for a connector.

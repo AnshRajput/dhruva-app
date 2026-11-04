@@ -210,6 +210,46 @@ class FakeNotificationAccess implements NotificationAccess {
 }
 
 /// Counts schedule/cancel calls instead of touching WorkManager.
+/// A scripted Gmail: whatever [threads] holds, or the error set in [syncError] /
+/// [signInError]. Records what the connector asked for.
+class FakeGmailSource implements GmailSource {
+  FakeGmailSource({this.configured = true});
+
+  @override
+  bool configured;
+  String? email = 'me@example.com';
+  GmailAuthException? signInError;
+  GmailAuthException? syncError;
+  List<GmailThread> threads = [];
+  int signIns = 0;
+  int signOuts = 0;
+  DateTime? lastSince;
+  int? lastMax;
+
+  @override
+  Future<String?> signIn() async {
+    signIns++;
+    final e = signInError;
+    if (e != null) throw e;
+    return email;
+  }
+
+  @override
+  Future<List<GmailThread>> recentThreads({
+    required DateTime since,
+    required int maxThreads,
+  }) async {
+    lastSince = since;
+    lastMax = maxThreads;
+    final e = syncError;
+    if (e != null) throw e;
+    return threads;
+  }
+
+  @override
+  Future<void> signOut() async => signOuts++;
+}
+
 class FakeScheduler implements BackgroundSyncScheduler {
   int scheduled = 0;
   int cancelled = 0;
@@ -227,6 +267,7 @@ class ConnectorTestKit {
     this.contacts,
     this.folder,
     this.notifications,
+    this.gmail,
     this.tempDir,
     this.charging,
   );
@@ -236,6 +277,7 @@ class ConnectorTestKit {
   final FakeContactsSource contacts;
   final FakeFolderSource folder;
   final FakeNotificationAccess notifications;
+  final FakeGmailSource gmail;
   final Directory tempDir;
   final ChargingState charging;
 
@@ -247,6 +289,7 @@ class ConnectorTestKit {
     bool notificationsSupported = true,
     DocumentExtractor? extractor,
     BackgroundSyncScheduler? scheduler,
+    FakeGmailSource? gmail,
   }) {
     final temp = Directory.systemTemp.createTempSync('dhruva_connector_kit');
     final queue = Directory(p.join(temp.path, 'queue'))..createSync();
@@ -258,19 +301,21 @@ class ConnectorTestKit {
       supported: notificationsSupported,
     );
     final charging = ChargingState();
+    final mail = gmail ?? FakeGmailSource(configured: false);
     final hub = ConnectorHub.fromSources(
       db: db,
       calendar: cal,
       contacts: con,
       folder: fol,
       notifications: not,
+      gmail: mail,
       isCharging: () async => charging.next(),
       folderCache: Directory(p.join(temp.path, 'cache')),
       extractor: extractor,
       clock: clock,
       scheduler: scheduler ?? FakeScheduler(),
     );
-    return ConnectorTestKit._(hub, cal, con, fol, not, temp, charging);
+    return ConnectorTestKit._(hub, cal, con, fol, not, mail, temp, charging);
   }
 
   Future<void> dispose() async {
