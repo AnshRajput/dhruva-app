@@ -32,7 +32,7 @@ import '../../today/state/brief_grounding.dart' show ungrounded;
 
 /// Instruction for the model: one short line, quoted data only.
 const summaryInstruction =
-    'You write a one-line summary of a notification from a phone. Reply with '
+    'You write a one-line summary of a notification or an email from a phone. Reply with '
     'one short sentence of at most 14 words that says what it is about or '
     'what is being asked. No quotes, no preamble.';
 

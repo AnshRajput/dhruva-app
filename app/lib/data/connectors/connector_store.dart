@@ -434,10 +434,11 @@ class ConnectorStore {
     });
   }
 
-  /// Notifications newer than [since], newest first, one row each (the Inbox).
-  Stream<List<ConnectorItem>> watchNotifications({DateTime? since}) {
+  /// Inbox rows (notifications and mail) newer than [since], newest first, one
+  /// row each.
+  Stream<List<ConnectorItem>> watchInbox({DateTime? since}) {
     final q = _db.select(_db.items)
-      ..where((t) => t.kind.equalsValue(ItemKind.notification))
+      ..where((t) => t.kind.isInValues([ItemKind.notification, ItemKind.mail]))
       ..orderBy([
         (t) => OrderingTerm.desc(t.sentAt),
         (t) => OrderingTerm.desc(t.id),

@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/connectors/connector.dart';
 import '../../data/connectors/connector_hub.dart';
+import '../../data/connectors/gmail_connector.dart' show GmailConnector;
 import 'connector_providers.dart';
 
 final class ConnectorActions {
@@ -71,11 +72,20 @@ final class ConnectorActions {
   /// Deletes the local copy of [id] (items, index, content ledger rows) and
   /// stops reading. With [openSystemSettings] it then opens the OS page where
   /// the user can switch the permission off too (an app cannot do that itself).
-  Future<void> disconnect(String id, {bool openSystemSettings = false}) async {
+  /// Returns a sentence to show when the disconnect is not fully finished (Gmail
+  /// could not revoke the grant at Google), else null.
+  Future<String?> disconnect(
+    String id, {
+    bool openSystemSettings = false,
+  }) async {
     final c = await _connector(id);
-    if (c == null) return;
+    if (c == null) return null;
     await c.revoke();
     if (openSystemSettings) await c.openSystemSettings();
+    if (c is GmailConnector && c.remoteRevokeConfirmed == false) {
+      return GmailConnector.finishAtGoogle;
+    }
+    return null;
   }
 
   /// Opens the OS page where [id]'s access is switched. Best effort: the card

@@ -1,4 +1,4 @@
-/// One notification in full (`/inbox/item/:id`): the original text, the
+/// One notification or email in full (`/inbox/item/:id`): the original text, the
 /// on-device summary when there is one, and four plain actions: Ask about
 /// this (a new chat with this notification as its source), Open app (launch
 /// the app it came from), Mark read / unread. Every action is a tap; nothing
@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/di/connector_providers.dart';
 import '../../../core/format/when.dart';
@@ -16,6 +17,7 @@ import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/failure_view.dart';
 import '../../../core/widgets/platform_chrome.dart';
 import '../../../data/connectors/connector.dart';
+import '../../../data/connectors/gmail_connector.dart' show gmailThreadUrl;
 import '../../../data/connectors/otp_guard.dart' show otpFlag;
 import '../state/inbox_grouping.dart';
 import '../state/inbox_rules.dart';
@@ -37,6 +39,18 @@ class InboxItemScreen extends ConsumerWidget {
     ConnectorItem item,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    if (item.kind == ItemKind.mail) {
+      final ok = await launchUrl(
+        gmailThreadUrl(item.externalId),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Could not open Gmail.')),
+        );
+      }
+      return;
+    }
     final ok = await ref
         .read(externalOpenerProvider)
         .launchApp(item.packageName);
@@ -56,13 +70,13 @@ class InboxItemScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final items = ref.watch(inboxNotificationsProvider);
+    final items = ref.watch(inboxItemsProvider);
 
     final body = items.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => ErrorStateView(
         error: e,
-        onRetry: () => ref.invalidate(inboxNotificationsProvider),
+        onRetry: () => ref.invalidate(inboxItemsProvider),
       ),
       data: (all) {
         final item = _find(all);
@@ -74,7 +88,7 @@ class InboxItemScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'This notification is no longer saved',
+                    'This message is no longer saved',
                     style: theme.textTheme.titleMedium,
                     textAlign: TextAlign.center,
                   ),
@@ -180,8 +194,11 @@ class InboxItemScreen extends ConsumerWidget {
                         path: '/actions',
                         queryParameters: {
                           'id': 'draft_reply',
-                          'text': '${senderOf(item)}: ${item.body.trim()}',
-                          if (item.packageName.isNotEmpty)
+                          'text': item.kind == ItemKind.mail
+                              ? '${senderOf(item)}, ${item.title}: ${item.body.trim()}'
+                              : '${senderOf(item)}: ${item.body.trim()}',
+                          if (item.packageName.isNotEmpty &&
+                              item.kind != ItemKind.mail)
                             'pkg': item.packageName,
                           'app': item.appLabel,
                         },
@@ -194,7 +211,9 @@ class InboxItemScreen extends ConsumerWidget {
                   onPressed: item.packageName.isEmpty
                       ? null
                       : () => _openApp(context, ref, item),
-                  child: const Text('Open app'),
+                  child: Text(
+                    item.kind == ItemKind.mail ? 'Open in Gmail' : 'Open app',
+                  ),
                 ),
                 OutlinedButton(
                   key: const ValueKey('inbox-mark-read'),
@@ -213,7 +232,14 @@ class InboxItemScreen extends ConsumerWidget {
     );
 
     return ChromeScaffold(
-      appBar: const AdaptiveAppBar(title: Text('Notification')),
+      appBar: AdaptiveAppBar(
+        title: Text(
+          (items.value == null ? null : _find(items.value!))?.kind ==
+                  ItemKind.mail
+              ? 'Mail'
+              : 'Notification',
+        ),
+      ),
       bodyBuilder: (context, inset) => Padding(
         padding: EdgeInsets.only(top: inset.top, bottom: inset.bottom),
         child: body,

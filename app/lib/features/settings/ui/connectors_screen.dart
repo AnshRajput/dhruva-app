@@ -5,8 +5,10 @@
 /// the reason and the fix. Tapping a connected row opens its sheet (folder
 /// index, notification apps, Disconnect). Below: the privacy ledger.
 ///
-/// Gmail is not listed: it arrives with 0.7b and a "Coming soon" row would
-/// promise something there is nothing to tap on.
+/// Gmail is listed only in a build that has OAuth client ids (otherwise its
+/// connector is `unsupported` and hidden). Beta: in Google's Testing mode the
+/// sign-in expires every 7 days, which reads as Needs attention + "Reconnect
+/// Gmail".
 ///
 /// States handled: loading (skeleton rows), nothing available, not connected,
 /// connected, syncing, needs attention (reason + fix), permission denied
@@ -237,6 +239,7 @@ class _ConnectorRowState extends ConsumerState<_ConnectorRow> {
                       Text(copy.name, style: theme.textTheme.titleMedium),
                       if (c.id == ConnectorIds.notifications)
                         const LabelChip('Android'),
+                      if (c.id == ConnectorIds.mail) const LabelChip('Beta'),
                     ],
                   ),
                   SizedBox(height: tokens.spacing.xs),

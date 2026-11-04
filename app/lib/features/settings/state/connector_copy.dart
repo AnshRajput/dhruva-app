@@ -95,6 +95,23 @@ const _copy = <String, ConnectorCopy>{
     fixLabel: 'Turn on access',
     hasOsPermission: true,
   ),
+  ConnectorIds.mail: ConnectorCopy(
+    icon: Icons.mail_outline,
+    name: 'Gmail',
+    reads:
+        'Sender, subject and text of the last 7 days of your inbox (up to '
+        '200 conversations), read only. It never sends, deletes or changes '
+        'mail. Verification codes are hidden. Beta: Google asks you to sign '
+        'in again every 7 days until the app is verified.',
+    disconnectEffect:
+        'Deletes the copy of your mail on this phone, then signs out and asks '
+        'Google to remove this app\'s access to your Gmail. If Google cannot '
+        'confirm that, you are told how to finish at '
+        'myaccount.google.com/permissions. Your mail itself is untouched.',
+    connectLabel: 'Sign in with Google',
+    fixLabel: 'Reconnect Gmail',
+    hasOsPermission: false,
+  ),
 };
 
 ConnectorCopy copyFor(String connectorId) =>
@@ -161,6 +178,7 @@ String _noun(String connector, int n) {
     ConnectorIds.contacts => one ? 'person' : 'people',
     ConnectorIds.folder => one ? 'file' : 'files',
     ConnectorIds.notifications => one ? 'notification' : 'notifications',
+    ConnectorIds.mail => one ? 'email' : 'emails',
     _ => one ? 'item' : 'items',
   };
 }

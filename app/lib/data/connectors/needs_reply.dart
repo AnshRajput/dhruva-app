@@ -30,6 +30,15 @@ extension InboxItem on ConnectorItem {
 /// for chat and mail apps; when it is empty or only repeats the app name, the
 /// app label is all there is.
 String senderOf(ConnectorItem item) {
+  // Mail: the title is the subject; the sender is the first person.
+  if (item.kind == ItemKind.mail) {
+    final p = item.people.firstOrNull;
+    final n = (p?.name?.trim().isNotEmpty ?? false)
+        ? p!.name!.trim()
+        : p?.email?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    return item.appLabel;
+  }
   final t = item.title.trim();
   if (t.isEmpty || t.toLowerCase() == item.appLabel.toLowerCase()) {
     return item.appLabel;
@@ -65,14 +74,23 @@ final _bulk = RegExp(
 /// [knownContacts] are lower-cased contact names.
 bool needsReply(ConnectorItem item, {Set<String> knownContacts = const {}}) {
   if (item.flags[otpFlag] == true || item.isRead) return false;
+  final mail = item.kind == ItemKind.mail;
+  // Your own last word, and Gmail's promotions/social/updates tabs, ask nothing.
+  if (mail && (item.flags['fromMe'] == true || item.flags['bulk'] == true)) {
+    return false;
+  }
   final sender = senderOf(item);
   final known = knownContacts.contains(sender.toLowerCase());
   final person =
       known || (hasPersonSender(item) && _personName.hasMatch(sender));
   if (!person) return false;
-  final text = item.body;
+  // A mail's ask often sits in the subject ("Can you approve?").
+  final text = mail ? '${item.title}\n${item.body}' : item.body;
   if (!known && _bulk.hasMatch(text)) return false;
-  return text.contains('?') || _requestWords.hasMatch(text);
+  // Gmail's IMPORTANT label counts as a signal on its own, from a person.
+  return text.contains('?') ||
+      _requestWords.hasMatch(text) ||
+      (mail && item.flags['important'] == true);
 }
 
 /// Ids of the items in [items] that need a reply.
