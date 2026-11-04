@@ -23,18 +23,28 @@ fs.mkdirSync(htmlDir, { recursive: true });
 // design-tokens.json color.dark
 const C = { bg: "#0E1220", surface: "#1F263D", gold: "#EBBA47", sky: "#8FB0DE", text: "#EDEFF8" };
 
-// *word* = gold emphasis. Short, specific, no em dashes.
-const FRAMES = [
-  { id: "01-understand", shot: "03_workflow_reply", back: "02_workflows",
-    k: "Workflows", h: "Understand any bill, *privately*" },
-  { id: "02-offline", shot: "04_chat", k: "Offline AI", h: "AI that runs *on your phone*" },
-  { id: "03-one-tap", shot: "02_workflows", k: "One tap", h: "*12 workflows*, one tap each" },
-  { id: "04-models", shot: "05_models", k: "Models", h: "Pick a model that *fits your phone*" },
-];
+// *word* = gold emphasis. Short, specific, no em dashes. Numbered per target;
+// Inbox is Android only (notifications are Android's). `id` is the file name.
+const FRAMES = {
+  android: [
+    { id: "01-today", shot: "01_today", k: "Today", h: "Your day, *ready when you wake*" },
+    { id: "02-ask", shot: "02_ask", k: "Ask", h: "Answers from *your own stuff*" },
+    { id: "03-prep", shot: "03_prep", k: "Prep", h: "Walk into every meeting *prepared*" },
+    { id: "04-inbox", shot: "04b_inbox_item", back: "04_inbox", k: "Inbox", h: "Draft a reply *in one tap*" },
+    { id: "05-library", shot: "05_library", k: "Library", h: "Find any file, *privately*" },
+  ],
+  ios: [
+    { id: "01-today", shot: "01_today", k: "Today", h: "Your day, *ready when you wake*" },
+    { id: "02-ask", shot: "02_ask", k: "Ask", h: "Answers from *your own stuff*" },
+    { id: "03-prep", shot: "03_prep", k: "Prep", h: "Walk into every meeting *prepared*" },
+    { id: "04-library", shot: "05_library", k: "Library", h: "Find any file, *privately*" },
+    { id: "05-private", shot: "06_privacy", k: "Private", h: "Nothing leaves *your phone*" },
+  ],
+};
 
 const TARGETS = {
   play: { W: 1080, H: 1920, plat: "android", out: "google-play/phone" },
-  apple: { W: 1206, H: 2622, plat: "ios", out: "app-store/iphone-6.3" },
+  apple: { W: 1320, H: 2868, plat: "ios", out: "app-store/iphone-6.9" },
 };
 
 const PLAT = {
@@ -42,10 +52,11 @@ const PLAT = {
   ios: { lw: 440, lh: 956, bez: 11, rad: 58 },
 };
 
-// Android captures have the status area painted out, so draw one; iOS
-// captures already carry the real status bar + Dynamic Island.
+// Android raws come from prep_android.py (status area + gesture bar painted
+// out), so a status bar and pill are drawn here. NATIVE_ANDROID_CHROME=1 skips
+// that for raws that already carry a clean native status bar.
 function androidChrome(k) {
-  const col = C.text;
+  const col = "#1B2033"; // the app is light now: dark status glyphs
   const s = 13 * k;
   return `<div style="position:absolute;left:0;right:0;top:${9 * k}px;display:flex;justify-content:space-between;align-items:center;padding:0 ${22 * k}px;height:${18 * k}px;font:700 ${14.5 * k}px/1 Manrope;color:${col}">
       <span>9:41</span>
@@ -55,7 +66,7 @@ function androidChrome(k) {
         <svg width="${s * 1.1}" height="${s * 1.1}" viewBox="0 0 16 16"><rect x="1" y="3.6" width="14" height="8.8" rx="2.6" fill="${col}" fill-opacity=".35"/><rect x="1" y="3.6" width="10.5" height="8.8" rx="2.6" fill="${col}"/></svg>
       </span></div>
     <div style="position:absolute;left:50%;top:${11 * k}px;width:${12 * k}px;height:${12 * k}px;margin-left:${-6 * k}px;border-radius:50%;background:#050607"></div>
-    <div style="position:absolute;left:50%;bottom:${6 * k}px;width:${110 * k}px;height:${4 * k}px;margin-left:${-55 * k}px;border-radius:${3 * k}px;background:${C.text};opacity:.6"></div>`;
+    <div style="position:absolute;left:50%;bottom:${6 * k}px;width:${110 * k}px;height:${4 * k}px;margin-left:${-55 * k}px;border-radius:${3 * k}px;background:${col};opacity:.55"></div>`;
 }
 
 function phone(plat, img, h, extra = "") {
@@ -67,7 +78,7 @@ function phone(plat, img, h, extra = "") {
     <div class="side" style="left:${-3 * k}px;top:${150 * k}px;width:${4 * k}px;height:${50 * k}px"></div>
     <div style="position:relative;width:100%;height:100%;border-radius:${P.rad * k}px;overflow:hidden;background:${C.bg}">
       <img src="${img}" style="display:block;width:100%;height:100%;object-fit:cover;object-position:top">
-      ${plat === "android" ? androidChrome(k) : ""}
+      ${plat === "android" && !process.env.NATIVE_ANDROID_CHROME ? androidChrome(k) : ""}
     </div></div>`;
 }
 
@@ -129,11 +140,11 @@ p{position:absolute;left:64px;top:300px;width:420px;font:600 21px/1.4 Manrope;co
 .glow{position:absolute;right:-80px;top:-80px;width:760px;height:760px;background:radial-gradient(closest-side,rgba(235,186,71,.14),rgba(235,186,71,0))}
 </style><body><div class="glow"></div>
 <div class="logo"><img src="${root}/src/icon.png"><b>Dhruva AI</b></div>
-<h1>Private AI that<br>runs <em>on your phone</em></h1>
-<p>Summarize, translate and chat offline. No cloud, no account.</p>
+<h1>Your day, handled<br><em>on your phone</em></h1>
+<p>A morning brief, meeting prep and drafted replies. No cloud, no account.</p>
 <div class="dash"><i></i><i></i><i></i><i></i></div>
-${phone("android", raw + "02_workflows.png", 500, `left:540px;top:${H - 370}px;filter:brightness(.6)`)}
-${phone("android", raw + "03_workflow_reply.png", 600, `left:${W - 600 * 0.452 - 56}px;top:${H - 460}px`)}
+${phone("android", raw + "03_prep.png", 500, `left:540px;top:${H - 370}px;filter:brightness(.6)`)}
+${phone("android", raw + "01_today.png", 600, `left:${W - 600 * 0.452 - 56}px;top:${H - 460}px`)}
 </body>`;
 }
 
@@ -150,7 +161,7 @@ async function shot(html, name, W, H, outPath) {
   await page.close();
 }
 for (const [name, t] of Object.entries(TARGETS)) {
-  for (const f of FRAMES) {
+  for (const f of FRAMES[t.plat]) {
     await shot(frameHtml(t, f), `${name}-${f.id}`, t.W, t.H, path.join(root, t.out, `${f.id}.png`));
   }
 }
