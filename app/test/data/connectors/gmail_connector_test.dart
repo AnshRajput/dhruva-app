@@ -486,7 +486,7 @@ void main() {
 
 class _Failing extends FakeGmailSource {
   @override
-  Future<List<GmailThread>> recentThreads({
+  Future<GmailFetch> recentThreads({
     required DateTime since,
     required int maxThreads,
   }) async => throw StateError('socket closed');

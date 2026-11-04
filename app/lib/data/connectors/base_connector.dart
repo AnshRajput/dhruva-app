@@ -244,21 +244,33 @@ abstract class BaseConnector implements Connector {
   Future<void> _recordFailure(String message) =>
       store.recordFailure(id, message);
 
+  /// How long revoke waits for a running sync, and for [onRevoke], before it
+  /// wipes anyway. A hung provider call must never stand between the user and
+  /// deleting their data. Tests shorten it.
+  Duration revokeWaitFor = const Duration(seconds: 10);
+
   @override
   Future<void> revoke() async {
-    // Stop a running sync and let it finish first. The store also refuses
-    // late writes once the account row is gone, which is what protects against
-    // a sync in another isolate (the background engine).
+    // Stop a running sync and give it a moment to finish. The store also
+    // refuses late writes once the account row is gone, which is what protects
+    // against a sync in another isolate (the background engine) or one that is
+    // still hung when the wait runs out.
     final running = _running;
     if (_syncing && running != null) {
       _cancelled = true;
       try {
-        await running;
-      } catch (_) {}
+        await running.timeout(revokeWaitFor);
+      } catch (_) {
+        // ponytail: a hung sync is abandoned, not killed; its late writes are
+        // refused by the store. Reset the flags so the next sync is not
+        // joined to it.
+        _flight = null;
+        _syncing = false;
+      }
     }
     final account = await store.account(id);
     try {
-      await onRevoke(account);
+      await onRevoke(account).timeout(revokeWaitFor);
     } catch (_) {
       // Releasing the OS-side handle is best effort; the local wipe below is
       // what the user asked for and always runs.

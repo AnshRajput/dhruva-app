@@ -191,8 +191,23 @@ final class GmailMessage {
 
 final class GmailThread {
   final String id;
+
+  /// At least the newest message; a source may send only that one.
   final List<GmailMessage> messages;
-  const GmailThread(this.id, this.messages);
+
+  /// How many messages the thread has (may exceed [messages]).
+  final int messageCount;
+  GmailThread(this.id, this.messages, {int? messageCount})
+    : messageCount = messageCount ?? messages.length;
+}
+
+/// What one read returned. [complete] is true only when the inbox listing was
+/// read to its end under the cap and no thread was skipped: only then does a
+/// thread missing from [threads] mean it left the inbox.
+final class GmailFetch {
+  final List<GmailThread> threads;
+  final bool complete;
+  const GmailFetch(this.threads, {required this.complete});
 }
 
 /// Google needs the user (token expired or revoked, consent missing, sign-in
@@ -219,14 +234,17 @@ abstract interface class GmailSource {
   Future<String?> signIn();
 
   /// Threads with a message newer than [since], at most [maxThreads]. Silent:
-  /// throws [GmailAuthException] instead of ever showing UI.
-  Future<List<GmailThread>> recentThreads({
+  /// throws [GmailAuthException] instead of ever showing UI. A thread that fails
+  /// to read is skipped (and the result is then not [GmailFetch.complete]).
+  Future<GmailFetch> recentThreads({
     required DateTime since,
     required int maxThreads,
   });
 
-  /// Revokes the grant at Google and signs out. Best effort.
-  Future<void> signOut();
+  /// Signs out and revokes the grant at Google. True only when the revoke at
+  /// Google is confirmed; false (never throws) when it could not be done, so
+  /// the user can be told to finish at myaccount.google.com/permissions.
+  Future<bool> signOut();
 }
 
 /// The source of a build without OAuth client ids (and of tests that do not
@@ -239,12 +257,12 @@ final class UnconfiguredGmailSource implements GmailSource {
   Future<String?> signIn() async =>
       throw const GmailAuthException('Gmail is not set up in this build.');
   @override
-  Future<List<GmailThread>> recentThreads({
+  Future<GmailFetch> recentThreads({
     required DateTime since,
     required int maxThreads,
   }) async => throw const GmailAuthException('Gmail is not set up.');
   @override
-  Future<void> signOut() async {}
+  Future<bool> signOut() async => false;
 }
 
 // ---- hand-off to other apps -------------------------------------------------

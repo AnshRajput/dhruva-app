@@ -67,3 +67,64 @@ bool looksLikeVerificationCode(String title, String text, {String? pkg}) {
   return _code.hasMatch(body) &&
       _wordsLeft.allMatches(body.replaceAll(_code, ' ')).length <= 3;
 }
+
+// ---- mail ------------------------------------------------------------------
+//
+// Mail has no sending app to key the bare-code rule on, and its text is long, so
+// the rule is: a code WORD near a code TOKEN. Both searches are bounded windows,
+// never a scan of the whole body per match, so hostile text cannot make it slow.
+
+// Words that name a code. "verify" alone is weaker (see below).
+final _mailCodeWord = RegExp(
+  r'\b(?:otps?|one[\s-]?time|pass[\s-]?code|code|pin)\b|'
+  'ओटीपी|कोड',
+  caseSensitive: false,
+);
+final _mailVerifyWord = RegExp(
+  r'\bverif(?:y|ication|ying)\b',
+  caseSensitive: false,
+);
+
+// Case-sensitive on purpose: a code is digits, or capitals with digits.
+//  - 4 to 8 digits, or 3-3 split;
+//  - "G-731942" style: 1-3 capitals, dash, 4-8 digits;
+//  - 5 to 8 capitals/digits with at least one of each ("AB12CD").
+final _mailToken = RegExp(
+  r'(?<![A-Za-z0-9])(?:[0-9०-९]{4,8}|[0-9०-९]{3}[- ][0-9०-९]{3}|[A-Z]{1,3}-[0-9]{4,8}|'
+  r'(?=[A-Z0-9]{5,8}(?![A-Za-z0-9]))(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])'
+  r'[A-Z0-9]{5,8})(?![A-Za-z0-9])',
+);
+
+final _plainYear = RegExp(r'^(?:19|20)[0-9]{2}$');
+
+const _window = 60;
+const _maxWordMatches = 200;
+
+bool _tokenNear(String s, Match word, {required bool allowYear}) {
+  final from = word.start - _window < 0 ? 0 : word.start - _window;
+  final to = word.end + _window > s.length ? s.length : word.end + _window;
+  for (final t in _mailToken.allMatches(s.substring(from, to))) {
+    if (allowYear || !_plainYear.hasMatch(t.group(0)!)) return true;
+  }
+  return false;
+}
+
+/// True when a mail's [subject] / [text] carries a verification code: a code
+/// word (otp, code, passcode, pin, one-time ...) within 60 characters of a code
+/// token, or a "verify" word near one that is not a plain year ("verify by
+/// 2026" is not a code). Conservative: it hides a real mail that merely
+/// mentions a code. A code with no wording around it is not caught.
+bool looksLikeMailCode(String subject, String text) {
+  final s = '$subject\n$text';
+  var n = 0;
+  for (final w in _mailCodeWord.allMatches(s)) {
+    if (++n > _maxWordMatches) break;
+    if (_tokenNear(s, w, allowYear: true)) return true;
+  }
+  n = 0;
+  for (final w in _mailVerifyWord.allMatches(s)) {
+    if (++n > _maxWordMatches) break;
+    if (_tokenNear(s, w, allowYear: false)) return true;
+  }
+  return false;
+}

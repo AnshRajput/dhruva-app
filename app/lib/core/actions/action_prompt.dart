@@ -62,17 +62,37 @@ String draftToneOf(String systemPrompt) {
 
 // ---- user text delimiters ----------------------------------------------------
 
-final _textTag = RegExp('</?text>', caseSensitive: false);
+// Any spelling of a text tag: spaces, case, attributes (`</text >`, `< TEXT>`).
+// The opening (`</text`, `< TEXT`) always goes; its closing `>` goes too when
+// within 200 characters. A tag stuffed with more is left as harmless text. Every
+// part is bounded or single-pass, so the match is linear.
+final _textTag = RegExp(
+  r'<\s*(?:/\s*)?text\b(?:[^<>]{0,200}>)?',
+  caseSensitive: false,
+);
+
+/// [s] without text tags, repeated until none is left: removing one can join
+/// the halves of another (`</te</text>xt>`).
+String _withoutTextTags(String s) {
+  var out = s;
+  for (var i = 0; i < 8; i++) {
+    final next = out.replaceAll(_textTag, '');
+    if (next == out) return out;
+    out = next;
+  }
+  // Still nesting after 8 passes: hostile. Drop the brackets outright.
+  return out.replaceAll('<', '').replaceAll('>', '');
+}
 
 /// The user turn of an action chat: [text] between `<text>` tags, so a small
 /// model can tell the material from the instruction (which lives only in the
 /// system layer) and does not echo it. Tags inside [text] are dropped so it
 /// cannot close the block early.
 String wrapActionText(String text) =>
-    '<text>\n${text.replaceAll(_textTag, '').trim()}\n</text>';
+    '<text>\n${_withoutTextTags(text).trim()}\n</text>';
 
 /// [reply] without any `<text>` tags the model copied into its answer.
-String stripActionDelimiters(String reply) => reply.replaceAll(_textTag, '');
+String stripActionDelimiters(String reply) => _withoutTextTags(reply);
 
 // ---- omissions -------------------------------------------------------------
 

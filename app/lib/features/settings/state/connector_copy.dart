@@ -104,9 +104,10 @@ const _copy = <String, ConnectorCopy>{
         'mail. Verification codes are hidden. Beta: Google asks you to sign '
         'in again every 7 days until the app is verified.',
     disconnectEffect:
-        'Deletes the copy of your mail on this phone and signs out of '
-        'Google, which also removes this app\'s access to your Gmail. Your '
-        'mail itself is untouched.',
+        'Deletes the copy of your mail on this phone, then signs out and asks '
+        'Google to remove this app\'s access to your Gmail. If Google cannot '
+        'confirm that, you are told how to finish at '
+        'myaccount.google.com/permissions. Your mail itself is untouched.',
     connectLabel: 'Sign in with Google',
     fixLabel: 'Reconnect Gmail',
     hasOsPermission: false,

@@ -1,6 +1,6 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
 
-// Gmail sign-in URL scheme (Info.plist). Placeholder until the iOS OAuth client
-// exists; then com.googleusercontent.apps.<reversed iOS client id>.
-GMAIL_IOS_URL_SCHEME = dhruva-gmail-unconfigured
+// Gmail sign-in URL scheme (Info.plist): the reversed iOS OAuth client id. A public id.
+// The client id itself is passed with --dart-define=GMAIL_IOS_CLIENT_ID.
+GMAIL_IOS_URL_SCHEME = com.googleusercontent.apps.262319606227-ahgl3kqr0jo0jo4sj18tcg74oaerqhib

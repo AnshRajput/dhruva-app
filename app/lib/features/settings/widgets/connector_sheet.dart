@@ -105,7 +105,7 @@ class _ConnectorSheetState extends ConsumerState<ConnectorSheet> {
     if (choice == DisconnectChoice.cancel || !mounted) return;
     setState(() => _working = true);
     try {
-      await ref
+      final unfinished = await ref
           .read(connectorActionsProvider)
           .disconnect(
             _id,
@@ -116,7 +116,8 @@ class _ConnectorSheetState extends ConsumerState<ConnectorSheet> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            '${copy.name} disconnected. The copy on this phone is deleted.',
+            unfinished ??
+                '${copy.name} disconnected. The copy on this phone is deleted.',
           ),
         ),
       );

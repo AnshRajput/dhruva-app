@@ -88,7 +88,7 @@ class InboxItemScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'This notification is no longer saved',
+                    'This message is no longer saved',
                     style: theme.textTheme.titleMedium,
                     textAlign: TextAlign.center,
                   ),

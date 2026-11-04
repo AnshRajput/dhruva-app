@@ -221,6 +221,15 @@ class FakeGmailSource implements GmailSource {
   GmailAuthException? signInError;
   GmailAuthException? syncError;
   List<GmailThread> threads = [];
+
+  /// Null: complete when under the cap. Set to script a cut-off listing.
+  bool? complete;
+  bool signOutConfirms = true;
+
+  /// When set, the read / sign-out waits for it (a hung provider).
+  Completer<void>? readGate;
+  Completer<void>? signOutGate;
+  int reads = 0;
   int signIns = 0;
   int signOuts = 0;
   DateTime? lastSince;
@@ -235,19 +244,28 @@ class FakeGmailSource implements GmailSource {
   }
 
   @override
-  Future<List<GmailThread>> recentThreads({
+  Future<GmailFetch> recentThreads({
     required DateTime since,
     required int maxThreads,
   }) async {
+    reads++;
     lastSince = since;
     lastMax = maxThreads;
+    if (readGate != null) await readGate!.future;
     final e = syncError;
     if (e != null) throw e;
-    return threads;
+    return GmailFetch(
+      threads,
+      complete: complete ?? threads.length < maxThreads,
+    );
   }
 
   @override
-  Future<void> signOut() async => signOuts++;
+  Future<bool> signOut() async {
+    signOuts++;
+    if (signOutGate != null) await signOutGate!.future;
+    return signOutConfirms;
+  }
 }
 
 class FakeScheduler implements BackgroundSyncScheduler {
