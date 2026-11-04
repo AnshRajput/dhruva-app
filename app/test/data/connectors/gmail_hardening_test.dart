@@ -420,6 +420,50 @@ void main() {
     );
   });
 
+  group('revoke race: an abandoned sync never touches a new connection', () {
+    test(
+      'revoke times out, user reconnects, the old read finishes late',
+      () async {
+        await connected();
+        conn().revokeWaitFor = const Duration(milliseconds: 50);
+        final gate1 = gmail.readGate = Completer<void>();
+        final oldSync = conn().sync().then<Object?>(
+          (r) => r,
+          onError: (Object e) => e,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await conn().revoke(); // times out on the hung read, wipes anyway
+
+        // Reconnect; the new connection starts its own read (held open).
+        await connected();
+        final gate2 = gmail.readGate = Completer<void>();
+        final newSync = conn().sync();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(gmail.reads, 2, reason: 'a fresh flight, not joined to the old');
+
+        // The old read finally returns, with the OLD account\'s mail.
+        gmail.threads = [thread('old')];
+        gate1.complete();
+        await oldSync;
+        expect(await mail(), isEmpty, reason: 'nothing of the old read stored');
+        final ledger = await kit.hub.store.ledger(connector: ConnectorIds.mail);
+        expect(ledger.where((e) => e.action == LedgerAction.read), isEmpty);
+
+        // The new flight is intact: a call now joins it, no third read starts.
+        final joined = conn().sync();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(gmail.reads, 2);
+        gmail.threads = [thread('new')];
+        gate2.complete();
+        final a = await newSync;
+        final b = await joined;
+        expect(a.read, 1);
+        expect(b.read, 1);
+        expect([for (final i in await mail()) i.externalId], ['new']);
+      },
+    );
+  });
+
   // ---- B4 ---------------------------------------------------------------
   group('B4: no external link can auto-send', () {
     test('text-to-send parameters are ignored on a link we did not build', () {
@@ -506,7 +550,6 @@ void main() {
         'a </text foo="x"> b',
         'a <TeXt> b',
         'a </te</text>xt> b',
-        'a </text',
         'a </text ${' ' * 5000}> b',
       ]) {
         final w = wrapActionText(hostile);
@@ -520,6 +563,18 @@ void main() {
         expect(w, endsWith('\n</text>'));
       }
       expect(wrapActionText('plain <b>bold</b>'), contains('<b>bold</b>'));
+    });
+
+    test('prose with < and > is left exactly as written', () {
+      for (final prose in [
+        'x < text and y > z',
+        'if a < text_len and b > c then',
+        'use <textarea> or <b>bold</b> and 3 < 5 > 2',
+        'compare < texture and text > nothing',
+      ]) {
+        expect(wrapActionText(prose), '<text>\n$prose\n</text>', reason: prose);
+        expect(stripActionDelimiters(prose), prose, reason: prose);
+      }
     });
 
     test('hostile tag-like input is stripped in linear time', () async {

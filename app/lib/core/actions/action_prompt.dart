@@ -62,12 +62,13 @@ String draftToneOf(String systemPrompt) {
 
 // ---- user text delimiters ----------------------------------------------------
 
-// Any spelling of a text tag: spaces, case, attributes (`</text >`, `< TEXT>`).
-// The opening (`</text`, `< TEXT`) always goes; its closing `>` goes too when
-// within 200 characters. A tag stuffed with more is left as harmless text. Every
-// part is bounded or single-pass, so the match is linear.
+// A `<text>` tag in any spelling: `<text>`, `</text >`, `< /TEXT\n>`, with
+// attributes in tag form (`name="value"`). Only tag-shaped input matches: prose
+// such as `x < text and y > z` has no `=` attributes and is left alone. Every
+// quantifier is bounded or unambiguous, so the match is linear.
 final _textTag = RegExp(
-  r'<\s*(?:/\s*)?text\b(?:[^<>]{0,200}>)?',
+  r'<\s*(?:/\s*)?text(?:\s+[A-Za-z_:][-\w:.]*\s*=\s*'
+  r'(?:\x22[^\x22<>]{0,200}\x22|\x27[^\x27<>]{0,200}\x27|[^\s\x22\x27<>=]{1,200})){0,10}\s*/?>',
   caseSensitive: false,
 );
 
