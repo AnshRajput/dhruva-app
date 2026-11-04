@@ -36,6 +36,7 @@ List<Override> todayStubOverrides({bool connectorList = true}) => [
   todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
   upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
   notificationGroupsProvider.overrideWith((ref) => Stream.value(const [])),
+  inboxNotificationsProvider.overrideWith((ref) => Stream.value(const [])),
 ];
 
 /// An in-memory DB whose query streams close the moment the last listener
