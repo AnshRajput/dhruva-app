@@ -60,6 +60,7 @@ void main() {
             appDatabaseProvider.overrideWithValue(db),
             todayEventsProvider.overrideWith((ref) => Stream.value(const [])),
             upNextEventsProvider.overrideWith((ref) => Stream.value(const [])),
+            inboxReplyCountProvider.overrideWithValue(0),
             notificationGroupsProvider.overrideWith(
               (ref) => Stream.value(const []),
             ),

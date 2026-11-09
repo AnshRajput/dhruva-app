@@ -93,12 +93,16 @@ void main() {
           'user_profile': jsonEncode({'name': 'Meera Menon'}),
         }),
         seed: _seedDay,
+        inbox: [raviMessage],
       );
       expect(find.text('Good morning, Meera'), findsOneWidget);
       expect(
         find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
         findsOneWidget,
       );
+      // The subtitle and the brief read one number (the store shots once showed
+      // "1 reply waiting" over "3 messages need a reply").
+      expect(_briefText(tester), contains('1 message needs a reply'));
       expect(find.text('Dhruva'), findsOneWidget); // wordmark via AppIdentity
     });
 
@@ -204,7 +208,7 @@ void main() {
 
     todayTest('once access is off the header, Up next and the timeline stop '
         'counting the meetings the store still holds', (tester) async {
-      final h = await pumpToday(tester, seed: _seedDay);
+      final h = await pumpToday(tester, seed: _seedDay, inbox: [raviMessage]);
       expect(
         find.text('Monday 2 November · 2 meetings · 1 reply waiting'),
         findsOneWidget,

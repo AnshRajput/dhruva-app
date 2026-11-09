@@ -213,6 +213,20 @@ int needsReplyCount(
       i,
 ], knownContacts: knownContacts).length;
 
+/// The one "needs a reply" number on Today: the subtitle and the brief read
+/// this, so they can't disagree with each other or with the Inbox.
+final inboxReplyCountProvider = Provider<int>(
+  (ref) => needsReplyCount(
+    ref.watch(inboxNotificationsProvider).value ?? const [],
+    {
+      for (final n
+          in ref.watch(askContactNamesProvider).value ?? const <String>[])
+        n.toLowerCase(),
+    },
+    ref.watch(notificationsReadAtProvider).value,
+  ),
+);
+
 /// The rule-written brief (see `brief_compose.dart`): sentences and the facts
 /// they cite. Empty until every input has answered, so a half-loaded day never
 /// reads as a different day.
@@ -236,15 +250,7 @@ final dayBriefProvider = Provider<DayBrief>((ref) {
     calendarSynced: calendar?.status.lastSyncAt != null,
     contactNames: ref.watch(contactNamesProvider),
     openTodos: ref.watch(openTodoCountProvider),
-    needsReplyCount: needsReplyCount(
-      ref.watch(inboxNotificationsProvider).value ?? const [],
-      {
-        for (final n
-            in ref.watch(askContactNamesProvider).value ?? const <String>[])
-          n.toLowerCase(),
-      },
-      readAt.value,
-    ),
+    needsReplyCount: ref.watch(inboxReplyCountProvider),
   );
 });
 
@@ -262,11 +268,9 @@ final todayNameProvider = Provider<String?>((ref) {
 
 /// "3 meetings · 2 replies waiting".
 final daySummaryProvider = Provider<String>((ref) {
-  final now = ref.watch(nowProvider);
   final events = ref.watch(todayEventsProvider).value ?? const [];
-  final groups = ref.watch(unreadNotificationGroupsProvider);
   return daySummary(
     meetings: events.where((e) => !isAllDay(e)).length,
-    replies: needsYou(groups, now, limit: 99).length,
+    replies: ref.watch(inboxReplyCountProvider),
   );
 });
