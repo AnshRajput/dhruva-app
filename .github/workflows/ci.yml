@@ -25,9 +25,21 @@ jobs:
         with:
           flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
       - run: flutter pub get
+      # sqlite3's build hook downloads prebuilt libraries from GitHub releases on
+      # every clean checkout. Several jobs fetching at once get rate-limited and
+      # receive an error page instead of the library (seen as "Hash of downloaded
+      # file ... is bef140a1..."). This runner is a single persistent Mac, so
+      # keep verified downloads in a local cache across runs. The hook still
+      # checks hashes on anything it downloads; only successful builds save back.
+      - name: Restore native-asset downloads
+        run: |
+          mkdir -p "$HOME/.cache/dhruva-ci/sqlite3" .dart_tool/hooks_runner/shared/sqlite3/build
+          rsync -a "$HOME/.cache/dhruva-ci/sqlite3/" .dart_tool/hooks_runner/shared/sqlite3/build/
       - run: dart format --set-exit-if-changed lib test
       - run: flutter analyze --fatal-infos
       - run: flutter test --coverage
+      - name: Save native-asset downloads
+        run: rsync -a --include='download-*/***' --exclude='*' .dart_tool/hooks_runner/shared/sqlite3/build/ "$HOME/.cache/dhruva-ci/sqlite3/"
       - name: Enforce coverage floor (70%)
         run: |
           if [ ! -f coverage/lcov.info ]; then echo "no coverage data"; exit 1; fi
@@ -78,7 +90,19 @@ jobs:
         with:
           flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
       - run: flutter pub get
+      # sqlite3's build hook downloads prebuilt libraries from GitHub releases on
+      # every clean checkout. Several jobs fetching at once get rate-limited and
+      # receive an error page instead of the library (seen as "Hash of downloaded
+      # file ... is bef140a1..."). This runner is a single persistent Mac, so
+      # keep verified downloads in a local cache across runs. The hook still
+      # checks hashes on anything it downloads; only successful builds save back.
+      - name: Restore native-asset downloads
+        run: |
+          mkdir -p "$HOME/.cache/dhruva-ci/sqlite3" .dart_tool/hooks_runner/shared/sqlite3/build
+          rsync -a "$HOME/.cache/dhruva-ci/sqlite3/" .dart_tool/hooks_runner/shared/sqlite3/build/
       - run: flutter build apk --release
+      - name: Save native-asset downloads
+        run: rsync -a --include='download-*/***' --exclude='*' .dart_tool/hooks_runner/shared/sqlite3/build/ "$HOME/.cache/dhruva-ci/sqlite3/"
 
   build-ios:
     runs-on: self-hosted  # was macos-latest; this self-hosted runner is a real Mac
@@ -91,4 +115,16 @@ jobs:
         with:
           flutter-version: 3.41.2   # pin = local dev version; upgrades are deliberate PRs
       - run: flutter pub get
+      # sqlite3's build hook downloads prebuilt libraries from GitHub releases on
+      # every clean checkout. Several jobs fetching at once get rate-limited and
+      # receive an error page instead of the library (seen as "Hash of downloaded
+      # file ... is bef140a1..."). This runner is a single persistent Mac, so
+      # keep verified downloads in a local cache across runs. The hook still
+      # checks hashes on anything it downloads; only successful builds save back.
+      - name: Restore native-asset downloads
+        run: |
+          mkdir -p "$HOME/.cache/dhruva-ci/sqlite3" .dart_tool/hooks_runner/shared/sqlite3/build
+          rsync -a "$HOME/.cache/dhruva-ci/sqlite3/" .dart_tool/hooks_runner/shared/sqlite3/build/
       - run: flutter build ios --no-codesign
+      - name: Save native-asset downloads
+        run: rsync -a --include='download-*/***' --exclude='*' .dart_tool/hooks_runner/shared/sqlite3/build/ "$HOME/.cache/dhruva-ci/sqlite3/"
