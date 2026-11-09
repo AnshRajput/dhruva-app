@@ -301,7 +301,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('send')));
     await awaitReply(n);
     await hideSpeedStats();
+    // The open thread holds the old row in memory: reopen it from the DB.
+    final threadId = (await assistantRows()).last.conversationId;
+    appRouter.go('/today');
     await settleFor(const Duration(seconds: 2));
+    unawaited(appRouter.push('/chat/$threadId'));
+    await settleFor(const Duration(seconds: 3));
     await shot('02_ask');
 
     // 3. Prep for a meeting (rule-built from what is on the phone).
