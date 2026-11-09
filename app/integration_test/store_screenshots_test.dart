@@ -25,10 +25,12 @@ import 'package:dhruva/data/connectors/ask_sources.dart';
 import 'package:dhruva/data/connectors/connector.dart';
 import 'package:dhruva/data/connectors/connector_sources.dart';
 import 'package:dhruva/data/db/database.dart';
+import 'package:dhruva/data/downloads/local_import.dart';
 import 'package:dhruva/features/models_hub/state/storage_controller.dart';
 import 'package:dhruva/features/onboarding/state/onboarding_controller.dart';
 import 'package:dhruva/features/today/state/today_data.dart';
 import 'package:dhruva/main.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -109,10 +111,18 @@ void main() {
     await (await container.read(onboardingStoreProvider.future)).markComplete();
     // A real user has closed the one-time "What moved" sheet by now.
     await container.read(whatMovedPendingProvider.notifier).dismiss();
+    // Register the GGUF under the catalog's repo id, as a catalog download
+    // does, so the app's own label path shows "Qwen2.5-1.5B-Instruct" and not
+    // the raw file name. (importLocal would file it under `local/<file>`.)
+    await importLocalGguf(
+      picked: channel.picked,
+      channel: channel,
+      modelsDirectory: await container.read(modelsDirectoryProvider.future),
+      db: db,
+      repoId: 'bartowski/Qwen2.5-1.5B-Instruct-GGUF',
+    );
+    container.invalidate(storageControllerProvider);
     await container.read(storageControllerProvider.future);
-    await container
-        .read(storageControllerProvider.notifier)
-        .importLocal(channel.picked);
 
     // ---- the demo day ------------------------------------------------------
     kit.calendar.items = [
@@ -249,6 +259,22 @@ void main() {
       }
     }
 
+    // A simulator/emulator generates far slower than a phone, and the reply
+    // footer would print that speed ("0.9 tok/s") and "5m ago". Clear the
+    // stored stats so the footer reads "just now": this is data setup in the
+    // test, not an app change.
+    Future<void> hideSpeedStats() async {
+      await (db.update(
+        db.messages,
+      )..where((m) => m.role.equalsValue(MessageRole.assistant))).write(
+        MessagesCompanion(
+          tokCount: const Value(null),
+          genMs: const Value(null),
+          createdAt: Value(DateTime.now()),
+        ),
+      );
+    }
+
     // Not pumpAndSettle: Today's "in 1h 48m" ticker never settles.
     Future<void> settleFor(Duration t) async {
       for (var i = 0; i < t.inMilliseconds ~/ 100; i++) {
@@ -274,6 +300,7 @@ void main() {
     await settleFor(const Duration(seconds: 3));
     await tester.tap(find.byKey(const ValueKey('send')));
     await awaitReply(n);
+    await hideSpeedStats();
     await settleFor(const Duration(seconds: 2));
     await shot('02_ask');
 
