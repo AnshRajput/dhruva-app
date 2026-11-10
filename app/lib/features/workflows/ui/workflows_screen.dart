@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/actions/action_prompt.dart';
+import '../../../core/router/route_trust.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/bottom_inset.dart';
 import '../../../core/widgets/dhruva_sheet.dart';
@@ -40,6 +41,7 @@ String workflowChatLocation(
     path: '/chat/new',
     queryParameters: {
       'prompt': capped,
+      routeKeyParam: trustedRouteKey,
       'asys': actionSystemPrompt(
         title: run.workflow.title,
         instruction: workflowInstruction(run.workflow, run.option),

@@ -22,6 +22,29 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<!-- Gmail sign-in callback (google_sign_in). GMAIL_IOS_URL_SCHEME is set in
+	     Flutter/Debug.xcconfig and Release.xcconfig to the reversed iOS client
+	     id. The client id itself comes from --dart-define=GMAIL_IOS_CLIENT_ID.
+	     This scheme is for Google sign-in only: no app route may be reachable
+	     from a URL (spec section 8), so Flutter's own deep-link routing is off
+	     (FlutterDeepLinkingEnabled). google_sign_in_ios receives the redirect
+	     through the plugin's own application/scene delegate (openURLContexts),
+	     which does not depend on that key. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>gmail-sign-in</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GMAIL_IOS_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

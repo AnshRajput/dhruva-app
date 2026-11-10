@@ -53,7 +53,8 @@ const networkFacts = <NetworkFact>[
     title: 'Your own accounts',
     body:
         'Once you connect one, this phone talks to it directly with your '
-        'sign-in. Nothing passes through us.',
+        'sign-in. Gmail, if you connect it (read only), talks to Google\'s sign-in '
+        'and Gmail services, nothing else. Nothing passes through us.',
   ),
 ];
 

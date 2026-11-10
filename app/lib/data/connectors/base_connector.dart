@@ -21,6 +21,14 @@ abstract class BaseConnector implements Connector {
   bool _syncing = false;
   Future<void>? _running;
   bool _cancelled = false;
+
+  /// Bumped by every [revoke]. A sync remembers the generation it started in
+  /// (in a zone value, so [syncCancelled] knows it from anywhere inside its
+  /// [doSync]); once it no longer matches, that sync is abandoned: it stops at
+  /// its next [syncCancelled] check, records nothing and leaves the flight
+  /// state to whoever owns the current generation.
+  int _generation = 0;
+  static const _genKey = #dhruvaSyncGeneration;
   bool _connecting = false;
   ConnectorStatus _lastConnect = ConnectorStatus.notConnected;
 
@@ -81,7 +89,10 @@ abstract class BaseConnector implements Connector {
 
   /// True once [revoke] has been asked for while a sync runs; long reads
   /// (the folder index) check it and stop.
-  bool get syncCancelled => _cancelled;
+  bool get syncCancelled {
+    final g = Zone.current[_genKey];
+    return _cancelled || (g is int && g != _generation);
+  }
 
   /// Asks a running sync to stop at its next checkpoint (the "Cancel" button
   /// on a manual folder index). What is already stored stays. No-op when
@@ -184,18 +195,26 @@ abstract class BaseConnector implements Connector {
     // Claimed before the first await so `revoke()` always sees it.
     _syncing = true;
     _cancelled = false;
+    final gen = _generation;
     final done = Completer<void>();
     _running = done.future;
     try {
-      return await _syncOnce(since);
+      return await runZoned(
+        () => _syncOnce(since, gen),
+        zoneValues: {_genKey: gen},
+      );
     } finally {
-      _syncing = false;
-      _flight = null;
+      // An abandoned sync (revoked meanwhile) must not clear the flight state of
+      // a newer connection.
+      if (gen == _generation) {
+        _syncing = false;
+        _flight = null;
+      }
       done.complete();
     }
   }
 
-  Future<SyncResult> _syncOnce(DateTime? since) async {
+  Future<SyncResult> _syncOnce(DateTime? since, int gen) async {
     final account = await store.account(id);
     if (account == null) {
       throw ConnectorException(
@@ -206,6 +225,8 @@ abstract class BaseConnector implements Connector {
     emit(_status.copyWith(state: ConnectorState.syncing));
     try {
       final result = await doSync(account, since);
+      // Revoked while reading: nothing of this run is recorded or shown.
+      if (gen != _generation) return const SyncResult.skipped('Disconnected.');
       if (result.skipped == null) {
         await store.recordSync(
           id,
@@ -217,6 +238,7 @@ abstract class BaseConnector implements Connector {
       emit(await _evaluateSafely(await store.account(id)));
       return result;
     } on ConnectorException catch (e) {
+      if (gen != _generation) rethrow;
       await _recordFailure(e.message);
       emit(
         ConnectorStatus(
@@ -229,6 +251,9 @@ abstract class BaseConnector implements Connector {
       rethrow;
     } catch (_) {
       final msg = 'Could not read $displayName. Try again.';
+      if (gen != _generation) {
+        throw ConnectorException(ConnectorState.needsAttention, msg);
+      }
       await _recordFailure(msg);
       emit(
         ConnectorStatus(
@@ -244,21 +269,35 @@ abstract class BaseConnector implements Connector {
   Future<void> _recordFailure(String message) =>
       store.recordFailure(id, message);
 
+  /// How long revoke waits for a running sync, and for [onRevoke], before it
+  /// wipes anyway. A hung provider call must never stand between the user and
+  /// deleting their data. Tests shorten it.
+  Duration revokeWaitFor = const Duration(seconds: 10);
+
   @override
   Future<void> revoke() async {
-    // Stop a running sync and let it finish first. The store also refuses
-    // late writes once the account row is gone, which is what protects against
-    // a sync in another isolate (the background engine).
+    // Stop a running sync and give it a moment to finish. The store also
+    // refuses late writes once the account row is gone, which is what protects
+    // against a sync in another isolate (the background engine) or one that is
+    // still hung when the wait runs out.
+    // The generation moves first: whatever sync is running now is abandoned
+    // from this point (it writes nothing more), however this ends.
+    _generation++;
     final running = _running;
     if (_syncing && running != null) {
       _cancelled = true;
       try {
-        await running;
-      } catch (_) {}
+        await running.timeout(revokeWaitFor);
+      } catch (_) {
+        // ponytail: a hung sync is abandoned, not killed.
+      }
     }
+    // The next sync starts a fresh flight, never joined to the old one.
+    _flight = null;
+    _syncing = false;
     final account = await store.account(id);
     try {
-      await onRevoke(account);
+      await onRevoke(account).timeout(revokeWaitFor);
     } catch (_) {
       // Releasing the OS-side handle is best effort; the local wipe below is
       // what the user asked for and always runs.

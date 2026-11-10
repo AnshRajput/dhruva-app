@@ -19,6 +19,8 @@ import 'connector_sources.dart';
 import 'connector_store.dart';
 import 'contacts_connector.dart';
 import 'folder_connector.dart';
+import 'gmail_connector.dart';
+import 'gmail_system_source.dart';
 import 'notification_connector.dart';
 import 'sync_service.dart';
 import 'system_sources.dart';
@@ -30,12 +32,13 @@ final class ConnectorHub {
     required this.contacts,
     required this.folder,
     required this.notifications,
+    required this.gmail,
     this.scheduler = const WorkmanagerSyncScheduler(),
   }) : sync = SyncService(
-         connectors: [calendar, contacts, folder, notifications],
+         connectors: [calendar, contacts, folder, notifications, gmail],
          clock: () => store.now,
        ) {
-    for (final c in [calendar, contacts, folder, notifications]) {
+    for (final c in _base) {
       c.onConnectionChanged = syncBackgroundJob;
     }
   }
@@ -45,6 +48,7 @@ final class ConnectorHub {
   final ContactsConnector contacts;
   final FolderConnector folder;
   final NotificationConnector notifications;
+  final GmailConnector gmail;
   final SyncService sync;
   final BackgroundSyncScheduler scheduler;
   bool _jobScheduled = false;
@@ -68,7 +72,7 @@ final class ConnectorHub {
 
   /// Runs after any connector's local data was wiped on revoke.
   set onWiped(Future<void> Function()? callback) {
-    for (final c in [calendar, contacts, folder, notifications]) {
+    for (final c in _base) {
       c.onWiped = callback;
     }
   }
@@ -122,7 +126,15 @@ final class ConnectorHub {
 
   /// In display order (Connectors screen). Sync order is
   /// `ConnectorIds.syncOrder`: contacts run last there.
-  List<Connector> get all => [calendar, contacts, folder, notifications];
+  List<BaseConnector> get _base => [
+    calendar,
+    contacts,
+    folder,
+    notifications,
+    gmail,
+  ];
+
+  List<Connector> get all => _base;
 
   Connector? byId(String id) {
     for (final c in all) {
@@ -141,6 +153,7 @@ final class ConnectorHub {
       contacts: SystemContactsSource(channel),
       folder: SystemFolderSource(channel),
       notifications: SystemNotificationAccess(channel),
+      gmail: SystemGmailSource(),
       isCharging: chargingProbe(channel),
       folderCache: Directory(p.join(cache.path, 'connector_files')),
     );
@@ -152,6 +165,7 @@ final class ConnectorHub {
     required ContactsSource contacts,
     required FolderSource folder,
     required NotificationAccess notifications,
+    GmailSource gmail = const UnconfiguredGmailSource(),
     required ChargingProbe isCharging,
     required Directory folderCache,
     DocumentExtractor? extractor,
@@ -171,12 +185,13 @@ final class ConnectorHub {
         extractor: extractor,
       ),
       notifications: NotificationConnector(store: store, access: notifications),
+      gmail: GmailConnector(store: store, source: gmail),
       scheduler: scheduler,
     );
   }
 
   Future<void> dispose() async {
-    for (final c in [calendar, contacts, folder, notifications]) {
+    for (final c in _base) {
       await c.dispose();
     }
   }

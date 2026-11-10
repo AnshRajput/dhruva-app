@@ -28,8 +28,8 @@ extension AskSourceX on AskSource {
   };
 
   /// The connector that fills this source (`items.source`), or null for
-  /// [AskSource.docs] (chat attachments are not a connector). Mail has no
-  /// connector yet; its id is reserved for Gmail (0.7b).
+  /// [AskSource.docs] (chat attachments are not a connector). Mail is filled by
+  /// the Gmail connector (absent in a build without OAuth client ids).
   String? get connectorId => switch (this) {
     AskSource.mail => ConnectorIds.mail,
     AskSource.calendar => ConnectorIds.calendar,
@@ -187,7 +187,7 @@ enum AskChipAvailability {
   needsConnect,
 }
 
-/// Chips to show, in order. Mail is hidden until a mail connector exists
+/// Chips to show, in order. Mail is hidden until the Gmail connector exists
 /// ([present] lists connector ids that exist on this platform, with whether
 /// each is connected). Docs only appears when the chat has documents.
 List<({AskSource source, AskChipAvailability availability})> askChips({

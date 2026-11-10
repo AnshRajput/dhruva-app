@@ -217,7 +217,7 @@ int needsReplyCount(
 /// this, so they can't disagree with each other or with the Inbox.
 final inboxReplyCountProvider = Provider<int>(
   (ref) => needsReplyCount(
-    ref.watch(inboxNotificationsProvider).value ?? const [],
+    ref.watch(inboxItemsProvider).value ?? const [],
     {
       for (final n
           in ref.watch(askContactNamesProvider).value ?? const <String>[])

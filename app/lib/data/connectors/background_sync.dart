@@ -33,6 +33,10 @@ const backgroundSyncEvery = Duration(hours: 6);
 /// connector (status + ledger), so the job reports success either way; a retry
 /// loop would only drain the battery the constraint protects.
 Future<bool> runConnectorSync(ConnectorHub hub) async {
+  // No Activity in this engine: Gmail cannot be asked for a token, even
+  // silently, so it skips quietly here instead of marking itself "Needs
+  // attention" every 6 hours.
+  hub.gmail.headless = true;
   await hub.sync.refresh();
   return true;
 }
