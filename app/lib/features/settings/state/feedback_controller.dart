@@ -2,10 +2,13 @@
 /// logic lives here (and in `core/feedback`); the screen only renders it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/crash/crash_log.dart';
+import '../../../core/feedback/feedback_draft_store.dart';
 import '../../../core/feedback/feedback_report.dart';
 import '../../../core/feedback/feedback_sender.dart';
 import '../app_info.dart';
@@ -34,7 +37,12 @@ class FeedbackFormState {
     this.sendError,
     this.busy = false,
     this.handoff,
+    this.restoreSeq = 0,
   });
+
+  /// Bumped when a saved draft was loaded into the fields, so the screen can
+  /// copy the text into its text controllers.
+  final int restoreSeq;
 
   final FeedbackType type;
   final String title;
@@ -71,7 +79,9 @@ class FeedbackFormState {
     String? Function()? sendError,
     bool? busy,
     FeedbackHandoff? Function()? handoff,
+    int? restoreSeq,
   }) => FeedbackFormState(
+    restoreSeq: restoreSeq ?? this.restoreSeq,
     type: type ?? this.type,
     title: title ?? this.title,
     description: description ?? this.description,
@@ -100,13 +110,64 @@ class FeedbackFormController extends Notifier<FeedbackFormState> {
   final FeedbackEntry entry;
 
   @override
-  FeedbackFormState build() =>
-      FeedbackFormState(type: entry.type, includeCrash: entry.fromCrash);
+  FeedbackFormState build() {
+    Future.microtask(_restore);
+    return FeedbackFormState(type: entry.type, includeCrash: entry.fromCrash);
+  }
 
-  void setType(FeedbackType t) => state = state.copyWith(type: t);
-  void setTitle(String v) => state = state.copyWith(title: v);
-  void setDescription(String v) => state = state.copyWith(description: v);
-  void setSteps(String v) => state = state.copyWith(steps: v);
+  /// Loads a saved draft of the same type, if the user has not typed yet.
+  Future<void> _restore() async {
+    final saved = await ref.read(feedbackDraftStoreProvider).load();
+    if (!ref.mounted || saved == null || saved.type != entry.type) return;
+    if (state.title.isNotEmpty ||
+        state.description.isNotEmpty ||
+        state.steps.isNotEmpty) {
+      return;
+    }
+    state = state.copyWith(
+      title: saved.title,
+      description: saved.description,
+      steps: saved.steps,
+      restoreSeq: state.restoreSeq + 1,
+    );
+  }
+
+  void _save() => unawaited(
+    ref
+        .read(feedbackDraftStoreProvider)
+        .save(
+          SavedFeedbackDraft(
+            type: state.type,
+            title: state.title,
+            description: state.description,
+            steps: state.steps,
+          ),
+        ),
+  );
+
+  void setType(FeedbackType t) {
+    state = state.copyWith(type: t);
+    _save();
+  }
+
+  void setTitle(String v) {
+    state = state.copyWith(title: v);
+    _save();
+  }
+
+  void setDescription(String v) {
+    state = state.copyWith(description: v);
+    _save();
+  }
+
+  void setSteps(String v) {
+    state = state.copyWith(steps: v);
+    _save();
+  }
+
+  /// "Done" after hand-off: the report is in the user's hands, drop the copy.
+  Future<void> finish() => ref.read(feedbackDraftStoreProvider).clear();
+
   void setIncludeDevice(bool v) => state = state.copyWith(includeDevice: v);
   void setIncludeCrash(bool v) => state = state.copyWith(includeCrash: v);
 
@@ -143,7 +204,14 @@ class FeedbackFormController extends Notifier<FeedbackFormState> {
     }
   }
 
-  Future<void> send() async {
+  /// Primary action: the email draft (falls back to the share sheet if the
+  /// plugin reports no mail app).
+  Future<void> send() => _handOff(share: false);
+
+  /// Secondary action, always available: the system share sheet.
+  Future<void> share() => _handOff(share: true);
+
+  Future<void> _handOff({required bool share}) async {
     if (state.busy) return;
     if (!state.valid) {
       state = state.copyWith(showErrors: true);
@@ -169,18 +237,29 @@ class FeedbackFormController extends Notifier<FeedbackFormState> {
         ),
         version: appVersion,
       );
-      final how = await sendFeedback(
-        report,
-        ref.read(feedbackTransportProvider),
+      // The mail app takes the screen and Android may not bring Dhruva back
+      // to this exact moment, so the confirmation (and the saved draft) must
+      // already be in place BEFORE the intent launches.
+      _save();
+      state = state.copyWith(
+        busy: false,
+        handoff: () =>
+            share ? FeedbackHandoff.shareSheet : FeedbackHandoff.emailDraft,
       );
+      final transport = ref.read(feedbackTransportProvider);
+      final how = share
+          ? await shareFeedback(report, transport)
+          : await sendFeedback(report, transport);
+      if (ref.mounted) state = state.copyWith(handoff: () => how);
       if (state.includeCrash) {
         await ref.read(crashLogProvider).markSeen();
         ref.invalidate(unseenCrashReportsProvider);
       }
-      state = state.copyWith(busy: false, handoff: () => how);
     } on Object {
+      if (!ref.mounted) return;
       state = state.copyWith(
         busy: false,
+        handoff: () => null,
         sendError: () =>
             "Couldn't open your email app or the share sheet. Try again.",
       );

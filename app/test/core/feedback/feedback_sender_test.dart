@@ -54,6 +54,30 @@ const _report = FeedbackReport(
 
 void main() {
   test(
+    'share path is always available: address first, full body, files',
+    () async {
+      final t = _FakeTransport(); // mail app "available": share still works
+      final how = await shareFeedback(
+        const FeedbackReport(
+          subject: '[Dhruva 0.7.0][Bug] t',
+          body: 'Type: Bug\nTitle: t\n\nDescription:\nIt broke.',
+          mediaPaths: ['/cache/a.png'],
+          crashLogText: 'StateError: boom',
+        ),
+        t,
+      );
+      expect(how, FeedbackHandoff.shareSheet);
+      expect(t.email, isNull);
+      expect(
+        t.shared!['text'],
+        'Please send to $developerEmail\n\n'
+        'Type: Bug\nTitle: t\n\nDescription:\nIt broke.',
+      );
+      expect(t.shared!['files'], ['/cache/a.png', '/tmp/crash-log.txt']);
+    },
+  );
+
+  test(
     'mail app available: composes to the developer with attachments',
     () async {
       final t = _FakeTransport();

@@ -1,10 +1,15 @@
-// Feedback form: the crash-banner entry preselects Bug + crash log, and the
-// post-handoff copy never claims the report was sent.
+// Feedback form: the crash-banner entry preselects Bug + crash log, both
+// hand-off paths are always offered (a signed-out Gmail "succeeds" without
+// composing, so the share sheet must never hide behind a failure), the
+// confirmation is in place before the mail app launches, and it never claims
+// the report was sent.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dhruva/core/crash/crash_banner.dart';
 import 'package:dhruva/core/crash/crash_log.dart';
+import 'package:dhruva/core/feedback/feedback_draft_store.dart';
 import 'package:dhruva/core/feedback/feedback_report.dart';
 import 'package:dhruva/core/feedback/feedback_sender.dart';
 import 'package:dhruva/core/safety/report_mail.dart';
@@ -40,9 +45,13 @@ class _Log extends CrashLog {
 }
 
 class _Transport implements FeedbackTransport {
-  _Transport({required this.email});
+  _Transport({this.email = true, this.hold});
   final bool email;
+
+  /// When set, composeEmail waits on it: the mail app "has the screen".
+  final Completer<void>? hold;
   int composed = 0;
+  final shared = <Map<String, Object?>>[];
 
   @override
   Future<String> stageText(String fileName, String text) async =>
@@ -56,6 +65,7 @@ class _Transport implements FeedbackTransport {
   }) async {
     if (!email) throw const EmailUnavailable();
     composed++;
+    await hold?.future;
   }
 
   @override
@@ -63,7 +73,26 @@ class _Transport implements FeedbackTransport {
     required String text,
     required String subject,
     required List<String> filePaths,
-  }) async {}
+  }) async {
+    shared.add({'text': text, 'files': filePaths});
+  }
+}
+
+class _Store implements FeedbackDraftStore {
+  SavedFeedbackDraft? saved;
+  @override
+  Future<SavedFeedbackDraft?> load() async => saved;
+  @override
+  Future<void> save(SavedFeedbackDraft draft) async => saved = draft;
+  @override
+  Future<void> clear() async => saved = null;
+}
+
+class _Picker implements FeedbackMediaPicker {
+  @override
+  Future<List<FeedbackAttachment>> pick(int limit) async => const [
+    FeedbackAttachment(path: '/cache/shot.png', name: 'shot.png', bytes: 2048),
+  ];
 }
 
 const _info = FeedbackDeviceInfo(
@@ -73,7 +102,11 @@ const _info = FeedbackDeviceInfo(
   appBuild: '106',
 );
 
-Widget _app(FeedbackTransport transport, {String initial = '/'}) {
+Widget _app(
+  FeedbackTransport transport, {
+  String initial = '/',
+  _Store? store,
+}) {
   final router = GoRouter(
     initialLocation: initial,
     routes: [
@@ -94,9 +127,25 @@ Widget _app(FeedbackTransport transport, {String initial = '/'}) {
       crashLogProvider.overrideWithValue(_Log()),
       feedbackTransportProvider.overrideWithValue(transport),
       feedbackDeviceInfoProvider.overrideWith((_) async => _info),
+      feedbackDraftStoreProvider.overrideWithValue(store ?? _Store()),
+      feedbackMediaPickerProvider.overrideWithValue(_Picker()),
     ],
     child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
   );
+}
+
+Future<void> _fill(WidgetTester tester) async {
+  await tester.enterText(find.byKey(const ValueKey('feedback-title')), 'T');
+  await tester.enterText(
+    find.byKey(const ValueKey('feedback-description')),
+    'D',
+  );
+}
+
+Future<void> _tap(WidgetTester tester, String key) async {
+  await tester.ensureVisible(find.byKey(ValueKey(key)));
+  await tester.tap(find.byKey(ValueKey(key)));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -104,7 +153,7 @@ void main() {
     'crash banner "Report this crash" opens Bug with crash log ticked',
     (tester) async {
       _tall(tester);
-      await tester.pumpWidget(_app(_Transport(email: true)));
+      await tester.pumpWidget(_app(_Transport()));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('crash-report')));
@@ -122,7 +171,6 @@ void main() {
             .value,
         isTrue,
       );
-      // Device info stays on by default; the steps field exists for Bug.
       expect(
         tester
             .widget<CheckboxListTile>(
@@ -137,9 +185,9 @@ void main() {
   );
 
   testWidgets(
-    'Settings entry: crash log off by default; send hands off, never says sent',
+    'Settings entry: crash log off by default; email hand-off never says sent',
     (tester) async {
-      final transport = _Transport(email: true);
+      final transport = _Transport();
       _tall(tester);
       await tester.pumpWidget(
         _app(transport, initial: '/settings/feedback?type=feature'),
@@ -157,53 +205,151 @@ void main() {
       expect(find.byKey(const ValueKey('feedback-steps')), findsNothing);
 
       // Empty form: plain-word errors, nothing composed.
-      await tester.ensureVisible(find.byKey(const ValueKey('feedback-send')));
-      await tester.tap(find.byKey(const ValueKey('feedback-send')));
-      await tester.pumpAndSettle();
+      await _tap(tester, 'feedback-send');
       expect(find.text('Add a short title.'), findsOneWidget);
       expect(transport.composed, 0);
 
-      await tester.enterText(
-        find.byKey(const ValueKey('feedback-title')),
-        'Widget',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('feedback-description')),
-        'A widget.',
-      );
-      await tester.ensureVisible(find.byKey(const ValueKey('feedback-send')));
-      await tester.tap(find.byKey(const ValueKey('feedback-send')));
-      await tester.pumpAndSettle();
+      await _fill(tester);
+      await _tap(tester, 'feedback-send');
 
       expect(transport.composed, 1);
       expect(
         find.text('Thanks. Send it from your email app to reach us.'),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('feedback-copy-address')), findsNothing);
+      expect(find.textContaining('was sent'), findsNothing);
     },
   );
 
-  testWidgets('no mail app: share-sheet fallback shows the address to copy', (
+  testWidgets('the share sheet and copy address are always available', (
     tester,
   ) async {
+    final transport = _Transport();
     _tall(tester);
-    await tester.pumpWidget(
-      _app(_Transport(email: false), initial: '/settings/feedback?type=bug'),
-    );
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('feedback-title')), 'T');
-    await tester.enterText(
-      find.byKey(const ValueKey('feedback-description')),
-      'D',
-    );
-    await tester.ensureVisible(find.byKey(const ValueKey('feedback-send')));
-    await tester.tap(find.byKey(const ValueKey('feedback-send')));
+    await tester.pumpWidget(_app(transport, initial: '/settings/feedback'));
     await tester.pumpAndSettle();
 
+    // Before anything is tapped: both options and the copy action exist.
+    expect(find.byKey(const ValueKey('feedback-send')), findsOneWidget);
+    expect(find.byKey(const ValueKey('feedback-share')), findsOneWidget);
     expect(find.byKey(const ValueKey('feedback-copy-address')), findsOneWidget);
-    expect(find.textContaining(developerEmail), findsOneWidget);
+
+    await _fill(tester);
+    await _tap(tester, 'feedback-share');
+
+    expect(transport.composed, 0);
+    expect(transport.shared, hasLength(1));
+    expect(
+      transport.shared.single['text'] as String,
+      startsWith('Please send to $developerEmail\n\nType: Bug'),
+    );
   });
+
+  testWidgets('the confirmation offers "Share another way" to recover', (
+    tester,
+  ) async {
+    final transport = _Transport();
+    _tall(tester);
+    await tester.pumpWidget(_app(transport, initial: '/settings/feedback'));
+    await tester.pumpAndSettle();
+    await _fill(tester);
+    await _tap(tester, 'feedback-send');
+
+    expect(transport.shared, isEmpty);
+    expect(find.textContaining("Didn't open a draft?"), findsOneWidget);
+    await _tap(tester, 'feedback-share-recovery');
+    expect(transport.shared, hasLength(1));
+    expect(transport.shared.single['text'] as String, contains('Title: T'));
+  });
+
+  testWidgets('no mail app: falls back to the share sheet automatically', (
+    tester,
+  ) async {
+    final transport = _Transport(email: false);
+    _tall(tester);
+    await tester.pumpWidget(
+      _app(transport, initial: '/settings/feedback?type=bug'),
+    );
+    await tester.pumpAndSettle();
+    await _fill(tester);
+    await _tap(tester, 'feedback-send');
+
+    expect(transport.shared, hasLength(1));
+    expect(find.textContaining(developerEmail), findsWidgets);
+  });
+
+  testWidgets(
+    'the confirmation is on screen before the mail app returns (set BEFORE '
+    'launch) and the draft is already saved',
+    (tester) async {
+      final hold = Completer<void>();
+      final store = _Store();
+      _tall(tester);
+      await tester.pumpWidget(
+        _app(
+          _Transport(hold: hold),
+          initial: '/settings/feedback',
+          store: store,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _fill(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('feedback-send')));
+      await tester.tap(find.byKey(const ValueKey('feedback-send')));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The composer call has not returned yet.
+      expect(hold.isCompleted, isFalse);
+      expect(find.byKey(const ValueKey('feedback-handoff')), findsOneWidget);
+      expect(store.saved?.title, 'T');
+
+      hold.complete();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('a saved draft is restored, and Done clears it', (tester) async {
+    final store = _Store()
+      ..saved = const SavedFeedbackDraft(
+        type: FeedbackType.bug,
+        title: 'Saved title',
+        description: 'Saved body',
+      );
+    _tall(tester);
+    await tester.pumpWidget(
+      _app(_Transport(), initial: '/settings/feedback?type=bug', store: store),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Saved title'), findsOneWidget);
+    expect(find.text('Saved body'), findsOneWidget);
+
+    await _tap(tester, 'feedback-send');
+    await _tap(tester, 'feedback-done');
+    expect(store.saved, isNull);
+  });
+
+  testWidgets(
+    'attachment row: immediate placeholder, 48 dp remove, "Remove attachment"',
+    (tester) async {
+      _tall(tester);
+      await tester.pumpWidget(
+        _app(_Transport(), initial: '/settings/feedback'),
+      );
+      await tester.pumpAndSettle();
+      await _tap(tester, 'feedback-add-media');
+
+      expect(find.text('shot.png'), findsOneWidget);
+      // Missing file: the placeholder icon is what shows, never nothing.
+      expect(find.byIcon(Icons.image_outlined), findsWidgets);
+      final remove = find.byKey(const ValueKey('feedback-remove'));
+      expect(tester.getSize(remove), const Size(48, 48));
+      expect(find.byTooltip('Remove attachment'), findsOneWidget);
+
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      expect(find.text('shot.png'), findsNothing);
+    },
+  );
 }
 
 /// The form is a lazy ListView: a tall screen builds every row.

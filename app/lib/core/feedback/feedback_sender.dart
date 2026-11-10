@@ -47,31 +47,46 @@ abstract interface class FeedbackTransport {
 
 enum FeedbackHandoff { emailDraft, shareSheet }
 
-/// Email draft first; share sheet when the mail app is unavailable.
+Future<List<String>> _files(
+  FeedbackReport report,
+  FeedbackTransport transport,
+) async => [
+  ...report.mediaPaths,
+  if (report.crashLogText != null)
+    await transport.stageText(feedbackCrashLogFileName, report.crashLogText!),
+];
+
+/// The system share sheet with the full body (address first) and the same
+/// files. Always available: Android cannot say whether a mail account is set
+/// up (a signed-out Gmail "succeeds" and shows a welcome tour), so the form
+/// always offers this next to the email draft.
+Future<FeedbackHandoff> shareFeedback(
+  FeedbackReport report,
+  FeedbackTransport transport,
+) async {
+  await transport.shareFallback(
+    text: 'Please send to $developerEmail\n\n${report.body}',
+    subject: report.subject,
+    filePaths: await _files(report, transport),
+  );
+  return FeedbackHandoff.shareSheet;
+}
+
+/// Email draft first; share sheet when the plugin reports no mail app.
 Future<FeedbackHandoff> sendFeedback(
   FeedbackReport report,
   FeedbackTransport transport,
 ) async {
-  final files = [
-    ...report.mediaPaths,
-    if (report.crashLogText != null)
-      await transport.stageText(feedbackCrashLogFileName, report.crashLogText!),
-  ];
   try {
     await transport.composeEmail(
       to: developerEmail,
       subject: report.subject,
       body: report.body,
-      attachmentPaths: files,
+      attachmentPaths: await _files(report, transport),
     );
     return FeedbackHandoff.emailDraft;
   } on EmailUnavailable {
-    await transport.shareFallback(
-      text: 'Please send to $developerEmail\n\n${report.body}',
-      subject: report.subject,
-      filePaths: files,
-    );
-    return FeedbackHandoff.shareSheet;
+    return shareFeedback(report, transport);
   }
 }
 

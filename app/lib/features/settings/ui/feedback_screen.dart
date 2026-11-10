@@ -52,6 +52,14 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
     final provider = feedbackFormProvider(widget.entry);
     final s = ref.watch(provider);
     final c = ref.read(provider.notifier);
+    // A saved draft was loaded (Android reclaimed us while the mail app was
+    // up, or the user came back later): show it in the fields.
+    ref.listen(provider.select((s) => s.restoreSeq), (_, _) {
+      final r = ref.read(provider);
+      _title.text = r.title;
+      _description.text = r.description;
+      _steps.text = r.steps;
+    });
     final pad = EdgeInsets.symmetric(horizontal: tokens.spacing.base);
     final gap = SizedBox(height: tokens.spacing.base);
 
@@ -141,11 +149,35 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
         gap,
         Padding(
           padding: pad,
-          child: FilledButton(
-            key: const ValueKey('feedback-send'),
-            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
-            onPressed: s.busy ? null : c.send,
-            child: Text(s.busy ? 'Opening…' : 'Open email draft'),
+          // Both ways out are always offered: Android cannot tell us whether
+          // a mail account is set up (a signed-out Gmail opens a welcome
+          // tour), so the share sheet is never hidden behind a failure.
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton(
+                key: const ValueKey('feedback-send'),
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: s.busy ? null : c.send,
+                child: Text(s.busy ? 'Opening…' : 'Open email draft'),
+              ),
+              SizedBox(height: tokens.spacing.sm),
+              OutlinedButton(
+                key: const ValueKey('feedback-share'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
+                onPressed: s.busy ? null : c.share,
+                child: const Text('Share another way'),
+              ),
+              TextButton.icon(
+                key: const ValueKey('feedback-copy-address'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text('Copy email address'),
+                onPressed: () => _copyAddress(context),
+              ),
+            ],
           ),
         ),
         if (s.sendError != null) SettingsNote(s.sendError!),
@@ -157,7 +189,15 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
               tokens.spacing.base,
               0,
             ),
-            child: _HandoffNote(handoff: s.handoff!),
+            child: _HandoffNote(
+              entry: widget.entry,
+              handoff: s.handoff!,
+              onShare: c.share,
+              onDone: () async {
+                await c.finish();
+                if (context.mounted) await Navigator.of(context).maybePop();
+              },
+            ),
           ),
       ],
     );
@@ -250,14 +290,15 @@ class _Attachments extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (s.attachments.isNotEmpty)
-            Wrap(
-              spacing: tokens.spacing.sm,
-              runSpacing: tokens.spacing.sm,
+            Column(
               children: [
                 for (var i = 0; i < s.attachments.length; i++)
-                  _Thumb(
-                    a: s.attachments[i],
-                    onRemove: () => c.removeAttachment(i),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: tokens.spacing.xs),
+                    child: _AttachmentRow(
+                      a: s.attachments[i],
+                      onRemove: () => c.removeAttachment(i),
+                    ),
                   ),
               ],
             ),
@@ -291,74 +332,98 @@ class _Attachments extends ConsumerWidget {
   }
 }
 
-class _Thumb extends StatelessWidget {
-  const _Thumb({required this.a, required this.onRemove});
+/// One attachment: a 56 dp thumbnail (with an immediate placeholder, since
+/// large photos take a moment to decode), its name and size, and a 48 dp
+/// remove button on its own, clear of the image.
+class _AttachmentRow extends StatelessWidget {
+  const _AttachmentRow({required this.a, required this.onRemove});
 
   final FeedbackAttachment a;
   final VoidCallback onRemove;
 
-  static const _size = 72.0;
+  static const _size = 56.0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<DhruvaTokens>()!;
-    final radius = BorderRadius.circular(tokens.radius.md);
-    return SizedBox(
-      // The remove button is 48 dp and overhangs the corner.
-      width: _size + 24,
-      height: _size + 24,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            bottom: 0,
-            child: ClipRRect(
-              borderRadius: radius,
-              child: SizedBox(
-                width: _size,
-                height: _size,
-                child: a.isVideo
-                    ? ColoredBox(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: Icon(
-                          Icons.videocam_outlined,
-                          semanticLabel: 'Video ${a.name}',
-                        ),
-                      )
-                    : Image.file(
-                        File(a.path),
-                        fit: BoxFit.cover,
-                        cacheWidth: 192,
-                        semanticLabel: 'Screenshot ${a.name}',
-                        errorBuilder: (_, _, _) => ColoredBox(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.image_outlined),
-                        ),
-                      ),
-              ),
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: IconButton.filledTonal(
-              tooltip: 'Remove ${a.name}',
-              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-              iconSize: 18,
-              icon: const Icon(Icons.close),
-              onPressed: onRemove,
-            ),
-          ),
-        ],
+    final placeholder = ColoredBox(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(
+          a.isVideo ? Icons.videocam_outlined : Icons.image_outlined,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
+    );
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(tokens.radius.md),
+          child: SizedBox(
+            width: _size,
+            height: _size,
+            child: a.isVideo
+                ? placeholder
+                : Image.file(
+                    File(a.path),
+                    fit: BoxFit.cover,
+                    cacheWidth: 168,
+                    // Shown until the first decoded frame, so the row never
+                    // appears as just a remove button.
+                    frameBuilder: (_, child, frame, sync) =>
+                        sync || frame != null ? child : placeholder,
+                    errorBuilder: (_, _, _) => placeholder,
+                  ),
+          ),
+        ),
+        SizedBox(width: tokens.spacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                formatFeedbackBytes(a.bytes),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          key: const ValueKey('feedback-remove'),
+          tooltip: 'Remove attachment',
+          constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+          icon: const Icon(Icons.close),
+          onPressed: onRemove,
+        ),
+      ],
     );
   }
 }
 
+Future<void> _copyAddress(BuildContext context) async {
+  await Clipboard.setData(const ClipboardData(text: developerEmail));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(const SnackBar(content: Text('Address copied.')));
+}
+
 class _HandoffNote extends StatelessWidget {
-  const _HandoffNote({required this.handoff});
+  const _HandoffNote({
+    required this.entry,
+    required this.handoff,
+    required this.onShare,
+    required this.onDone,
+  });
+
+  final FeedbackEntry entry;
   final FeedbackHandoff handoff;
+  final VoidCallback onShare;
+  final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -381,29 +446,27 @@ class _HandoffNote extends StatelessWidget {
               'Thanks. Send it from your email app to reach us.',
               style: theme.textTheme.titleSmall,
             ),
-            if (viaShare) ...[
-              SizedBox(height: tokens.spacing.xs),
-              Text(
-                'No email app is set up on this phone, so we opened the share '
-                'sheet instead. Send it to $developerEmail.',
-                style: theme.textTheme.bodyMedium,
-              ),
-              TextButton.icon(
-                key: const ValueKey('feedback-copy-address'),
+            SizedBox(height: tokens.spacing.xs),
+            Text(
+              viaShare
+                  ? 'Pick an app in the share sheet and send it to '
+                        '$developerEmail.'
+                  : 'Your draft is saved here until you tap Done.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            if (!viaShare)
+              TextButton(
+                key: const ValueKey('feedback-share-recovery'),
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                icon: const Icon(Icons.copy_rounded, size: 18),
-                label: const Text('Copy email address'),
-                onPressed: () async {
-                  await Clipboard.setData(
-                    const ClipboardData(text: developerEmail),
-                  );
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Address copied.')),
-                  );
-                },
+                onPressed: onShare,
+                child: const Text("Didn't open a draft? Share another way"),
               ),
-            ],
+            TextButton(
+              key: const ValueKey('feedback-done'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: onDone,
+              child: const Text('Done'),
+            ),
           ],
         ),
       ),
