@@ -42,10 +42,12 @@ import '../../features/models_hub/ui/models_hub_screen.dart';
 import '../../features/models_hub/widgets/download_status_pill.dart';
 import '../../features/onboarding/ui/onboarding_screen.dart';
 import '../../features/playground/ui/playground_screen.dart';
+import '../../features/settings/state/feedback_controller.dart';
 import '../../features/settings/ui/about_me_screen.dart';
 import '../../features/settings/ui/about_screen.dart';
 import '../../features/settings/ui/connectors_screen.dart';
 import '../../features/settings/ui/crash_reports_screen.dart';
+import '../../features/settings/ui/feedback_screen.dart';
 import '../../features/settings/ui/ledger_screen.dart';
 import '../../features/settings/ui/notifications_screen.dart';
 import '../../features/settings/ui/privacy_screen.dart';
@@ -362,6 +364,13 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings/crash-reports',
       builder: (context, state) => const CrashReportsScreen(),
+    ),
+    // `?type=bug|feature`; `&crash=1` (from the crash banner) ticks the crash log.
+    GoRoute(
+      path: '/settings/feedback',
+      builder: (context, state) => FeedbackScreen(
+        entry: feedbackEntryFromQuery(state.uri.queryParameters),
+      ),
     ),
     GoRoute(
       path: '/settings/about',

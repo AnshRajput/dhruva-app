@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../feedback/feedback_report.dart';
 import '../identity/app_identity.dart';
 import '../theme/dhruva_theme_extension.dart';
 import 'crash_actions.dart';
@@ -86,6 +90,21 @@ class CrashReportBanner extends ConsumerWidget {
                     foregroundColor: scheme.onSurfaceVariant,
                   ),
                   child: const Text('Dismiss'),
+                ),
+                TextButton(
+                  key: const ValueKey('crash-report'),
+                  onPressed: () async {
+                    await done();
+                    if (context.mounted) {
+                      unawaited(
+                        context.push<void>(
+                          feedbackRoute(FeedbackType.bug, fromCrash: true),
+                        ),
+                      );
+                    }
+                  },
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  child: const Text('Report this crash'),
                 ),
                 FilledButton.tonal(
                   key: const ValueKey('crash-send'),

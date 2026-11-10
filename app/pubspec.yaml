@@ -73,6 +73,11 @@ dependencies:
   # lookup at a time (data/connectors/system_sources.dart). MIT, maintained
   # (QuisApp). Read permission only (READ_CONTACTS / NSContactsUsageDescription).
   flutter_contacts: ^2.1.0
+  # Report a bug / Request a feature: opens the user's OWN mail app with a
+  # prefilled draft (ACTION_SENDTO / MFMailCompose + attachments). No network
+  # code in the plugin (audited); 9.0.0 is the newest that supports our pinned
+  # Flutter 3.41.2 (10.x+ need Flutter 3.44).
+  flutter_email_sender: ^9.0.0
   # Loop 4 (chat): markdown rendering for assistant/user bubbles.
   # `flutter_markdown_plus` (BSD-3, actively maintained continuation of
   # Google's original flutter_markdown by Foresight Mobile — the original

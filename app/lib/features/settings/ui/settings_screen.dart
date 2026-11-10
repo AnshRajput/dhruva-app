@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/device_health/device_health_provider.dart';
+import '../../../core/feedback/feedback_report.dart';
 import '../../../core/identity/app_identity.dart';
 import '../../../core/widgets/platform_chrome.dart' show isCupertinoChrome;
 import '../privacy_facts.dart';
@@ -127,6 +128,27 @@ class SettingsScreen extends StatelessWidget {
               '/settings/crash-reports',
             ),
             const _AboutRow(),
+          ],
+        ),
+        const SettingsSectionLabel('Help us improve'),
+        SettingsGroup(
+          children: [
+            _nav(
+              context,
+              'settings-report-bug',
+              Icons.bug_report_outlined,
+              'Report a bug',
+              'Opens a draft in your email app',
+              feedbackRoute(FeedbackType.bug),
+            ),
+            _nav(
+              context,
+              'settings-request-feature',
+              Icons.lightbulb_outline,
+              'Request a feature',
+              'Tell us what ${AppIdentity.shortName} should do next',
+              feedbackRoute(FeedbackType.feature),
+            ),
           ],
         ),
         const CreditRow(),

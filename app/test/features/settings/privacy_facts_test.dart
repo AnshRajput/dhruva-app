@@ -14,6 +14,14 @@ void main() {
     ]);
   });
 
+  test('reports are drafts in the email app, not a network call', () {
+    expect(
+      reportsFact,
+      'Reports you write open in your email app; nothing is sent until you '
+      'send it there.',
+    );
+  });
+
   test('the facts name the real parties and promise nothing false', () {
     final all = networkFacts.map((f) => '${f.title} ${f.body}').join(' ');
     expect(all, contains('Hugging Face'));

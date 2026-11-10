@@ -71,6 +71,7 @@ class PrivacyScreen extends ConsumerWidget {
               SettingsRow(icon: f.icon, title: f.title, subtitle: f.body),
           ],
         ),
+        const SettingsNote(reportsFact),
         const SettingsSectionLabel('On this phone'),
         SettingsGroup(
           children: [
