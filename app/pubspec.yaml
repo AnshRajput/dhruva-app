@@ -99,6 +99,18 @@ dependencies:
   # `features/vision/image_attach_source.dart` is the only file that imports
   # it (ADR-002: `features/chat` depends on the `ImageAttacher` interface,
   # same discipline as `voice/mic_audio_source.dart`'s `MicSource`).
+  # Gmail connector (0.7b, read-only). google_sign_in 7.x (BSD-3, flutter.dev)
+  # does the Google sign-in and the silent gmail.readonly authorization; it
+  # keeps its own credentials in the OS (Credential Manager / Keychain) and
+  # talks only to Google. googleapis (BSD-3, Dart team) is the typed Gmail v1
+  # client; its default root is https://gmail.googleapis.com/. Neither has
+  # telemetry. See data/connectors/gmail_source.dart.
+  google_sign_in: ^7.0.0
+  googleapis: ^17.0.0
+  # http (BSD-3, Dart team): the transport googleapis needs. Production code
+  # only wraps it to add the bearer header (gmail_source.dart); the hf_api
+  # tests also use http.Response for their fakes. Already in the lockfile.
+  http: ^1.6.0
   image_picker: ^1.2.3
   json_annotation: ^4.9.0
   # Inference engine (ADR-001). PINNED to an exact commit — the pub.dev
@@ -170,10 +182,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   freezed: ^3.2.5
-  # Test-only: the hf_api tests build fake responses with http.Response and a
-  # tiny custom dio HttpClientAdapter (test/support/mock_hf_client.dart) feeds
-  # them to the migrated dio-based HfApiClient. Production code uses dio only.
-  http: ^1.6.0
   # iOS-metal-wiring: integration_test drives the REAL app process on the iOS
   # Simulator (unlike `flutter test`, which runs on the host) — the only way
   # to prove the CocoaPods-vendored llama.xcframework actually dyld-loads on

@@ -60,6 +60,7 @@ import '../../features/voice/ui/handsfree_screen.dart';
 import '../../features/workflows/ui/workflows_screen.dart';
 import 'app_shell.dart';
 import 'ask_route.dart';
+import 'route_trust.dart';
 
 /// Maps a pre-redesign route to its new home, or null if [uri] is current.
 /// Pure so tests can pin every old route. Query strings are preserved
@@ -263,11 +264,13 @@ final appRouter = GoRouter(
           // `/chat/new?prompt=<encoded>` (extra: installed model id) so the
           // first turn auto-sends — a query param, like `characterId`, so
           // `features/onboarding` never imports `ChatRouteArgs` (ADR-002).
-          final promptParam = state.uri.queryParameters['prompt'];
+          // Text to send is honoured only on a link this process built (see
+          // route_trust.dart): an external URL can never auto-send.
+          final promptParam = trustedParam(state.uri, 'prompt');
           // Actions: the instruction rides in the system prompt (`asys`), the
           // user's text is `prompt`; `pkg` / `app` name the message's source
           // app so a drafted reply can offer "Open in <app>".
-          final actionSystem = state.uri.queryParameters['asys'];
+          final actionSystem = trustedParam(state.uri, 'asys');
           // Android widget "Talk" (IntentInbox route `talk`): open hands-free
           // voice as soon as the new chat is ready.
           final openVoice = state.uri.queryParameters['talk'] == '1';
@@ -280,8 +283,8 @@ final appRouter = GoRouter(
                   : int.tryParse(characterIdParam),
               initialPrompt: promptParam,
               actionSystemPrompt: actionSystem,
-              sourcePackage: state.uri.queryParameters['pkg'],
-              sourceApp: state.uri.queryParameters['app'],
+              sourcePackage: trustedParam(state.uri, 'pkg'),
+              sourceApp: trustedParam(state.uri, 'app'),
             ),
           );
         }

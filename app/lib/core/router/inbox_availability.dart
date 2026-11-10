@@ -3,8 +3,7 @@
 /// then Today carries a "Set up your inbox" card (spec B2: iOS without Gmail
 /// must never see an empty Inbox tab).
 ///
-/// Derived from the connector list: true when an inbox source (today only
-/// notifications, which exists on Android alone; Gmail joins in 0.7b) is
+/// Derived from the connector list: true when an inbox source is
 /// connected. While the list is still loading, or if it cannot load, the Inbox
 /// stays hidden rather than flashing an empty tab.
 library;
@@ -13,6 +12,7 @@ import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/connectors/connector.dart';
+import '../../data/connectors/gmail_system_source.dart' show GmailClientIds;
 import '../di/connector_providers.dart';
 
 final inboxAvailableProvider = Provider<bool>((ref) {
@@ -24,10 +24,11 @@ final inboxAvailableProvider = Provider<bool>((ref) {
   );
 });
 
-/// Whether an inbox source COULD be set up on [platform]. On iOS today there is
-/// none (notifications are Android-only, Gmail joins in 0.7b), so Today must not
-/// offer to "set up your inbox" there: the card would lead nowhere.
-/// ponytail: a platform check; replace with a connector capability flag when
-/// Gmail lands.
-bool inboxSetupPossibleOn(TargetPlatform platform) =>
-    platform == TargetPlatform.android;
+/// Whether an inbox source COULD be set up on [platform]: Android always has the
+/// notification digest; any platform with Gmail configured (OAuth client ids in
+/// this build, see `GmailClientIds`) has Gmail. Without either, Today must not
+/// offer to "set up your inbox": the card would lead nowhere.
+bool inboxSetupPossibleOn(
+  TargetPlatform platform, {
+  GmailClientIds gmailIds = GmailClientIds.fromEnvironment,
+}) => platform == TargetPlatform.android || gmailIds.supportedOn(platform);

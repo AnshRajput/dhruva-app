@@ -64,6 +64,9 @@ String firstLineOf(String body) {
 }
 
 /// The one line a row shows under the sender: a usable summary, else the
-/// first line of the body.
+/// mail's subject, else the first line of the body.
 String rowLineOf(ConnectorItem item) =>
-    usableSummary(item) ?? firstLineOf(item.body);
+    usableSummary(item) ??
+    (item.kind == ItemKind.mail && item.title.trim().isNotEmpty
+        ? item.title.trim()
+        : firstLineOf(item.body));

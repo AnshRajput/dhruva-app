@@ -154,7 +154,7 @@ void main() {
     });
 
     test(
-      'watchNotifications: newest first, only the window asked for',
+      'watchInbox: newest first (notifications and mail), only the window asked for',
       () async {
         final store = kit.hub.store;
         await store.upsertItems('notifications', [
@@ -167,7 +167,7 @@ void main() {
             ),
         ]);
         final recent = await store
-            .watchNotifications(since: DateTime.utc(2026, 10, 25))
+            .watchInbox(since: DateTime.utc(2026, 10, 25))
             .first;
         expect([for (final i in recent) i.title], ['b', 'a']);
       },

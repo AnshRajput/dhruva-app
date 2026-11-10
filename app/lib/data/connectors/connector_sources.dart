@@ -162,6 +162,109 @@ abstract interface class NotificationAccess {
 /// user asks).
 typedef ChargingProbe = Future<bool> Function();
 
+// ---- gmail -----------------------------------------------------------------
+
+/// The Gmail scope the app asks for: read-only. There is deliberately no
+/// compose / send scope anywhere in the app.
+const gmailReadonlyScope = 'https://www.googleapis.com/auth/gmail.readonly';
+
+/// One message as the connector needs it. [text] is the plain-text body, cut to
+/// the item cap by the source; it is untrusted (anyone can mail the user).
+final class GmailMessage {
+  final String id;
+  final Person? from;
+  final String subject;
+  final DateTime date;
+  final String text;
+
+  /// Gmail label ids (`UNREAD`, `IMPORTANT`, `SENT`, `CATEGORY_PROMOTIONS`).
+  final Set<String> labels;
+  const GmailMessage({
+    required this.id,
+    required this.date,
+    this.from,
+    this.subject = '',
+    this.text = '',
+    this.labels = const {},
+  });
+}
+
+final class GmailThread {
+  final String id;
+
+  /// At least the newest message; a source may send only that one.
+  final List<GmailMessage> messages;
+
+  /// How many messages the thread has (may exceed [messages]).
+  final int messageCount;
+  GmailThread(this.id, this.messages, {int? messageCount})
+    : messageCount = messageCount ?? messages.length;
+}
+
+/// What one read returned. [complete] is true only when the inbox listing was
+/// read to its end under the cap and no thread was skipped: only then does a
+/// thread missing from [threads] mean it left the inbox.
+final class GmailFetch {
+  final List<GmailThread> threads;
+  final bool complete;
+  const GmailFetch(this.threads, {required this.complete});
+}
+
+/// Google needs the user (token expired or revoked, consent missing, sign-in
+/// failed); [message] is user-ready. Background syncs never prompt: they end
+/// here and the connector shows "Reconnect Gmail".
+final class GmailAuthException implements Exception {
+  final String message;
+  const GmailAuthException(this.message);
+  @override
+  String toString() => 'GmailAuthException: $message';
+}
+
+/// The Gmail seam: Google sign-in plus the Gmail API, read only. The only hosts
+/// behind it are Google's sign-in and gmail.googleapis.com. Tokens never leave
+/// the implementation: nothing here returns or stores one.
+abstract interface class GmailSource {
+  /// False when this build has no OAuth client id for the platform: the
+  /// connector then reports `unsupported` and the card is hidden.
+  bool get configured;
+
+  /// Interactive Google sign-in plus consent for [gmailReadonlyScope]. Returns
+  /// the account's email, or null when the user backed out. Throws
+  /// [GmailAuthException].
+  Future<String?> signIn();
+
+  /// Threads with a message newer than [since], at most [maxThreads]. Silent:
+  /// throws [GmailAuthException] instead of ever showing UI. A thread that fails
+  /// to read is skipped (and the result is then not [GmailFetch.complete]).
+  Future<GmailFetch> recentThreads({
+    required DateTime since,
+    required int maxThreads,
+  });
+
+  /// Signs out and revokes the grant at Google. True only when the revoke at
+  /// Google is confirmed; false (never throws) when it could not be done, so
+  /// the user can be told to finish at myaccount.google.com/permissions.
+  Future<bool> signOut();
+}
+
+/// The source of a build without OAuth client ids (and of tests that do not
+/// care about Gmail): not configured, so Gmail does not exist in the app.
+final class UnconfiguredGmailSource implements GmailSource {
+  const UnconfiguredGmailSource();
+  @override
+  bool get configured => false;
+  @override
+  Future<String?> signIn() async =>
+      throw const GmailAuthException('Gmail is not set up in this build.');
+  @override
+  Future<GmailFetch> recentThreads({
+    required DateTime since,
+    required int maxThreads,
+  }) async => throw const GmailAuthException('Gmail is not set up.');
+  @override
+  Future<bool> signOut() async => false;
+}
+
 // ---- hand-off to other apps -------------------------------------------------
 
 /// Why [ExternalOpener] could not open something; [message] is user-ready.

@@ -216,7 +216,7 @@ Future<TodayHarness> pumpToday(
           (ref) async => MemoryGuardStore(),
         ),
         // Existing Today tests predate the reply count: none by default.
-        inboxNotificationsProvider.overrideWith((ref) => Stream.value(inbox)),
+        inboxItemsProvider.overrideWith((ref) => Stream.value(inbox)),
         ...overrides,
       ],
       child: MaterialApp.router(

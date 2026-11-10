@@ -774,7 +774,7 @@ void main() {
 
     testWidgets('gone item: says so and offers a way back', (tester) async {
       await pumpConnectorScreen(tester, const InboxItemScreen(itemId: 7));
-      expect(find.text('This notification is no longer saved'), findsOneWidget);
+      expect(find.text('This message is no longer saved'), findsOneWidget);
     });
 
     testWidgets('shows the original text; Ask about this pins it as the '
