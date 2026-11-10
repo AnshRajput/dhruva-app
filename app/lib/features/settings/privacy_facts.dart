@@ -60,6 +60,11 @@ const networkFacts = <NetworkFact>[
 /// The headline: there is nothing server-side.
 const noServerFact = 'There is no ${AppIdentity.shortName} server.';
 
+/// Reports are drafts in the user's own mail app: not a network call of ours.
+const reportsFact =
+    'Reports you write open in your email app; nothing is sent until you send '
+    'it there.';
+
 /// What lives on the phone.
 const storedOnPhoneFact =
     'Your chats, downloaded models, documents you attach, About me, settings '

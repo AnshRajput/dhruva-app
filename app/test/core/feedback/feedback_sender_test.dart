@@ -1,0 +1,108 @@
+// sendFeedback: email draft first, share-sheet fallback when the mail app is
+// unavailable. The platform sits behind FeedbackTransport, faked here.
+
+import 'package:dhruva/core/feedback/feedback_report.dart';
+import 'package:dhruva/core/feedback/feedback_sender.dart';
+import 'package:dhruva/core/safety/report_mail.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+class _FakeTransport implements FeedbackTransport {
+  _FakeTransport({this.emailAvailable = true});
+  final bool emailAvailable;
+  final staged = <String, String>{};
+  Map<String, Object?>? email;
+  Map<String, Object?>? shared;
+
+  @override
+  Future<String> stageText(String fileName, String text) async {
+    staged[fileName] = text;
+    return '/tmp/$fileName';
+  }
+
+  @override
+  Future<void> composeEmail({
+    required String to,
+    required String subject,
+    required String body,
+    required List<String> attachmentPaths,
+  }) async {
+    if (!emailAvailable) throw const EmailUnavailable('not_available');
+    email = {
+      'to': to,
+      'subject': subject,
+      'body': body,
+      'files': attachmentPaths,
+    };
+  }
+
+  @override
+  Future<void> shareFallback({
+    required String text,
+    required String subject,
+    required List<String> filePaths,
+  }) async {
+    shared = {'text': text, 'subject': subject, 'files': filePaths};
+  }
+}
+
+const _report = FeedbackReport(
+  subject: '[Dhruva 0.7.0][Bug] t',
+  body: 'Type: Bug\nTitle: t',
+  mediaPaths: ['/cache/a.png'],
+  crashLogText: null,
+);
+
+void main() {
+  test(
+    'mail app available: composes to the developer with attachments',
+    () async {
+      final t = _FakeTransport();
+      final how = await sendFeedback(_report, t);
+      expect(how, FeedbackHandoff.emailDraft);
+      expect(t.email, {
+        'to': developerEmail,
+        'subject': '[Dhruva 0.7.0][Bug] t',
+        'body': 'Type: Bug\nTitle: t',
+        'files': ['/cache/a.png'],
+      });
+      expect(t.shared, isNull);
+    },
+  );
+
+  test(
+    'mail app unavailable: share sheet with the address first, same files',
+    () async {
+      final t = _FakeTransport(emailAvailable: false);
+      final how = await sendFeedback(_report, t);
+      expect(how, FeedbackHandoff.shareSheet);
+      expect(
+        t.shared!['text'],
+        'Please send to $developerEmail\n\nType: Bug\nTitle: t',
+      );
+      expect(t.shared!['subject'], '[Dhruva 0.7.0][Bug] t');
+      expect(t.shared!['files'], ['/cache/a.png']);
+    },
+  );
+
+  test(
+    'crash-log.txt is staged and attached only when the report has one',
+    () async {
+      final none = _FakeTransport();
+      await sendFeedback(_report, none);
+      expect(none.staged, isEmpty);
+
+      final t = _FakeTransport();
+      await sendFeedback(
+        const FeedbackReport(
+          subject: 's',
+          body: 'b',
+          mediaPaths: ['/cache/a.png'],
+          crashLogText: 'StateError: boom',
+        ),
+        t,
+      );
+      expect(t.staged, {'crash-log.txt': 'StateError: boom'});
+      expect(t.email!['files'], ['/cache/a.png', '/tmp/crash-log.txt']);
+    },
+  );
+}

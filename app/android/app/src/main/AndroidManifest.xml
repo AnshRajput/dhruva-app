@@ -199,6 +199,13 @@
             <action android:name="android.intent.action.MAIN"/>
             <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
+        <!-- Report a bug / Request a feature: lets flutter_email_sender see
+             whether a mail app exists (ACTION_SENDTO mailto), else we fall
+             back to the share sheet. -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

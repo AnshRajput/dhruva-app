@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/crash/crash_actions.dart';
 import '../../../core/crash/crash_log.dart';
+import '../../../core/feedback/feedback_report.dart';
 import '../../../core/theme/dhruva_theme_extension.dart';
 import '../../../core/widgets/bottom_inset.dart';
 
@@ -20,6 +22,14 @@ class CrashReportsScreen extends ConsumerWidget {
         title: const Text('Crash reports'),
         actions: [
           if (reports.isNotEmpty) ...[
+            IconButton(
+              key: const ValueKey('crash-report-feedback'),
+              tooltip: 'Report this crash',
+              icon: const Icon(Icons.bug_report_outlined),
+              onPressed: () => context.push<void>(
+                feedbackRoute(FeedbackType.bug, fromCrash: true),
+              ),
+            ),
             IconButton(
               key: const ValueKey('crash-share-all'),
               tooltip: 'Share',
