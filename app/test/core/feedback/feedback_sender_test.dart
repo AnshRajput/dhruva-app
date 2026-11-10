@@ -54,6 +54,50 @@ const _report = FeedbackReport(
 
 void main() {
   test(
+    'text-only share passes no files (share_plus rejects an empty list)',
+    () {
+      final p = feedbackShareParams(
+        text: 't',
+        subject: 's',
+        filePaths: const [],
+      );
+      expect(p.files, isNull);
+      expect(p.text, 't');
+    },
+  );
+
+  test('share with attachments still passes the files', () {
+    final p = feedbackShareParams(
+      text: 't',
+      subject: 's',
+      filePaths: const ['/cache/a.png', '/tmp/crash-log.txt'],
+    );
+    expect(p.files!.map((f) => f.path), ['/cache/a.png', '/tmp/crash-log.txt']);
+  });
+
+  test(
+    'text-only email passes no attachment list; with files it passes them',
+    () {
+      final none = feedbackEmail(
+        to: developerEmail,
+        subject: 's',
+        body: 'b',
+        attachmentPaths: const [],
+      );
+      expect(none.attachmentPaths, isNull);
+      expect(none.recipients, [developerEmail]);
+
+      final some = feedbackEmail(
+        to: developerEmail,
+        subject: 's',
+        body: 'b',
+        attachmentPaths: const ['/cache/a.png'],
+      );
+      expect(some.attachmentPaths, ['/cache/a.png']);
+    },
+  );
+
+  test(
     'share path is always available: address first, full body, files',
     () async {
       final t = _FakeTransport(); // mail app "available": share still works

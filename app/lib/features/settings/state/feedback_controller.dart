@@ -255,7 +255,10 @@ class FeedbackFormController extends Notifier<FeedbackFormState> {
         await ref.read(crashLogProvider).markSeen();
         ref.invalidate(unseenCrashReportsProvider);
       }
-    } on Object {
+    } on Object catch (e, st) {
+      // Never swallow silently: the existing crash log scrubs it (message
+      // cut, no bound values) so the next failure is diagnosable.
+      await ref.read(crashLogProvider).record(e, st);
       if (!ref.mounted) return;
       state = state.copyWith(
         busy: false,

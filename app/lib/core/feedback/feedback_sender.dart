@@ -108,8 +108,8 @@ final class SystemFeedbackTransport implements FeedbackTransport {
   }) async {
     try {
       await FlutterEmailSender.send(
-        Email(
-          recipients: [to],
+        feedbackEmail(
+          to: to,
           subject: subject,
           body: body,
           attachmentPaths: attachmentPaths,
@@ -125,16 +125,38 @@ final class SystemFeedbackTransport implements FeedbackTransport {
     required String text,
     required String subject,
     required List<String> filePaths,
-  }) async {
-    await SharePlus.instance.share(
-      ShareParams(
-        text: text,
-        subject: subject,
-        files: [for (final p in filePaths) XFile(p)],
-      ),
-    );
-  }
+  }) => SharePlus.instance
+      .share(
+        feedbackShareParams(text: text, subject: subject, filePaths: filePaths),
+      )
+      .then((_) {});
 }
+
+/// share_plus 13.2.1 THROWS `ArgumentError('files provided, but cannot be
+/// empty')` for `files: []` (share_plus.dart:90-91); a text-only share must
+/// pass `null`.
+ShareParams feedbackShareParams({
+  required String text,
+  required String subject,
+  required List<String> filePaths,
+}) => ShareParams(
+  text: text,
+  subject: subject,
+  files: filePaths.isEmpty ? null : [for (final p in filePaths) XFile(p)],
+);
+
+/// Same rule for the mail plugin: no attachments means `null`, not `[]`.
+Email feedbackEmail({
+  required String to,
+  required String subject,
+  required String body,
+  required List<String> attachmentPaths,
+}) => Email(
+  recipients: [to],
+  subject: subject,
+  body: body,
+  attachmentPaths: attachmentPaths.isEmpty ? null : attachmentPaths,
+);
 
 final feedbackTransportProvider = Provider<FeedbackTransport>(
   (ref) => SystemFeedbackTransport(),

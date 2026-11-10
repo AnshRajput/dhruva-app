@@ -42,6 +42,20 @@ class _Log extends CrashLog {
   Future<List<CrashRecord>> unseen() async => records;
   @override
   Future<void> markSeen() async {}
+
+  final recorded = <Object>[];
+  @override
+  Future<void> record(Object error, StackTrace? stack) async =>
+      recorded.add(error);
+}
+
+class _FailingTransport extends _Transport {
+  @override
+  Future<void> shareFallback({
+    required String text,
+    required String subject,
+    required List<String> filePaths,
+  }) async => throw ArgumentError('files provided, but cannot be empty');
 }
 
 class _Transport implements FeedbackTransport {
@@ -106,6 +120,7 @@ Widget _app(
   FeedbackTransport transport, {
   String initial = '/',
   _Store? store,
+  _Log? log,
 }) {
   final router = GoRouter(
     initialLocation: initial,
@@ -124,7 +139,7 @@ Widget _app(
   );
   return ProviderScope(
     overrides: [
-      crashLogProvider.overrideWithValue(_Log()),
+      crashLogProvider.overrideWithValue(log ?? _Log()),
       feedbackTransportProvider.overrideWithValue(transport),
       feedbackDeviceInfoProvider.overrideWith((_) async => _info),
       feedbackDraftStoreProvider.overrideWithValue(store ?? _Store()),
@@ -305,6 +320,29 @@ void main() {
 
       hold.complete();
       await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'a failed hand-off shows the error and is logged, not swallowed',
+    (tester) async {
+      final log = _Log();
+      _tall(tester);
+      await tester.pumpWidget(
+        _app(_FailingTransport(), initial: '/settings/feedback', log: log),
+      );
+      await tester.pumpAndSettle();
+      await _fill(tester);
+      await _tap(tester, 'feedback-share');
+
+      expect(
+        find.text(
+          "Couldn't open your email app or the share sheet. Try again.",
+        ),
+        findsOneWidget,
+      );
+      expect(log.recorded.single, isA<ArgumentError>());
+      expect(find.byKey(const ValueKey('feedback-handoff')), findsNothing);
     },
   );
 
